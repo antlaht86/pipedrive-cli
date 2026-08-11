@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "openapi-ts": "npx tsx openapi-ts.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
