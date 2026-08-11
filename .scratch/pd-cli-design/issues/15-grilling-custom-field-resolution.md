@@ -39,3 +39,16 @@ Record as an ADR.
     resolution is not knowable before the run — it is 0 or 1 per schema depending on cache state.
   - **Failure partway**: a cache read failure already degrades to a fresh fetch plus a `warning` line.
     A *resolution* failure is a different event and this ticket must still decide it.
+- [ADR-0006](../../../docs/adr/0006-validation-placement-and-rejection.md) and the v1 scope decision
+  taken with it narrow this ticket in three ways:
+  - **Every hash this ticket resolves arrives inside `custom_fields`**, a `z.record(z.string(), z.unknown())`
+    on a v2 record. Top-level 40-character hash keys were a v1 shape, and v1 is out of scope apart
+    from `users`. `custom_fields` is explicitly protected from any patch that would close it, because
+    stripping is otherwise the default.
+  - **`leadFields` and `noteFields` no longer matter.** Leads and notes are out of scope, so the
+    v1-only field schemas research 03 flagged are simply never fetched. `activityFields` remains the
+    only uncached schema this ticket has to rule on.
+  - **The `warning` line now carries a `kind`**, and warnings are deduplicated by
+    `(resource, field path, zod issue code)`. Whatever this ticket decides an unresolvable hash emits,
+    it must fit that shape — and a per-record warning for a hash appearing on 40,000 records would be
+    reported once, not 40,000 times.

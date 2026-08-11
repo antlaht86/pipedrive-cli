@@ -1,7 +1,7 @@
 # Where zod validation sits, and what a rejected response does
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 06, 09
 
@@ -29,3 +29,39 @@ Record as an ADR.
   is, how a hand-written override survives regeneration, and what validates cached data.
 - A `--no-validate` style flag would have to be argued against ADR-0004's page atomicity as well: the
   generator's contract is that a yielded page is already clean.
+
+## Answer
+
+Recorded as [ADR-0006](../../../docs/adr/0006-validation-placement-and-rejection.md).
+
+**A scope decision was taken during this ticket and belongs to the map, not to this ADR alone: the v1
+API is out of scope except for the `users` resource.** Leads, notes, currencies, activity types and
+filters are not exposed. That removes the sharpest half of the strictness question, because the
+top-level 40-character custom field hashes lived on v1 records only.
+
+- **Placement.** `sdk.validator` stays off; the generated `z*Response` schemas run explicitly with
+  `safeParse` in the one client module, so a parse failure becomes a typed error instead of being
+  merged into the generated client's untyped `error` field alongside HTTP and transport failures.
+- **Two-stage split.** The envelope is validated strictly and its failure is structural —
+  `Err(invalid_response)`, the walk ends. Each element of `data` is validated individually and its
+  failure is per-record — a `warning` plus `skipped += 1`, the walk continues. A single
+  `zGetDealsResponse` could not deliver ADR-0004's per-record skip, because `data: z.array(zDeal)`
+  fails as a whole.
+- **Strictness: strip.** zod v4's default is accepted deliberately; no `.passthrough()`, no
+  `.catchall()`. A `record` line's shape is a function of `pd`'s version, not of Pipedrive's release
+  schedule. The one protected exception is `custom_fields`, an open `z.record` by design.
+- **Mass rejection.** A first page whose `data` is non-empty and yields **no** survivors ends the run
+  as `invalid_response`. No later page escalates and there is no ratio threshold — keyset cursors walk
+  in id order, so old records cluster early and a wholly rejected page is expected in the survivable
+  case.
+- **Warning flood.** A `warning` is emitted once per distinct
+  `(resource, field path, zod issue code)`; `skipped` still counts every record. `NdjsonWriter` owns
+  the suppression, `Page.warnings` is unchanged. The line gains a `kind` discriminator, shared with
+  ADR-0005's cache warning.
+- **No `--no-validate`.** It would make ADR-0004's clean-page promise conditional, and the cost it
+  would save is a small fraction of the 20 s of HTTP the same walk already pays.
+- **Cached data** is validated with the *same* record schema as the network path, behind a
+  wrapper-owned cache envelope. A stricter cache schema would make `--no-cache` change what `pd`
+  accepts.
+- **Overrides** are `parser.patch` against the input spec, never edits to `generated/`. The patch list
+  starts with `next_cursor` nullability, without which the last page of every list fails.

@@ -17,3 +17,9 @@ This file is built lazily, as terms actually get settled. The design effort that
 **Completeness marker** — the field on every list output stating whether the result set is complete. Present always, including on full success, so an agent never infers completeness from a record count.
 
 **Daily budget** — the token pool Pipedrive allocates per company account, shared across every user and integration on it. Spending it is a safety concern rather than a performance one, because exhausting it breaks colleagues' integrations. Distinct from the **burst limit**, which counts requests in a rolling 2-second window and is per token.
+
+**Envelope schema** — the schema for the wrapper around a list response: `success`, `data` as an array of unknown, and `additional_data.next_cursor`. Contrast the **record schema**, which describes one element of `data`. They are separate because they fail differently. Settled in [ADR-0006](docs/adr/0006-validation-placement-and-rejection.md).
+
+**Structural failure** — a validation failure of the envelope schema, or a body that is not JSON at all. It ends the walk as `invalid_response`. Contrast a **per-record failure**, which drops one record, emits a `warning` and increments `skipped` while the walk continues.
+
+**Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.
