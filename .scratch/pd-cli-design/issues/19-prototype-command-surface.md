@@ -21,3 +21,17 @@ Draft the surface concretely — a listing of commands with their flags, a sampl
 - Which resources ship in the first surface, given ticket 18's answer on v1.
 
 Produce the draft surface and manifest as assets and link them from this ticket.
+
+## Context added while resolving other tickets
+
+- [ADR-0007](../../../docs/adr/0007-the-narrow-v1-users-client.md) answers the last bullet. The v1
+  question is closed: **`users` is the only v1 resource**, and it ships as two commands,
+  `pd users list` and `pd users get <id>`. Leads, notes, currencies, activity types and filters are
+  out of scope, so the first surface is the v2 resources plus `users`.
+- ADR-0007 also adds a global flag, `--resolve`, and **retires the name `--resolve-fields`** used in
+  ADR-0005. The manifest and every `--help` must spell it `--resolve`.
+- `pd users get <id>` is the first command that can legitimately report `requests: 0`, because it is
+  answered entirely from cache. If the manifest expresses per-command request cost, it cannot promise
+  a request per command.
+- ADR-0007 excluded seven `users` endpoints (`/users/{id}`, `/users/me`, `/users/find`, followers,
+  permissions, role assignments, role settings). The surface must not imply they exist.

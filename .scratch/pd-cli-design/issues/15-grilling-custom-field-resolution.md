@@ -48,6 +48,17 @@ Record as an ADR.
   - **`leadFields` and `noteFields` no longer matter.** Leads and notes are out of scope, so the
     v1-only field schemas research 03 flagged are simply never fetched. `activityFields` remains the
     only uncached schema this ticket has to rule on.
+- [ADR-0007](../../../docs/adr/0007-the-narrow-v1-users-client.md) fixed three things this ticket
+  must build on:
+  - **The flag is `--resolve`, not `--resolve-fields`**, and it is one switch covering custom field
+    hashes, option labels and owner ids together. This ticket owns what it does to custom fields, not
+    what it is called.
+  - **Resolution is additive and preserves raw values.** ADR-0007 settled it for owner ids
+    (`owner_name` beside `owner_id`), on locked point 6's diffability argument. This ticket's
+    "replace in place versus parallel block" bullet inherits that precedent — deviating for custom
+    fields is now an argument to be made, not an open choice.
+  - **The cold-cache request cost of `--resolve` includes one 20-token v1 `users` fetch** on top of
+    the field schemas.
   - **The `warning` line now carries a `kind`**, and warnings are deduplicated by
     `(resource, field path, zod issue code)`. Whatever this ticket decides an unresolvable hash emits,
     it must fit that shape — and a per-record warning for a hash appearing on 40,000 records would be

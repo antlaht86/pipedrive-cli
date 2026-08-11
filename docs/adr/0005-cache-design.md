@@ -3,6 +3,7 @@
 Status: accepted
 Date: 2026-08-11
 Supersedes in part: the cache-keying suggestion in research 08
+Superseded in part by [ADR-0007](0007-the-narrow-v1-users-client.md): the flag this ADR calls `--resolve-fields` is named `--resolve`
 
 ## Context
 

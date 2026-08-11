@@ -22,4 +22,6 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Structural failure** — a validation failure of the envelope schema, or a body that is not JSON at all. It ends the walk as `invalid_response`. Contrast a **per-record failure**, which drops one record, emits a `warning` and increments `skipped` while the walk continues.
 
+**Resolution** — turning an id into the name it stands for: a custom field hash into its label, an option id into its option label, an owner id into a person's name. Always opt-in behind the single `--resolve` flag, and always **additive** — the raw value stays so output remains diffable and re-queryable. Settled for owner ids in [ADR-0007](docs/adr/0007-the-narrow-v1-users-client.md).
+
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.
