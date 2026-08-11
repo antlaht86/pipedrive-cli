@@ -18,3 +18,14 @@ The generated client already gives types. Where does runtime validation add valu
 - What validates cached data read back off disk, and whether that is the same schema or a stricter one.
 
 Record as an ADR.
+
+## Context added while resolving other tickets
+
+- [ADR-0004](../../../docs/adr/0004-streaming-and-result-composition.md) fixed **who runs** per-record
+  validation: the walk generator, which yields only validated, deduplicated pages. That settles the
+  last two bullets of the placement question by derivation — a rejected record can never be the
+  walk's `Err`, it is a `warning` line plus a `skipped` count on the trailer, and the caller learns
+  through stdout rather than stderr. This ticket still owns *which schema* runs there, how strict it
+  is, how a hand-written override survives regeneration, and what validates cached data.
+- A `--no-validate` style flag would have to be argued against ADR-0004's page atomicity as well: the
+  generator's contract is that a yielded page is already clean.

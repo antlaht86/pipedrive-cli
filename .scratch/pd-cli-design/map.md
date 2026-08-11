@@ -46,13 +46,15 @@ A **locked design spec** for `pd` — every open design decision argued, decided
 
 - [How pagination is bounded, and how partiality is signalled](issues/11-grilling-pagination-bounding.md) — `--limit` counted in records is the only bound and `--max-pages` is cut for exposing page size; `--limit` applies after zod rejection and deduplication, with `skipped` and `duplicates` on every trailer; there is no resumption token, because a cursor of undocumented stability cannot promise one. Full detail in [ADR-0003](../../docs/adr/0003-pagination-bounding-and-partiality.md).
 
+- [How streaming pagination composes with `Result`](issues/12-grilling-streaming-and-result-composition.md) — a paginated read is `AsyncGenerator<Result<Page, PdError>>` that yields only validated, deduplicated, bounded pages, with `bound` riding on the final page; one `NdjsonWriter` owns stdout, the counters and the single trailer, and refuses a second one; `collect` is the specified non-streaming path and emits `emitted: 0` rather than an unsorted prefix. Full detail in [ADR-0004](../../docs/adr/0004-streaming-and-result-composition.md).
+
 ## Not yet specified
 
 - **Testing strategy against a shared live account.** How `pd` is tested without burning the company's shared daily token budget — recorded fixtures, a replay layer, a sandbox account, or contract tests against the generated types alone. Hangs on the cache and client-module design.
 - **Field projection.** Whether a `--fields` style projection exists to shrink output against an agent's context budget, and how it interacts with custom field hashes. Hangs on custom field resolution. [ADR-0003](../../docs/adr/0003-pagination-bounding-and-partiality.md) narrows it: `emitted` counts `record` lines, so a projection that drops fields leaves the count untouched — but a projection that could drop a whole record would be a third subtractive filter alongside `skipped` and `duplicates` and would need its own trailer field.
 - **Filtering and search surface.** How filters and the stricter-limited Search API are exposed, if at all. Hangs on the command surface.
 - **Related-entity expansion.** Whether a deal can pull its person and organisation in one command, and what that does to request count and budget. Hangs on concurrency and budget guard.
-- **Manifest schema and its versioning.** The shape of the machine-readable command manifest and how a harness detects a manifest it does not understand. Hangs on the command surface. [ADR-0002](../../docs/adr/0002-output-format.md) removed one part of this: with a single machine format, the manifest declares it once globally rather than per command.
+- **Manifest schema and its versioning.** The shape of the machine-readable command manifest and how a harness detects a manifest it does not understand. Hangs on the command surface. [ADR-0002](../../docs/adr/0002-output-format.md) removed one part of this: with a single machine format, the manifest declares it once globally rather than per command. [ADR-0004](../../docs/adr/0004-streaming-and-result-composition.md) adds one thing the manifest must express: whether a command streams or collects, since a collected command's time to first byte is its total wall time.
 - **Value formatting.** Money, currency and timezone representation in machine output.
 
 ## Out of scope
