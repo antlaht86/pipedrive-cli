@@ -28,6 +28,8 @@ A **locked design spec** for `pd` — every open design decision argued, decided
 
 **Working style**: prototypes are wanted both where the decision hangs on what Pipedrive actually returns, and where it hangs on how output reads to an agent. React to a concrete artifact rather than an abstract argument.
 
+**Grill at the right altitude.** Do not put implementation-technical questions to the user — function signatures, call styles, class versus function, file layout, naming, internal types nobody observes. Grill only on decisions with a consequence the user can see or feel: observable behaviour, the output contract, safety properties, scope, and trade-offs with a user-visible cost. Where an implementation detail must be settled to write the ADR, decide it, state the assumption in the ADR, and give the reasoning — do not ask.
+
 ## Decisions so far
 
 <!-- one line per resolved ticket -->
