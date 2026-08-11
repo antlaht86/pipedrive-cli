@@ -1,0 +1,1 @@
+{"type":"error","code":"usage","message":"Unknown flag --frobnicate.","complete":false,"emitted":0,"exit_code":2,"retry":"never","details":{}}

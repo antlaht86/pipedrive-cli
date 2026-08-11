@@ -1,0 +1,7 @@
+{
+  "type": "result",
+  "command": "deals list",
+  "data": [],
+  "complete": true,
+  "emitted": 0
+}

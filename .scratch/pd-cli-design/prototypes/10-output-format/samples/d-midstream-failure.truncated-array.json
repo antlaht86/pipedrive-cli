@@ -1,0 +1,95 @@
+{
+  "type": "result",
+  "command": "deals list",
+  "data": [
+    {
+      "id": 1000,
+      "title": "Acme Oy — annual licence 2020",
+      "value": 12000,
+      "currency": "EUR",
+      "status": "open",
+      "stage_id": 3,
+      "pipeline_id": 1,
+      "person_id": 5000,
+      "org_id": 900,
+      "owner_id": 11,
+      "add_time": "2025-11-03T09:14:22Z",
+      "update_time": "2026-02-18T13:01:07Z",
+      "custom_fields": {
+        "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3": 4200,
+        "1f2e3d4c5b6a798877665544332211aabbccddee": 34
+      }
+    },
+    {
+      "id": 1001,
+      "title": "Acme Oy — annual licence 2021",
+      "value": 12037,
+      "currency": "EUR",
+      "status": "won",
+      "stage_id": 4,
+      "pipeline_id": 1,
+      "person_id": 5001,
+      "org_id": 901,
+      "owner_id": 11,
+      "add_time": "2025-11-03T09:14:22Z",
+      "update_time": "2026-02-18T13:01:07Z",
+      "custom_fields": {
+        "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3": 4200,
+        "1f2e3d4c5b6a798877665544332211aabbccddee": 34
+      }
+    },
+    {
+      "id": 1002,
+      "title": "Acme Oy — annual licence 2022",
+      "value": 12074,
+      "currency": "EUR",
+      "status": "lost",
+      "stage_id": 5,
+      "pipeline_id": 1,
+      "person_id": 5002,
+      "org_id": 902,
+      "owner_id": 11,
+      "add_time": "2025-11-03T09:14:22Z",
+      "update_time": "2026-02-18T13:01:07Z",
+      "custom_fields": {
+        "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3": 4200,
+        "1f2e3d4c5b6a798877665544332211aabbccddee": 34
+      }
+    },
+    {
+      "id": 1003,
+      "title": "Acme Oy — annual licence 2023",
+      "value": 12111,
+      "currency": "EUR",
+      "status": "open",
+      "stage_id": 6,
+      "pipeline_id": 1,
+      "person_id": 5003,
+      "org_id": 903,
+      "owner_id": 11,
+      "add_time": "2025-11-03T09:14:22Z",
+      "update_time": "2026-02-18T13:01:07Z",
+      "custom_fields": {
+        "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3": 4200,
+        "1f2e3d4c5b6a798877665544332211aabbccddee": 34
+      }
+    },
+    {
+      "id": 1004,
+      "title": "Acme Oy — annual licence 2024",
+      "value": 12148,
+      "currency": "EUR",
+      "status": "won",
+      "stage_id": 3,
+      "pipeline_id": 1,
+      "person_id": 5004,
+      "org_id": 904,
+      "owner_id": 11,
+      "add_time": "2025-11-03T09:14:22Z",
+      "update_time": "2026-02-18T13:01:07Z",
+      "custom_fields": {
+        "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3": 4200,
+        "1f2e3d4c5b6a798877665544332211aabbccddee": 34
+      }
+    }
+  ... process died here, no closing bracket
