@@ -1,7 +1,7 @@
 # Cache design: what, where, keyed how, invalidated when
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 01, 09
 
@@ -20,3 +20,42 @@ Blocked by: 01, 09
 - Whether the cache can be inspected or cleared, given the read-only surface — is `pd cache clear` a write operation?
 
 Record as an ADR.
+
+## Answer
+
+Full detail in [ADR-0005](../../../docs/adr/0005-cache-design.md).
+
+The cache holds a **closed list of five** resources — `users`, `dealFields`, `personFields`,
+`organizationFields`, `productFields` — and nothing else. No entity records, no result sets: an agent
+cannot tell a stale deal from a fresh one, so the cache is confined to data an admin edits by hand.
+`activityFields`, `leadFields` and `noteFields` are deliberately outside the list and cost one request
+per invocation to resolve.
+
+The key is the **first 16 hex characters of SHA-256 over the resolved API token**, which supersedes
+research 08's suggestion that the profile name key the field cache. A profile name is not an account
+identity, and repointing `default` at another company would mislabel custom field hashes with no error
+anywhere. Keying by credential removes that failure at zero request cost; the price is that a token
+rotation discards a warm cache.
+
+TTL is **24 h for schemas, 1 h for `users`**, and an **unrecognised 40-character hash — or an unknown
+`owner_id` — forces one refresh** regardless of the clock. Without that, a field added at 10:00 renders
+as a raw hash all day and the agent has no reason to reach for `--no-cache`, because it does not know
+the field exists.
+
+**A cache hit does not count against `--max-requests`**: the flag bounds requests that reach the
+network, because it exists to protect the shared budget and the burst window, neither of which a disk
+read touches.
+
+A **broken entry is skipped, refetched, and reported as a `warning` line** — silent skipping would let
+an unwritable cache directory drain the shared budget forever with no signal. Storage is
+`~/.cache/pd/<token-hash>/`, `0600`, temp-file plus `rename`, version-stamped, no locks.
+
+**`pd cache info` and `pd cache clear` exist**, both with zero HTTP requests; `clear` takes no argument
+that could widen its constant target. Read-only is a property of the Pipedrive API surface, not of the
+local filesystem.
+
+**`--no-cache` skips the read and still writes**, so one run repairs a stale entry instead of the flag
+becoming permanent.
+
+Open dependency: `users` is a Class B v1-only resource (research 04), so its caching is inert until
+ticket 18 delivers a v1 client, and it costs 20 tokens per list rather than 10.
