@@ -35,3 +35,12 @@ Produce the draft surface and manifest as assets and link them from this ticket.
   a request per command.
 - ADR-0007 excluded seven `users` endpoints (`/users/{id}`, `/users/me`, `/users/find`, followers,
   permissions, role assignments, role settings). The surface must not imply they exist.
+
+- [ADR-0008](../../../docs/adr/0008-resolution-mechanics.md) leaves this ticket two loose ends. First,
+  it names a hypothetical `pd fields list` when drawing the line between an enrichment that degrades
+  and an answer that fails — whether such a command exists is this ticket's call, not ADR-0008's.
+  Second, `/projectFields` exists in v2 and is deliberately absent from the cache list; ADR-0008's
+  rule ("every v2 `*Fields` schema, 24 h") admits it automatically if this ticket gives projects a
+  command surface, so no cache decision has to be reopened either way.
+- `--resolve-budget <n>` joins `--max-requests` as a global flag the surface must carry, and the
+  `summary` trailer now always carries `resolved`.

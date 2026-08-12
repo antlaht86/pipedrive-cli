@@ -22,6 +22,10 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Structural failure** — a validation failure of the envelope schema, or a body that is not JSON at all. It ends the walk as `invalid_response`. Contrast a **per-record failure**, which drops one record, emits a `warning` and increments `skipped` while the walk continues.
 
-**Resolution** — turning an id into the name it stands for: a custom field hash into its label, an option id into its option label, an owner id into a person's name. Always opt-in behind the single `--resolve` flag, and always **additive** — the raw value stays so output remains diffable and re-queryable. Settled for owner ids in [ADR-0007](docs/adr/0007-the-narrow-v1-users-client.md).
+**Resolution** — turning an id into the name it stands for: a custom field hash into its label, an option id into its option label, an owner id into a person's name. Always opt-in behind the single `--resolve` flag, and always **additive** — the raw value stays so output remains diffable and re-queryable. Settled for owner ids in [ADR-0007](docs/adr/0007-the-narrow-v1-users-client.md), and in full in [ADR-0008](docs/adr/0008-resolution-mechanics.md).
+
+**Fixed-cost resolution** — the part of `--resolve` whose request count does not depend on how much data is walked: the field schemas, `users`, `pipelines` and `stages`. At most nine requests on a cold cache, zero on a warm one. Contrast **variable-cost resolution**, the person and organization lookups that scale with the number of distinct ids in the result set. Only the variable part is charged against `--resolve-budget`, because only the variable part can surprise the shared daily budget.
+
+**Degrade** — the response to a failure in an enrichment rather than in the answer: drop the enrichment for the rest of the run, emit one `warning`, mark the output partial, and exit 0. Reserved for work the caller asked for as a decoration. A failure in the thing the caller actually asked for is an error, not a degradation — the asymmetry is why a `users` fetch failure degrades under `--resolve` but is fatal to `pd users list`.
 
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.

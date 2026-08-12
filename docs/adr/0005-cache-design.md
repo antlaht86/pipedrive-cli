@@ -4,6 +4,7 @@ Status: accepted
 Date: 2026-08-11
 Supersedes in part: the cache-keying suggestion in research 08
 Superseded in part by [ADR-0007](0007-the-narrow-v1-users-client.md): the flag this ADR calls `--resolve-fields` is named `--resolve`
+Superseded in part by [ADR-0008](0008-resolution-mechanics.md): the closed cache list of §1 grows from five entries to eight, and §4's "at most six metadata requests" becomes at most four per run
 
 ## Context
 

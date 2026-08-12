@@ -24,3 +24,16 @@ Record as an ADR.
 
 - [Pipedrive rate limiting and the shared daily token budget](01-research-rate-limits-and-token-budget.md) removed this ticket's reactive option: **no header reports the remaining daily budget**. Accounting must be predictive, from the flat per-operation `x-token-cost` table. And [Cursor pagination semantics](02-research-cursor-pagination-semantics.md) removed the pre-flight option for walks: **v2 has no total count anywhere**, so a walk's size cannot be estimated before walking it.
 - [The error union, exit codes, and machine-readable failure](09-grilling-error-union-and-exit-codes.md) left a problem on this ticket's doorstep: the **internal retry cap is process-scoped**, exactly like the budget accounting. An agent invoking `pd` fifty times in a loop passes fifty independent guards and fifty fresh retry caps, none aware of the others. Whatever cross-invocation state answers the budget question must answer the retry question too — decide them together.
+
+
+- [ADR-0008](../../../docs/adr/0008-resolution-mechanics.md) leaves two request-denominated knobs for
+  this ticket to reconcile. `--max-requests` stays the guard locked point 4 describes: a hard ceiling
+  that aborts, exit 3, `complete: false`. `--resolve-budget <n>` is **not** a guard — it bounds an
+  enrichment, defaults to 50, and reaching it degrades to raw ids with one `warning` and
+  `resolved: "partial"`, exit 0. The boundary ADR-0008 §10 draws is that resolution *yields* to the
+  guard rather than consuming it: relation resolution stops issuing requests once the remaining
+  `--max-requests` headroom would not survive a batch, so an enrichment can never be the thing that
+  trips the ceiling. This ticket owns whether the predictive token guard behaves the same way.
+- The fixed-cost half of `--resolve` — one field schema, `users`, `pipelines`, `stages` — is at most
+  four requests on a cold cache and zero on a warm one, per ADR-0008. ADR-0005 §4's parenthetical
+  "at most six metadata requests" predates that arithmetic and should not be relied on.
