@@ -34,3 +34,15 @@ Does `pd` expose any of them, and how?
   deciding whether they deserve flags — that is a fact to look up, not a decision.
 
 Record as an ADR.
+
+## Context added while resolving other tickets
+
+- [ADR-0010](../../../docs/adr/0010-budget-guard.md) removes an option this ticket might have assumed:
+  there is **no daily token guard**, so a search surface cannot lean on one to make an expensive
+  endpoint safe. The only quantitative guard is `--max-requests`, counted in network requests, with no
+  default.
+- The relevant arithmetic from research 01: a v2 search costs **20 tokens** against a list's 10, and the
+  Search API has its own burst ceiling of **10 requests per 2 seconds**, uniform across every plan and
+  auth type — roughly a tenth of a Premium account's general allowance. Whether that ceiling is separate
+  from or carved out of the general burst counter is documented nowhere (research 01, open question 11),
+  and the exact membership of "the Search API" is inference from path names (open question 10).

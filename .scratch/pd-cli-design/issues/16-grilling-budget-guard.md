@@ -1,7 +1,7 @@
 # Budget guard: pre-flight estimation, reactive accounting, or both
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 01, 11, 14
 
@@ -37,3 +37,40 @@ Record as an ADR.
 - The fixed-cost half of `--resolve` — one field schema, `users`, `pipelines`, `stages` — is at most
   four requests on a cold cache and zero on a warm one, per ADR-0008. ADR-0005 §4's parenthetical
   "at most six metadata requests" predates that arithmetic and should not be relied on.
+
+## Answer
+
+Full detail in [ADR-0010](../../../docs/adr/0010-budget-guard.md).
+
+`pd` does not guard the shared daily budget, and says so rather than pretending. Research removed
+every input a budget guard would need: no header reports the remaining pool, v2 reports no total
+count so a walk cannot be estimated before it is walked, and neither the plan tier nor the seat count
+is readable, so even the denominator is unknown — and spend by colleagues' integrations is invisible
+by construction. What remains possible is predictive self-accounting, which was considered and
+rejected: at v2 costs the heaviest single run `pd` can produce is roughly 1,300 tokens against a
+smallest-possible pool of 30,000, so no single run is the hazard, and a ceiling aimed at the runaway
+loop would be an arbitrary absolute number interrupting legitimate work. The deciding input is stated
+in the ADR as an assumption rather than a fact: this account has never reached the daily budget.
+
+That disposes of the cross-invocation token ledger and, with it, the reset problem — the budget resets
+"at midnight at server's timezone" and the server timezone is named nowhere, so no ledger could have
+expired honestly.
+
+`--max-requests` is therefore the only quantitative guard, counted in network requests, with **no
+default value** — a default would make `complete: false` the ordinary outcome and contradict the
+locked complete-pagination property. ADR-0008 §10's yielding rule is promoted to cover every
+enrichment request, so `request_ceiling` can only ever be caused by the walk the caller asked for.
+The ticket's resumption question is confirmed against ADR-0003: there is no resumption, so a restart
+is the only path and the two ADRs agree.
+
+One piece of cross-invocation state survives, and it is a Cloudflare question rather than a budget
+one: a `blocked` outcome writes a **sentinel** under `~/.cache/pd/<token-hash>/`, and while it is live
+every invocation for that credential refuses with zero HTTP requests, `code: "blocked"`, exit 3. It
+reuses the existing variant because the caller's correct response is identical, expires after 15
+minutes rather than at an unknowable midnight, and covers only `blocked` — a `budget_exhausted` 429
+costs one rejected response and does not escalate. It has no override flag, and **`pd cache clear`
+now preserves it** and `--no-cache` does not bypass it, because an agent's ordinary "clear the cache
+and retry" reflex would otherwise delete the one company-wide safety stop. This amends ADR-0005 §7.
+
+Ticket 09's debt is settled by this: the internal retry cap stays process-scoped, which is safe
+because ADR-0001 already forbids retrying the two situations that escalate.
