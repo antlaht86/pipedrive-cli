@@ -1,7 +1,7 @@
 # The search surface, and what the stricter search rate limit costs
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 16, 19
 
@@ -67,3 +67,64 @@ Record as an ADR.
   whether a filtered-out record was simply never fetched and therefore counts as nothing at all.
 - ADR-0016 §10 already added `custom_fields` to ADR-0015 §6's allowlist. A search `term` still is not
   eligible, for the reason given above.
+
+## Answer
+
+Recorded as [ADR-0017](../../../docs/adr/0017-search-and-list-filtering.md). Resolved without a
+grilling dialogue: the user's invocation directed that nothing answerable from the material be put to
+them, and every open point here was answerable from `openapi-v2.yaml` and the prior ADRs. The
+decisions are therefore recorded with their rejected alternatives, and an *Assumptions recorded rather
+than asked* section, in ADR-0009's manner.
+
+**The fact that decided the shape question.** A search hit is not a record: `/deals/search` returns
+`{ result_score, item }` where `item` is a truncated projection — no `custom_fields` object, no
+`add_time`, and a different field set per entity. So `pd deals list --search <term>` is dead, because
+it would make a flag change the record shape, which is the invariant ADR-0016 §5 and ADR-0008 §1
+exist to protect. Search must be its own command.
+
+**What exists.** A third verb — `pd deals search`, `pd persons search`, `pd organizations search`,
+`pd products search` — amending ADR-0009 §1, whose §6 had already forbidden the refusal message from
+naming the verb inventory. Plus a tenth resource `items` (`pd items search <term>`, wrapping
+`/itemSearch`) that has neither `list` nor `get`, amending §3. Making cross-entity search a resource
+rather than a fourth verbless exception keeps ADR-0009 §8's exception list closed.
+
+**The scope boundary holds.** `item_types` is pinned to `deal,person,organization,product` on every
+request and `--types` can only narrow within it, so `itemSearch` does not re-admit leads, files, mail
+attachments or projects through the back door. `/leads/search` gets no command.
+
+**Four collisions found and fixed**, all of which would have shipped silently:
+
+- `item.type` (`"deal"`) collides with ADR-0002's line kind — dropped, `record_type` carries it.
+- The hit's `custom_fields` is `string[]` (matched values) where ADR-0008 §1 defines a hash-keyed
+  object — renamed `matched_custom_field_values`; `notes[]` likewise `matched_notes`.
+- The endpoints' `fields` query parameter (search *in*) collides with ADR-0016's `--fields` (emit) —
+  the flag is `--search-in`.
+- `filter_id` makes the API silently ignore `ids` — the combination is a usage error, exit 2, offline.
+
+`owner`, `stage`, `person` and `organization` objects are flattened to ADR-0008 §3's existing
+`*_id` / `*_name` pairs, so a hit's reference fields are byte-compatible with a resolved record and
+`--resolve` has only `owner_id` left to do — from the cache, at zero requests.
+
+**The budget question, answered against a reason rather than a preference.** Search shares
+`--max-requests` and gets no ceiling of its own: `--resolve-budget` exists because resolution requests
+are *implicit*, and a search command's requests are the ones the caller asked for. ADR-0011 §10's
+conservative reading of research 01 gap 11 is **confirmed** — a search request is assumed to spend both
+allowances — on ADR-0001's asymmetric-consequence argument.
+
+**`--limit` is unchanged and the trailer gains nothing**, because a record excluded by a search term or
+a filter flag was never fetched. Dedup keys on `(record_type, id)` for the mixed `items` stream.
+Relevance ordering makes a partial search the *best* matches rather than an arbitrary prefix, which is
+said in `AGENTS.md` without becoming a default `--limit`.
+
+**The filtering half.** The v2 list vocabulary was enumerated from the spec and fifteen flags survive
+(`--ids`, `--owner-id`, `--person-id`, `--org-id`, `--deal-id`, `--pipeline-id`, `--stage-id`,
+`--status`, `--done`/`--not-done`, `--updated-since`, `--updated-until`, `--sort-by`,
+`--sort-direction`, `--filter-id`), command-scoped so ADR-0009's global table stays at nine.
+`lead_id` is dropped. `--filter-id` is exposed despite being non-enumerable, because a saved filter is
+server-side selection at zero extra requests. `--updated-since` with `--sort-by update_time` is the
+honest incremental read ADR-0003 §6 refused to fake with a resumption token.
+
+**Redaction.** Fifteen enum and numeric parameters join ADR-0015 §6's allowlist; `term` is refused
+permanently and the refusal is recorded so it does not read as an oversight later.
+
+No new error variant, no exit-code change, no `manifest_version` bump — everything here is additive.

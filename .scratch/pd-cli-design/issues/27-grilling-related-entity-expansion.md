@@ -46,3 +46,18 @@ Record as an ADR.
 - **ADR-0016 shrinks this ticket's cost problem before it starts.** Projection runs before the resolve
   prefetch, so an unselected `org_id` needs no lookup. Whatever expansion costs, `--fields` is already
   the lever that stops the caller paying for it unasked.
+
+- **[ADR-0017](../../../docs/adr/0017-search-and-list-filtering.md) §6 hands this ticket an option and
+  a fact.** `/itemSearch` carries `search_for_related_items`, which returns *"up to 100 newest related
+  leads and 100 newest related deals for each found person and organization, and up to 100 newest
+  related persons for each found organization"* in a **sibling `related_items` array**, not nested in
+  the hit. ADR-0017 deliberately did not expose it: it is entity expansion that happens to live on a
+  search endpoint, so it is this ticket's call. Three things about it are already settled by ADR-0017
+  and need no rework here — the flag would apply only to `pd items search`, its results would include
+  leads (out of scope, so they would have to be dropped client-side), and the API's own sibling-array
+  shape is a working precedent for this ticket's "separate `type` the consumer joins by id" option.
+- **ADR-0017 §3 adds a fifth record shape family.** `deal_search_hit` and its three siblings already
+  carry `person_name` / `org_name` without `--resolve`, because the search API supplies them. If
+  expansion applies to hits at all, it starts from a record that is partly expanded already; if it does
+  not, this ticket must say so, because "expansion is a `list` affordance only" is a legitimate answer
+  and a smaller surface.
