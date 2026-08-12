@@ -68,3 +68,9 @@ Record as an ADR.
   minimum-term-length refusal, the `--filter-id` with `--ids` refusal, and `--sort-by` on a search
   command — each exit 2 with the HTTP layer asserted untouched, which is the same assertion ADR-0016 §6
   already needs. §9's `(record_type, id)` dedup key is a fourth, on a mixed `pd items search` fixture.
+
+- **[ADR-0018](../../../docs/adr/0018-related-entity-expansion.md) adds three offline tests and no
+  fixture problem**, because the decision was to add nothing: `--ids` with 250 ids issues exactly
+  three requests; `--ids` with duplicate ids issues the same requests as without them; and a fixture
+  where the API omits two requested ids produces exactly one `unmatched_ids` warning and exit 0. All
+  three assert against the HTTP layer rather than against Pipedrive, so all three cost zero requests.

@@ -6,6 +6,7 @@ Deciding ticket: [The search surface, and what the stricter search rate limit co
 Amends: [ADR-0009](0009-command-surface-and-manifest.md) §1 and §3 — the grammar gains a third verb, and one resource that has neither `list` nor `get`
 Extends: [ADR-0015](0015-stderr-and-run-diagnostics.md) §6 — six query parameters join the redaction allowlist, and one is refused entry
 Confirms: [ADR-0011](0011-concurrency-and-retry.md) §10's conservative reading of research 01's open question 11
+Amended by: [ADR-0018](0018-related-entity-expansion.md) §3 — §7's `--ids` accepts any number of ids and chunks client-side into requests of at most 100, which is the API's ceiling on the parameter
 
 ## Context
 

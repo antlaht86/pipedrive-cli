@@ -1,7 +1,7 @@
 # Related-entity expansion: pulling the whole related record
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 15, 16, 17
 
@@ -61,3 +61,53 @@ Record as an ADR.
   expansion applies to hits at all, it starts from a record that is partly expanded already; if it does
   not, this ticket must say so, because "expansion is a `list` affordance only" is a legitimate answer
   and a smaller surface.
+
+## Answer
+
+Recorded as [ADR-0018](../../../docs/adr/0018-related-entity-expansion.md).
+
+**There is no expansion.** `pd` never emits a related entity's record — not nested, not as a sibling
+line, not behind a flag. `--resolve` keeps ADR-0008's meaning exactly: legibility, not data. The
+whole related record is fetched by a second command, and that recipe ships in `AGENTS.md`:
+
+```
+pd deals list --fields title,org_id
+pd organizations list --ids 7,9,11
+```
+
+**The fact that decided it**: the `ids` parameter is a query parameter on the *same operation* as the
+unfiltered list, so a batched fetch returns full records and the second command issues exactly the
+request an in-run expansion would have issued. Request cost against the shared daily budget is
+identical either way, which removes expansion's only real argument and leaves a pure trade of
+contract surface against one extra invocation.
+
+**The rival that was actually close** was deduplicated sibling `record` lines — it has API precedent
+and `pd items search` already mixes `record_type` in one stream. It was rejected on the five contract
+questions it would have forced (`emitted` arithmetic, its own ceiling beside `--resolve-budget`,
+page-1-vs-page-40 partiality marking, `--fields` across two shapes in one stream, and ADR-0016 §2's
+grammar reaching inside a nested block), every one of which the second command answers by never
+asking.
+
+**Answers the ticket's sub-questions:**
+
+- *Distinct flag or extension of `--resolve`?* Neither.
+- *Where does an expanded record go in NDJSON?* Nowhere; ADR-0002's line types are unchanged.
+- *Which ceiling bounds it?* `--max-requests`, because the second command is an ordinary list command.
+  No `--expand-budget` exists and `--resolve-budget` is untouched.
+- *Does `ids` batching still apply?* Yes, and checking it found the gap this ticket actually closes —
+  see below.
+- *What does a failed expansion do?* Not applicable; an id the API omits is one deduplicated
+  `unmatched_ids` warning at exit 0, which is the only surface this decision adds.
+- *Interaction with field projection?* None. ADR-0016 §2's grammar is closed permanently and
+  `manifest_version` does not move.
+
+**One real gap found and closed.** ADR-0017 §7 exposed `--ids` without noticing the API's 100-id
+ceiling, which would have broken the recipe at exactly the scale that motivated this ticket. ADR-0018
+§3 amends it: `--ids` accepts any number, chunks client-side into requests of at most 100, and the
+boundary is invisible — locked point 5's rule applied to a second kind of internal batching.
+
+**`search_for_related_items` is refused** on three independent grounds: its `related_items` are
+truncated *hits* rather than records (so it does not answer this question at all), it returns
+out-of-scope leads, and it truncates at "100 newest" with no marker. Expansion is not a `list`-only
+affordance either — the recipe applies to search hits unchanged, because ADR-0017 §3 already gives a
+hit its `person_id` / `org_id`.
