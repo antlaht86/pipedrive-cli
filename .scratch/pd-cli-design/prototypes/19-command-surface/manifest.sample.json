@@ -1,0 +1,154 @@
+{
+  "manifest_version": 1,
+  "tool": "pd",
+  "version": "0.1.0",
+  "description": "Read-only Pipedrive CLI. Emits NDJSON on stdout for machine consumption.",
+  "read_only": true,
+  "read_only_scope": "pipedrive_api",
+  "grammar": "pd <resource> <verb> [id] [flags]",
+  "output": {
+    "format": "ndjson",
+    "applies_to": "data commands only; --help and `pd manifest` are surface introspection and are exempt",
+    "stdout": "machine-readable output only",
+    "stderr": "logging and diagnostics only",
+    "line_types": ["record", "warning", "summary", "error"],
+    "trailer": {
+      "exclusive": true,
+      "types": ["summary", "error"],
+      "always_present_fields": ["complete", "emitted"],
+      "summary_fields": ["complete", "emitted", "skipped", "duplicates", "resolved", "requests", "reason"],
+      "resolved_values": ["none", "partial", "full"]
+    },
+    "pretty": {
+      "flag": "--pretty",
+      "stability": "unstable",
+      "machine_readable": false,
+      "note": "Human table. No error object on stdout. An agent must never invoke pd with --pretty."
+    }
+  },
+  "exit_codes": {
+    "0": "success, including a run bounded by --limit",
+    "1": "runtime error",
+    "2": "usage error",
+    "3": "rate or token budget exhausted"
+  },
+  "global_flags": [
+    { "name": "--pretty", "type": "boolean", "default": false, "description": "Human table on stdout. Unstable; do not parse." },
+    { "name": "--no-cache", "type": "boolean", "default": false, "description": "Bypass the cached value and fetch fresh. The fresh response replaces the cached entry." },
+    { "name": "--max-requests", "type": "integer", "unit": "network requests", "default": null, "description": "Hard ceiling. Aborts before it is exceeded. Cache hits do not count." },
+    { "name": "--limit", "type": "integer", "unit": "records", "default": null, "description": "Stop after n records. Applied after validation and deduplication. Unset means every record." },
+    { "name": "--resolve", "type": "boolean", "default": false, "description": "Add custom_fields_resolved, option labels and owner/relation names. Additive; raw fields unchanged." },
+    { "name": "--resolve-budget", "type": "integer", "unit": "network requests", "default": 50, "description": "Ceiling on extra requests spent on --resolve. Degrades to raw ids, never aborts." },
+    { "name": "--help", "type": "boolean", "default": false, "description": "Print help for this command on stdout and exit 0." }
+  ],
+  "resources": [
+    {
+      "name": "deals",
+      "record_type": "deal",
+      "verbs": ["list", "get"],
+      "commands": [
+        { "name": "deals list", "summary": "Every deal in the account.", "delivery": "streams", "arguments": [], "flags": [], "example": "pd deals list --limit 100" },
+        { "name": "deals get", "summary": "One deal by id.", "delivery": "streams", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd deals get 123 --resolve" }
+      ]
+    },
+    {
+      "name": "persons",
+      "record_type": "person",
+      "verbs": ["list", "get"],
+      "commands": [
+        { "name": "persons list", "summary": "Every person in the account.", "delivery": "streams", "arguments": [], "flags": [], "example": "pd persons list" },
+        { "name": "persons get", "summary": "One person by id.", "delivery": "streams", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd persons get 901" }
+      ]
+    },
+    {
+      "name": "organizations",
+      "record_type": "organization",
+      "verbs": ["list", "get"],
+      "commands": [
+        { "name": "organizations list", "summary": "Every organization in the account.", "delivery": "streams", "arguments": [], "flags": [], "example": "pd organizations list" },
+        { "name": "organizations get", "summary": "One organization by id.", "delivery": "streams", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd organizations get 12" }
+      ]
+    },
+    {
+      "name": "activities",
+      "record_type": "activity",
+      "verbs": ["list", "get"],
+      "commands": [
+        { "name": "activities list", "summary": "Every activity in the account.", "delivery": "streams", "arguments": [], "flags": [], "example": "pd activities list" },
+        { "name": "activities get", "summary": "One activity by id.", "delivery": "streams", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd activities get 77" }
+      ]
+    },
+    {
+      "name": "products",
+      "record_type": "product",
+      "verbs": ["list", "get"],
+      "commands": [
+        { "name": "products list", "summary": "Every product in the account.", "delivery": "streams", "arguments": [], "flags": [], "example": "pd products list" },
+        { "name": "products get", "summary": "One product by id.", "delivery": "streams", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd products get 5" }
+      ]
+    },
+    {
+      "name": "pipelines",
+      "record_type": "pipeline",
+      "verbs": ["list", "get"],
+      "cached": true,
+      "commands": [
+        { "name": "pipelines list", "summary": "Every pipeline. Answered from cache when warm.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd pipelines list" },
+        { "name": "pipelines get", "summary": "One pipeline by id, filtered from the cached list.", "delivery": "collects", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd pipelines get 1" }
+      ]
+    },
+    {
+      "name": "stages",
+      "record_type": "stage",
+      "verbs": ["list", "get"],
+      "cached": true,
+      "commands": [
+        { "name": "stages list", "summary": "Every stage. Answered from cache when warm.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd stages list" },
+        { "name": "stages get", "summary": "One stage by id, filtered from the cached list.", "delivery": "collects", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd stages get 3" }
+      ]
+    },
+    {
+      "name": "users",
+      "record_type": "user",
+      "verbs": ["list", "get"],
+      "cached": true,
+      "commands": [
+        { "name": "users list", "summary": "Every user seat. Answered from cache when warm.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd users list" },
+        { "name": "users get", "summary": "One user by id, filtered from the cached list. Issues no request on a warm cache.", "delivery": "collects", "arguments": [{ "name": "id", "type": "integer", "required": true }], "flags": [], "example": "pd users get 42" }
+      ]
+    },
+    {
+      "name": "fields",
+      "record_type": "field",
+      "verbs": ["list", "get"],
+      "cached": true,
+      "commands": [
+        {
+          "name": "fields list",
+          "summary": "Field schemas for one entity, including custom field hashes and their display names.",
+          "delivery": "collects",
+          "arguments": [],
+          "flags": [
+            { "name": "--entity", "type": "enum", "required": true, "values": ["deal", "person", "organization", "product", "activity"], "description": "Which entity's field schema to read." }
+          ],
+          "example": "pd fields list --entity deal"
+        },
+        {
+          "name": "fields get",
+          "summary": "One field schema by field_code, filtered from the cached list.",
+          "delivery": "collects",
+          "arguments": [{ "name": "field_code", "type": "string", "required": true }],
+          "flags": [
+            { "name": "--entity", "type": "enum", "required": true, "values": ["deal", "person", "organization", "product", "activity"], "description": "Which entity the field belongs to." }
+          ],
+          "example": "pd fields get --entity deal a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        }
+      ]
+    }
+  ],
+  "other_commands": [
+    { "name": "manifest", "summary": "This document. One JSON object on stdout, not NDJSON.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd manifest" },
+    { "name": "cache info", "summary": "Cache path, entries present and their ages. Zero requests.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd cache info" },
+    { "name": "cache clear", "summary": "Delete the local cache subtree. Zero requests. Touches local files only, never Pipedrive.", "delivery": "collects", "arguments": [], "flags": [], "example": "pd cache clear" }
+  ]
+}

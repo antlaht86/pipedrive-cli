@@ -1,0 +1,146 @@
+Normative help text for the surface locked by ADR-0009.
+Help goes to stdout and exits 0. It and `pd manifest` are the only stdout output that is not NDJSON.
+
+=== pd --help ===
+
+pd — read-only Pipedrive CLI
+
+  pd is read-only. It issues GET requests only. It cannot create, update or
+  delete anything in Pipedrive.
+
+USAGE
+  pd <resource> <list|get> [id] [flags]
+
+RESOURCES
+  deals          deals in the account
+  persons        people, as Pipedrive spells them
+  organizations  organizations
+  activities     activities
+  products       products
+  pipelines      pipelines
+  stages         stages
+  users          user seats in the account
+  fields         field schemas, including custom field hashes
+
+OTHER
+  manifest       the full command surface as one JSON object
+  cache info     cache path, entries and their ages
+  cache clear    delete the local cache
+
+GLOBAL FLAGS
+  --limit <n>            stop after n records; unset means every record
+  --max-requests <n>     hard ceiling on network requests; aborts before exceeding
+  --resolve              add resolved custom fields, option labels and owner names
+  --resolve-budget <n>   ceiling on requests spent resolving (default 50)
+  --no-cache             fetch fresh and replace the cached entry
+  --pretty               human table on stdout; UNSTABLE, do not parse
+  --help                 this text
+
+OUTPUT
+  stdout is NDJSON, one JSON object per line, each with a "type" of
+  record, warning, summary or error. The last line always carries
+  "complete" and "emitted". stderr carries diagnostics only.
+
+EXIT CODES
+  0 success   1 runtime error   2 usage error   3 budget exhausted
+
+=== pd deals --help ===
+
+pd deals — deals in the account
+
+USAGE
+  pd deals list [flags]
+  pd deals get <id> [flags]
+
+  list   every deal, walking every cursor page
+  get    one deal by id
+
+  Both accept the global flags only; see pd --help.
+
+EXAMPLES
+  pd deals list
+  pd deals list --limit 100
+  pd deals get 123 --resolve
+
+=== pd deals list --help ===
+
+pd deals list — every deal in the account
+
+USAGE
+  pd deals list [flags]
+
+  Walks every cursor page. Streams: the first record reaches stdout before
+  the walk finishes. Stops early only if --limit or --max-requests says so,
+  and says so on the summary line.
+
+FLAGS
+  accepts the global flags only; see pd --help
+
+EXAMPLES
+  pd deals list
+  pd deals list --limit 100
+  pd deals list --resolve --resolve-budget 10
+
+OUTPUT
+  {"type":"record","record_type":"deal", ...}
+  {"type":"summary","complete":true,"emitted":4021,"skipped":0,
+   "duplicates":0,"resolved":"none","requests":9}
+
+=== pd fields list --help ===
+
+pd fields list — field schemas for one entity
+
+USAGE
+  pd fields list --entity <deal|person|organization|product|activity>
+
+  Lists every field of that entity, custom fields included, with the
+  40-character hash that identifies each one in a record's custom_fields
+  block. Answered from the cached schema; issues no request on a warm cache.
+
+FLAGS
+  --entity <name>   REQUIRED. One of deal, person, organization, product,
+                    activity. There is no default.
+
+EXAMPLES
+  pd fields list --entity deal
+  pd fields get --entity deal a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
+
+OUTPUT
+  {"type":"record","record_type":"field","entity":"deal",
+   "key":"a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+   "name":"Renewal date","field_type":"date"}
+  {"type":"summary","complete":true,"emitted":37,"skipped":0,
+   "duplicates":0,"resolved":"none","requests":0}
+
+=== pd fields list ===  (missing required flag)
+
+  stdout: {"type":"error","code":"usage_error","complete":false,"emitted":0,
+           "message":"--entity is required; one of deal, person,
+           organization, product, activity."}
+  stderr: pd: --entity is required
+  exit 2
+
+=== pd users get --help ===
+
+pd users get — one user seat by id
+
+USAGE
+  pd users get <id> [flags]
+
+  Filtered from the cached user list. When the cache is warm this issues no
+  network request at all and the summary reports "requests": 0.
+
+  This is the only v1 endpoint pd calls. pd exposes no other user endpoint —
+  there is no "me", no "find", no followers, no permissions, no roles.
+
+EXAMPLES
+  pd users get 42
+
+=== pd deals create ===  (not a command)
+
+  stdout: {"type":"error","code":"unknown_command","complete":false,
+           "emitted":0,"message":"pd has no write commands. It is read-only
+           against the Pipedrive API. Run `pd manifest` for the full
+           command surface."}
+  stderr: pd: unknown command "deals create"
+  exit 2
