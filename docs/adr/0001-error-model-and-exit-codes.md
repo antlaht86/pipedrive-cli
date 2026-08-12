@@ -11,7 +11,7 @@ Deciding ticket: [The error union, exit codes, and machine-readable failure](../
 Two findings from research constrain this decision and are cited where they bite:
 
 - No response header reports the remaining daily token budget, and a 429 caused by daily exhaustion is indistinguishable from one caused by the 2-second burst window by anything documented. Continuing to retry a 429 earns a Cloudflare 403 whose body is HTML and which blocks the whole company's `api_token` traffic. See [rate limiting research](../../.scratch/pd-cli-design/research/01-rate-limits-and-token-budget.md).
-- An API token may be transmitted as a query parameter, so a request URL is credential-bearing. See [auth research](../../.scratch/pd-cli-design/research/05-auth-mechanisms.md).
+- ~~An API token may be transmitted as a query parameter, so a request URL is credential-bearing.~~ **Corrected by [ADR-0012](0012-authentication-and-credential-resolution.md) §10**: no `api_token` query parameter exists in either OpenAPI spec; the documented transport is the `x-api-token` header alone. The URL-redaction rule below survives on a different ground — a request URL carries user-supplied search terms and filter values, which are company data with no business on an agent's stdout by default. See [auth research](../../.scratch/pd-cli-design/research/05-auth-mechanisms.md).
 
 ## Decision
 
@@ -40,6 +40,8 @@ A variant exists only if the caller must respond differently to it — not becau
 | `upstream` | 5xx or transport failure after retries | Retry later |
 | `invalid_response` | Pipedrive returned data the schema rejects | Retrying will not help |
 | `internal` | A programmer error that escaped | File a bug |
+
+`auth` covers **no credential found anywhere in the precedence chain**, not only a credential the API rejected. [ADR-0012](0012-authentication-and-credential-resolution.md) §7 settled that against research 08's suggestion of exit 2: no argument the caller can supply produces a credential, so exit 2's "invoked wrongly, try different arguments" would send an agent into a futile retry.
 
 Cache corruption is deliberately **not** a variant. `pd` evicts a corrupt entry and refetches, so it never surfaces. A tool able to advise "try `--no-cache`" is able to do it itself.
 
@@ -138,7 +140,7 @@ Concrete counts, delays and caps are derived from the burst allowance in the con
 `details` is **explicitly unstable** — HTTP status, Pipedrive's own error text, the path. Two rules govern it:
 
 - **Nothing in `details` may be branched on.** If something turns out to be actionable it is promoted to a named field. This keeps the stable surface small and deliberate rather than letting it grow with every debug addition.
-- **URLs are redacted before they enter `details`.** An API token may travel as a query parameter, so a request URL — the most natural debug field imaginable — would put the credential on stdout, into an agent's context, and from there into logs. Redaction is enforced by the client module, not left to whoever writes the field.
+- **URLs are redacted before they enter `details`.** A request URL — the most natural debug field imaginable — carries the query string, and the query string carries user-supplied search terms and filter values. That is company data, and it would land on stdout, in an agent's context, and from there in logs. Redaction is enforced by the client module, not left to whoever writes the field. (The original justification — that the token travels as a query parameter — was false; see [ADR-0012](0012-authentication-and-credential-resolution.md) §10.)
 
 How an error object is distinguished from a data record while streaming depends on the output format and is decided in that ticket. This ADR fixes only that it is distinguishable, and its field set.
 

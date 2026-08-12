@@ -12,7 +12,7 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Bound** — a limit expressing what the caller *wanted*: `--limit`, `--max-pages`. Reaching a bound is success, and exits 0.
 
-**Guard** — a limit expressing what the caller would *tolerate*: `--max-requests`, the budget guard. Reaching a guard means the work was larger than the allowance, and exits 3. The bound/guard distinction is the reason two superficially similar flags produce different exit codes.
+**Guard** — a limit expressing what the caller would *tolerate*: `--max-requests`. Reaching a guard means the work was larger than the allowance, and exits 3. The bound/guard distinction is the reason two superficially similar flags produce different exit codes. `--max-requests` is the only one: [ADR-0010](docs/adr/0010-budget-guard.md) decided there is no budget guard, and `--resolve-budget` is not one either, because exhausting it degrades and exits 0.
 
 **Completeness marker** — the field on every list output stating whether the result set is complete. Present always, including on full success, so an agent never infers completeness from a record count.
 
@@ -27,5 +27,11 @@ This file is built lazily, as terms actually get settled. The design effort that
 **Fixed-cost resolution** — the part of `--resolve` whose request count does not depend on how much data is walked: the field schemas, `users`, `pipelines` and `stages`. At most nine requests on a cold cache, zero on a warm one. Contrast **variable-cost resolution**, the person and organization lookups that scale with the number of distinct ids in the result set. Only the variable part is charged against `--resolve-budget`, because only the variable part can surprise the shared daily budget.
 
 **Degrade** — the response to a failure in an enrichment rather than in the answer: drop the enrichment for the rest of the run, emit one `warning`, mark the output partial, and exit 0. Reserved for work the caller asked for as a decoration. A failure in the thing the caller actually asked for is an error, not a degradation — the asymmetry is why a `users` fetch failure degrades under `--resolve` but is fatal to `pd users list`.
+
+**Burst gate** — the rolling 2-second rate limiter in the client module, distinct from the `p-limit` concurrency limiter beside it. `p-limit` bounds requests *in flight*; the gate bounds requests *per window*, which is the quantity Pipedrive's burst limit actually counts. Latency converts between the two, so no concurrency value alone protects the window. Settled in [ADR-0011](docs/adr/0011-concurrency-and-retry.md).
+
+**Endpoint family** — the key the burst gate is partitioned by. Every current operation sits in one `default` family; the Search API's uniform 10 requests per 2 seconds becomes a second family when a search command exists.
+
+**Strike** — one burst 429 against the whole gate. Strikes are counted per *run*, not per request, because a 429 pauses every request rather than the one that met it. Three strikes end the run as `rate_limited`. Contrast a **retry**, which is per request and counts 5xx and transport failures against a separate budget.
 
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.

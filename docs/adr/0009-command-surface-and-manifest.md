@@ -149,13 +149,18 @@ invented line types, leaving the harness to reassemble the document. A single-li
 plus trailer was rejected as the worse half of both: the invariant survives, but `JSON.parse(stdout)`
 still fails.
 
-### 8. Two groups sit outside the grammar, by name
+### 8. Three groups sit outside the grammar, by name
+
+*Amended by [ADR-0012](0012-authentication-and-credential-resolution.md) §5, which added the third.*
 
 `pd manifest` is verbless. `pd cache info` and `pd cache clear` (ADR-0005 §7) use verbs that are not
-`list` or `get`, on a noun that is not a Pipedrive resource.
+`list` or `get`, on a noun that is not a Pipedrive resource. `pd auth status` (ADR-0012 §5) does the
+same on a second such noun, and like `pd manifest` it emits one JSON object rather than an NDJSON
+stream.
 
 These are the complete set of exceptions, and they are exceptions rather than a generalisation: the
-grammar governs *resources*, and neither the surface description nor the local cache is one. The
+grammar governs *resources*, and neither the surface description, the local cache, nor the credential
+configuration is one. The
 root `--help` therefore has two sections, `RESOURCES` and `OTHER`, and the manifest carries the same
 split so an agent constructing a resource command never sees `manifest` in the candidate list.
 

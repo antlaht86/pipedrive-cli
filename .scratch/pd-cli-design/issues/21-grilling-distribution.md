@@ -18,3 +18,9 @@ How does `pd` reach a machine, given users may not have Bun installed?
 - Whether `AGENTS.md` ships with the tool or lives only in the repo, given it is the canonical documentation a harness reads.
 
 Record as an ADR.
+
+## Context added while resolving other tickets
+
+- **The plain npm package is still on the table, and [ADR-0012](../../../docs/adr/0012-authentication-and-credential-resolution.md) §4 is why.** Research 07 found that option survives only if `pd` avoids `Bun.*` APIs. ADR-0012 refused `Bun.secrets` — the one such API any decision had reached for — so as of ADR-0012 no locked decision requires the Bun runtime. Verify that before relying on it; a later ticket could spend the freedom.
+- **Nothing needs to ship a credential.** ADR-0012 §3 puts the credential in `$XDG_CONFIG_HOME/pd/credentials`, `$PD_API_TOKEN` or a file path, none of which the installer touches. Install is code only.
+- **The config path is a second per-user location beside the cache.** [ADR-0005](../../../docs/adr/0005-cache-design.md) §6 fixed `$XDG_CACHE_HOME/pd/`; ADR-0012 §3 fixes `$XDG_CONFIG_HOME/pd/`. Both need a Windows answer, and research 08 §10 point 3 flags that `0600` has no NTFS equivalent and `chmod` is largely a no-op there — so a Windows target makes the credential file's permission promise unenforceable, which is a distribution consequence rather than an auth one.

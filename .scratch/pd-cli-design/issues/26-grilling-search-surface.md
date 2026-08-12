@@ -46,3 +46,10 @@ Record as an ADR.
   auth type — roughly a tenth of a Premium account's general allowance. Whether that ceiling is separate
   from or carved out of the general burst counter is documented nowhere (research 01, open question 11),
   and the exact membership of "the Search API" is inference from path names (open question 10).
+- [ADR-0011](../../../docs/adr/0011-concurrency-and-retry.md) §10 answers the limiter half so this ticket
+  does not have to: the rate gate is already **keyed by endpoint family**, so search arrives as a new key
+  rather than a rework. Under §2's half-window rule the `search` family gates at **5 requests per
+  2 seconds**. What is left here is unchanged — whether search can share `--max-requests` honestly, or
+  needs its own ceiling — plus one inherited assumption to confirm or overturn: ADR-0011 takes the
+  conservative reading of research gap 11, that a search request spends **both** the search allowance and
+  the general one.
