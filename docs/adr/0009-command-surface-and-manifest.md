@@ -38,6 +38,9 @@ exists, but whether a second one is justified.
 
 ### 1. The grammar is `pd <resource> <verb> [id] [flags]`
 
+*Amended by [ADR-0017](0017-search-and-list-filtering.md) §1 — the verb inventory is three, not two:
+`search` joins `list` and `get`. The grammar's form is unchanged.*
+
 Resource first, verb second. `pd deals list`, `pd deals get 123`, `pd persons list`,
 `pd users get 42`.
 
@@ -73,9 +76,13 @@ cache stays at eight entries.
 
 Search (`/deals/search`, `/itemSearch`, and siblings) is absent for a different reason: it is the
 map's *Filtering and search surface* question, which was waiting on this ticket and is now
-unblocked.
+unblocked. *[ADR-0017](0017-search-and-list-filtering.md) answered it: four of these nine resources
+gain `search`, and a tenth resource `items` is added.*
 
 ### 3. Every resource has `list` and `get`; cached resources answer `get` locally
+
+*Amended by [ADR-0017](0017-search-and-list-filtering.md) §2 — the tenth resource, `items`, has
+neither, because `/itemSearch` offers no by-id path and no unfiltered listing.*
 
 `get` exists wherever v2 offers a by-id path. For the four resources that are cached —
 `users`, `fields`, `pipelines`, `stages` — `get` filters the cached list rather than issuing a

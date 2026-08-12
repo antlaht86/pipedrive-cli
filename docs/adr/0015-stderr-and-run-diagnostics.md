@@ -7,6 +7,7 @@ Extends: [ADR-0009](0009-command-surface-and-manifest.md) — adds an eighth glo
 Closes: [ADR-0011](0011-concurrency-and-retry.md) §"The effective gate and concurrency belong in stderr diagnostics" — this ADR owns the shape
 Confirms: [ADR-0001](0001-error-model-and-exit-codes.md), [ADR-0002](0002-output-format.md) — stdout stays the only machine channel; no new error variant, no exit-code change
 Amended by: [ADR-0016](0016-field-projection.md) §10 — §6's query-value allowlist gains `custom_fields`
+Amended by: [ADR-0017](0017-search-and-list-filtering.md) §10 — §6's allowlist gains the search and filter parameters; the search `term` is permanently refused
 
 ## Context
 

@@ -2,6 +2,7 @@
 
 Status: accepted
 Date: 2026-08-12
+Deciding ticket: [The search surface, and what the stricter search rate limit costs](../../.scratch/pd-cli-design/issues/26-grilling-search-surface.md)
 Amends: [ADR-0009](0009-command-surface-and-manifest.md) §1 and §3 — the grammar gains a third verb, and one resource that has neither `list` nor `get`
 Extends: [ADR-0015](0015-stderr-and-run-diagnostics.md) §6 — six query parameters join the redaction allowlist, and one is refused entry
 Confirms: [ADR-0011](0011-concurrency-and-retry.md) §10's conservative reading of research 01's open question 11
