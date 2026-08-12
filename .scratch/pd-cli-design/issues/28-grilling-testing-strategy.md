@@ -1,7 +1,7 @@
 # Testing strategy against a shared live account
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 12, 14, 17
 
@@ -74,3 +74,66 @@ Record as an ADR.
   three requests; `--ids` with duplicate ids issues the same requests as without them; and a fixture
   where the API omits two requested ids produces exactly one `unmatched_ids` warning and exit 0. All
   three assert against the HTTP layer rather than against Pipedrive, so all three cost zero requests.
+
+## Answer
+
+Recorded in [ADR-0019](../../../docs/adr/0019-testing-strategy.md).
+
+**Strategy.** Three layers, each with its blind spot named: offline unit tests over `pd`'s own logic
+(cannot see a response body), fixture replay (cannot see Pipedrive changing), and a hand-invoked live
+suite (sees nothing on a schedule, because nothing schedules it). Beside them sit the CI gates, which
+are safety assertions rather than regression tests and fail hard.
+
+**The seam.** Replay is installed at `guardedFetch`'s custom `fetch`, not at a client — so v1 `users`
+traffic cannot escape it. The consequence that made this more than convenient: replay sits *below*
+ADR-0013's non-GET refusal, so no test can accidentally test past the read-only property, and every
+replay test re-executes the refusal path. It also gives ADR-0016 §6, ADR-0017 and ADR-0018 one shared
+answer to "and no request was made" — the gate's dispatch count.
+
+**Zero requests is mechanical.** The default gate is constructed with a transport that throws, so a
+missing fixture fails a test instead of quietly making a live call. The failure mode of a suite that
+drifts into hitting the network cannot occur.
+
+**The clock.** Injected, alongside the transport, into the one module that already takes an injected
+`fetch`. Six timing behaviours depend on it (ADR-0011's gate and both retry budgets, ADR-0015's 1 Hz
+status line, ADR-0005's TTLs, ADR-0010's sentinel expiry); the retry test alone costs ~6 s of real time
+and the TTL tests are untestable without it. Ruled a seam rather than production complexity: one extra
+parameter, at a boundary that already exists for an unrelated reason, and nothing else in `pd` reads
+the wall clock. Jitter is seeded from the same source, so backoff tests assert exact durations.
+
+**Guard state.** No test-only flag and no test-only environment variable. Isolation runs entirely on
+the `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` and `%LOCALAPPDATA%` / `%APPDATA%` overrides ADR-0005,
+ADR-0012 and ADR-0014 already defined. The `blocked` sentinel is placed by writing the file and cleared
+by deleting it — its unreachability from `--no-cache` and `pd cache clear` was about refusing an agent
+a flag, never about hiding a file.
+
+**Cache reuse: no.** Sharing them is a false economy, and the reason is that they are permitted to fail
+in opposite directions — the cache is deliberately partial, TTL'd, version-stamped and credential-keyed,
+every one of which is wrong for a fixture store that must never expire and must be keyed by request.
+The cache is still exercised, by replay tests with a temp cache directory and the injected clock.
+
+**Runtimes.** Suite under Bun; a short smoke leg runs the *built bundle* under Node 20 and LTS, plus
+the Windows runner. That leg exists because the ESLint ban proves the source is `Bun.*`-free while
+users run the bundle, and a bundler can reintroduce the gap. Three things are asserted on the bundle
+only: ADR-0014 §5's `pd --version` / `pd_version` agreement, §9's `unsupported_runtime` refusal, and the
+tarball contents.
+
+**Live suite: yes, hand-invoked only** (user's decision). Never CI, never scheduled, never part of
+`bun test`, read-only by construction through the same guarded client, with a `--max-requests` ceiling
+it is alone in supplying by default. It runs against the **real company account** — a sandbox was
+rejected because its custom-field schema, option ids and emptiness would pin a shape no real user meets.
+Its output is a re-recording that leaves a git diff for a human, not a pass/fail, because a suite that
+goes red when a colleague edits a deal is a suite nobody reads. It **never** tests a retry, a 429 or the
+Cloudflare block — permanently, on research 01's asymmetry — which is the strongest single argument for
+the fake clock.
+
+**Fixture provenance: real CRM data, verbatim** (user's decision). Three consequences written into the
+ADR rather than assumed: the repository being private becomes a load-bearing design property and cannot
+be opened without a git-history rewrite; the package manifest uses an explicit `files` allowlist with a
+CI gate on the packed tarball, so no fixture ever ships; and the credential is stripped mechanically
+regardless — request headers are never recorded, and a CI gate greps the fixture tree for
+credential-shaped strings. The user's decision was about CRM data and never about the token.
+
+**Net surface: zero.** No flag, no environment variable, no line type, no warning kind, no error
+variant, no exit-code change, and `manifest_version` does not move. Production cost is two injected
+dependencies on `guardedFetch` and one injected TTY predicate on the diagnostics module.
