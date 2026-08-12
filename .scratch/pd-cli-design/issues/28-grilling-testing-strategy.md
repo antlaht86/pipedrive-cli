@@ -37,3 +37,24 @@ run being the thing that earns a Cloudflare block?
   in a query string. What is redacted, and is that a manual discipline or a mechanical one?
 
 Record as an ADR.
+
+## Context added while resolving other tickets
+
+- **[ADR-0013](../../../docs/adr/0013-read-only-enforcement.md) §2 hands you two tests you do not get to skip**, because they enforce a safety property rather than catch a regression: a CI assertion that both generated clients contain zero non-GET operations after regeneration, and a unit test that drives a non-GET request through the single client and asserts the `write_blocked` error. You may decide how they are structured and where they run. You may not decide whether they exist. The same ADR makes the ESLint `no-restricted-imports` rule on `**/generated/**` a CI gate, so the lint step is not optional either.
+- **[ADR-0014](../../../docs/adr/0014-distribution.md) §3 adds a third mandatory check and one question you do own.** The check: an ESLint ban on the `Bun` global and every `bun:*` import in `src/**`, CI-gated, because the shipped artifact targets Node ≥ 20 and the whole npm-package channel rests on that ban holding. The question: the test suite runs under Bun, but users run the bundle under Node — so decide whether tests execute against both runtimes, and whether anything tests the built bundle rather than the source. ADR-0014 §9's `unsupported_runtime` check and §5's version-stamp agreement between `pd --version` and the manifest's `pd_version` are both things only a test can keep honest. §6 also commits CI to a Windows runner beside the POSIX one — the `%LOCALAPPDATA%`/`%APPDATA%` path resolution is the only Windows-specific code in `pd` and the only thing that leg exists to protect.
+
+- **[ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md) hands this ticket two testable
+  claims.** First, a non-TTY run emits exactly two things on stderr (§1) — testable as output, and the
+  test must be able to lie about whether stderr is a TTY. Second, no unredacted query value or
+  non-allowlisted header reaches stderr under `--verbose` (§6); that is a safety assertion belonging
+  with ADR-0013's CI gates rather than in a snapshot test, and it is the second such gate this map has
+  produced.
+- ADR-0015 §4's status line refreshes on a ~1 Hz timer, which joins ADR-0011's gate and retry budgets
+  in the set of timing behaviour a replay layer must be able to drive the clock for.
+
+- **[ADR-0016](../../../docs/adr/0016-field-projection.md) §7 hands this ticket the highest-value
+  single test in the map**: the same projection with and without the upstream `custom_fields`
+  push-down must produce **byte-identical** output. That property is the only thing standing between
+  an optimisation and a silent contract change, and it needs a fixture pair rather than a live call.
+- Also testable from ADR-0016: an unknown top-level selector exits 2 **before any request is made**
+  (§6), which is a test the HTTP layer must be able to assert was never touched.

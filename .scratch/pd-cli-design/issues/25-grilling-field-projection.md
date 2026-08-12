@@ -1,7 +1,7 @@
 # Field projection: shrinking output against an agent's context budget
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 15
 
@@ -50,3 +50,30 @@ Record as an ADR.
   fixes three things it must work with: `custom_fields_resolved` is a parallel hash-keyed block,
   resolution adds seven sibling `*_name` fields beside their ids, and `custom_fields` is byte-identical
   with and without `--resolve`.
+
+- **[ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md) §6 touches whatever query
+  parameter this ticket adds.** `--verbose` logs request URLs, and query values print only for an
+  allowlist (`limit`, `cursor`, `sort_by`, `sort_direction`, `include_option_labels`, `ids`); anything
+  else is `[redacted]`. A projection field list is structural rather than company data, so it is
+  arguably allowlist-eligible in a way a search term is not — this ticket's call, and the only reason
+  to make it is debuggability of the projection itself.
+
+## Answer
+
+Recorded as [ADR-0016](../../../docs/adr/0016-field-projection.md).
+
+**`--fields` exists**, comma-separated, the ninth global flag, with `id` always emitted regardless. The `jq` counter-argument fails on a specific point: the agent does not read Pipedrive's response, it reads `pd`'s stdout, and a harness capturing stdout has already spent the tokens before any downstream filter could run.
+
+**Grammar is two forms**: bare top-level names, and `custom_fields.<hash>`. No display names — ADR-0008 chose hashes because names collide, and a projection accepting names inherits the collision at the worst moment. `pd fields list --entity deals` is the lookup, at zero requests warm.
+
+**One rule covers both of ADR-0008's second-key problems**: a resolution artifact rides with its raw field and is never selectable alone. Selecting a hash brings its `custom_fields_resolved` entry; selecting `org_id` brings `org_name`. The invariant bought is that **the legal selector set does not depend on `--resolve`** — the rejected alternative lets `--fields org_name` without `--resolve` return a record with nothing in it.
+
+**Projection removes fields, never records.** The trailer is untouched and a record whose every selected field is absent still emits with just its id. Filtering is ticket 26's.
+
+**Unknown name is exit 2 before any request** — possible offline because ADR-0006 makes the schema `pd`'s own — while an unmatched hash is one deduplicated `warning`, `kind: "unmatched_field_selector"`. A wrong name is always a mistake; a hash matching nothing might be a field nobody filled in.
+
+**The ticket's push-down premise was wrong and the live spec inverted it.** `include_fields` is *additive* — "additional data namespaces", enum-constrained — and cannot trim anything, so it is never sent and its namespaces (`notes_count`, `products_count`, mail timestamps) are simply outside `pd`'s schema. The real subtractive parameter is `custom_fields`, max 15 keys, verified on eight operations covering deals, persons, organizations and products. `pd` pushes down when every condition holds and trims locally otherwise, which is contract-invisible because **output is byte-identical either way** — the per-endpoint availability the ticket feared never reaches the caller.
+
+**Manifest gains a per-command selectable-field list.** Without it the flag's primary consumer must run the command unprojected to learn the field names, spending exactly the context the flag exists to save. Hashes stay out (per-account, `pd fields list` serves them). Additive, so `manifest_version` does not move.
+
+**Key order is `pd`'s schema order in machine mode** so two callers selecting the same fields get identical bytes, and **selector order under `--pretty`**, which is already unstable. **ADR-0015 §6's allowlist gains `custom_fields`** — structural, and logging it is how "why is my field missing" gets answered.

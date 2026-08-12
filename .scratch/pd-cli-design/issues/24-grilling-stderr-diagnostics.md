@@ -1,7 +1,7 @@
 # What stderr carries, and how a long run reports progress
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 10
 
@@ -50,3 +50,23 @@ Record as an ADR if the answer is more than "stderr carries the error line and n
   **allowlist**, never a denylist — a constraint on whatever debug dump this ticket specifies.
 - **`pd auth status` is not a diagnostic channel.** ADR-0012 §5 makes it a stdout command emitting one
   JSON object at zero requests. It answers "which credential, from where" without stderr's help.
+
+## Answer
+
+Recorded as [ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md).
+
+**Default stderr is exactly two things, and neither is progress**: ADR-0001's one-line error summary and ADR-0003's per-10,000-record large-walk warning. A successful bounded run with no TTY is byte-silent. The invariant that makes this safe is that **in machine mode nothing on stderr is the sole carrier of any fact** — the error line duplicates stdout's error object, the walk warning duplicates the trailer's `emitted`. That answers the ticket's sharpest question: stderr is reliable enough only for things that do not matter if lost.
+
+**Progress exists and is gated on stderr being a TTY** — not stdout's. Observable behaviour therefore varies by environment, which locked note 4 forbids on stdout; accepted here because stdout is a contract and stderr, by decision, is not. Zero flags, and the agent gets no noise it would not read.
+
+**stderr is prose, and explicitly not a contract.** No JSON, no `type` tags, no `--log-format`, no manifest description of the channel's content. Structured stderr was rejected because a machine-readable channel becomes a promise the moment anyone parses it, giving `pd` two output contracts when ADR-0002 deliberately built one. Consequence accepted: if telemetry is ever wanted, the answer is "there is none", not "pass a flag".
+
+**One `\r`-rewriting status line at ~1 Hz, plus permanent appended lines for anomalies**, and a final summary that replaces the status line. Anomalies are ADR-0011's 429 gate pauses, 5xx backoffs and the self-raising gate ceiling, plus ADR-0005's cache skips. Line-per-page was rejected (80 unread lines, and under `--pretty` all 80 print before the first row); anomalies-only was rejected because a normal 20 s walk and a hung one would both be silent — the exact ambiguity ADR-0011 created.
+
+**`--verbose` is the eighth global flag and the only addition to the surface.** No `-v` (ADR-0009 bans short forms), no `--quiet` (the default is already silent for anyone who would want it), no level scale, and no `PD_LOG` — an environment variable would make two runs with identical argv print differently, and argv is what a human reads in a harness transcript. `--verbose` never changes a byte of stdout.
+
+**Redaction is by allowlist in both directions.** The ticket's premise was already corrected: the token is header-borne, so a URL leaks company data rather than the credential — same rule, different reason. Query values print only for `limit`, `cursor`, `sort_by`, `sort_direction`, `include_option_labels`, `ids`; every other parameter is `[redacted]`, so a future flag leaks nothing by default. Headers from ADR-0012 §10's allowlist. Response bodies never logged at any verbosity.
+
+**`--pretty` is where progress earns its place** — ~20 s of blank terminal against ~250 ms streaming — and its status line counts records *collected*, naming the buffering so a climbing counter over an empty screen is not a mystery.
+
+**No new error variant, no exit-code change, no `pd auth status` involvement.** ADR-0001 and ADR-0002 are confirmed rather than amended, and ADR-0011's explicit handoff is closed: the gate and concurrency become visible without becoming settable.

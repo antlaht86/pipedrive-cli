@@ -37,3 +37,12 @@ to the output contract?
   has to say whether it names them on the expanded record too.
 
 Record as an ADR.
+
+- **[ADR-0016](../../../docs/adr/0016-field-projection.md) §2 leaves this ticket a grammar question,
+  deliberately unanswered.** The selector language is bare top-level names plus `custom_fields.<hash>`
+  and nothing deeper, because `pd`'s records are one level deep plus that block. If expansion adds a
+  nested block to the record, either it is selectable as a whole under its bare name, or this ticket
+  extends the grammar — and extending it is a manifest-visible change under ADR-0016 §8.
+- **ADR-0016 shrinks this ticket's cost problem before it starts.** Projection runs before the resolve
+  prefetch, so an unselected `org_id` needs no lookup. Whatever expansion costs, `--fields` is already
+  the lever that stops the caller paying for it unasked.

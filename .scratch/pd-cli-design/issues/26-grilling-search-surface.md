@@ -53,3 +53,17 @@ Record as an ADR.
   needs its own ceiling — plus one inherited assumption to confirm or overturn: ADR-0011 takes the
   conservative reading of research gap 11, that a search request spends **both** the search allowance and
   the general one.
+
+- **[ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md) §6 constrains the search term.**
+  `--verbose` logs request URLs, and query values print only for an allowlist (`limit`, `cursor`,
+  `sort_by`, `sort_direction`, `include_option_labels`, `ids`). Whatever parameter this ticket adds for
+  a search term is `[redacted]` by default and must not be added to that allowlist — a search term is
+  company data. Nothing to decide unless this ticket wants the opposite.
+
+- **[ADR-0016](../../../docs/adr/0016-field-projection.md) §5 draws a boundary this ticket owns the
+  other side of.** `--fields` removes fields and never records, so `emitted`, `skipped` and
+  `duplicates` keep their meanings and the trailer gains nothing. Any record-dropping behaviour is
+  this ticket's to invent — including whether it needs a fourth subtractive counter on the trailer, or
+  whether a filtered-out record was simply never fetched and therefore counts as nothing at all.
+- ADR-0016 §10 already added `custom_fields` to ADR-0015 §6's allowlist. A search `term` still is not
+  eligible, for the reason given above.
