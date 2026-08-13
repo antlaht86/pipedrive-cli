@@ -6,10 +6,11 @@
 #      %LOCALAPPDATA% / %APPDATA% resolution that is the only
 #      Windows-specific code in pd
 #
-# The CWD `.env` gate (ADR-0021 §3) runs in leg 1, against a binary compiled by
-# the same `buildBinary` as `dist/pd` — `pd` has no command that reads the
-# credential chain yet. Ticket 03 moves it here as `pd auth status` beside a
-# `.env`, asserting the run does not report the `env` tier.
+# The CWD `.env` gate (ADR-0021 §3) runs in every leg. Leg 1 covers both halves
+# against binaries compiled by the same `buildBinary` as `dist/pd`; legs 2 and 3
+# run the normative `.env` form — `pd auth status` beside a `.env` that sets
+# `PD_API_TOKEN` must not report the `env` tier — against `dist/pd` itself, on
+# both platforms.
 name: ci
 
 on:
@@ -49,6 +50,21 @@ jobs:
           # The three shapes of ADR-0021 §6, and nothing else — in particular
           # not the source-mode fallback, which means the build failed to stamp.
           echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\+g[0-9a-f]+(\.dirty)?)?$'
+      - name: pd auth status beside a .env does not report the env tier
+        run: |
+          set -euo pipefail
+          pd="$PWD/dist/pd"
+          workdir="$(mktemp -d)"
+          home="$(mktemp -d)"
+          echo 'PD_API_TOKEN=leaked-from-dotenv' > "$workdir/.env"
+          # An empty home, so the config-file tier cannot answer either: the only
+          # credential on offer is the one the `.env` would leak (ADR-0021 §3).
+          status="$(cd "$workdir" && env -u PD_API_TOKEN \
+            HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_CACHE_HOME="$home/cache" \
+            "$pd" auth status)"
+          echo "$status"
+          echo "$status" | grep -q '"found":false'
+          ! echo "$status" | grep -q '"tier"'
 
   binary-windows:
     name: binary smoke (windows)
@@ -68,3 +84,22 @@ jobs:
           # The three shapes of ADR-0021 §6, and nothing else — in particular
           # not the source-mode fallback, which means the build failed to stamp.
           if ($version -notmatch '^\d+\.\d+\.\d+(\+g[0-9a-f]+(\.dirty)?)?$') { exit 1 }
+      - name: pd auth status beside a .env does not report the env tier
+        shell: pwsh
+        run: |
+          $pd = Join-Path $PWD 'dist\pd.exe'
+          $workdir = Join-Path $env:RUNNER_TEMP 'dotenv-gate'
+          $home2 = Join-Path $env:RUNNER_TEMP 'empty-home'
+          New-Item -ItemType Directory -Force -Path $workdir, $home2 | Out-Null
+          Set-Content -Path (Join-Path $workdir '.env') -Value 'PD_API_TOKEN=leaked-from-dotenv'
+          # An empty %APPDATA%, so the config-file tier cannot answer either: the
+          # only credential on offer is the one the `.env` would leak.
+          $env:APPDATA = Join-Path $home2 'Roaming'
+          $env:LOCALAPPDATA = Join-Path $home2 'Local'
+          Remove-Item Env:PD_API_TOKEN -ErrorAction SilentlyContinue
+          Push-Location $workdir
+          $status = & $pd auth status
+          Pop-Location
+          Write-Host $status
+          if ($status -notmatch '"found":false') { exit 1 }
+          if ($status -match '"tier"') { exit 1 }

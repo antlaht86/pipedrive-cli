@@ -691,9 +691,15 @@ unparseable sentinel is treated as absent.
   existing `code` are frozen. Adding a `code` is non-breaking, which is only safe because `retry` is
   always present. The error object carries no version number.
 
-**Seven warning kinds, by name**: `record_rejected`, `cache_entry_skipped`,
+**Eight warning kinds, by name**: `record_rejected`, `cache_entry_skipped`,
 `owner_resolution_unavailable`, `unknown_custom_field`, `resolution_budget_exhausted`,
-`unmatched_field_selector`, `unmatched_ids`.
+`unmatched_field_selector`, `unmatched_ids`, `credential_file_permissions`.
+
+`credential_file_permissions` is the eighth, minted by implementation ticket 03 for the two
+permission statements about the credential file that ADR-0012 §3 and ADR-0021 §8 require and that no
+ADR named a `kind` for: a POSIX file with permissions looser than `0600`, and the Windows NTFS gap
+where `0600` has no equivalent. Both say the same thing about the same file, so they share one kind.
+`src/lib/warnings.ts` is the registry; this list is a copy of it.
 
 ### 16. stderr and diagnostics — [ADR-0015](../../docs/adr/0015-stderr-and-run-diagnostics.md)
 
@@ -1108,9 +1114,9 @@ Two questions are deliberately left to be answered with a keystroke rather than 
 - Whether `custom_fields=` with an empty value means "none" upstream. If it does, dropping every
   custom field from a large walk is the single largest response-size win available. `pd` does not
   gamble on it today and omits the parameter instead.
-- **An eighth `warning` kind must be minted.** ADR-0012 §3's loose-permissions warning on the
-  credential file is a machine-mode stdout `warning` line, so ADR-0006 §6 requires it to carry a
-  `kind`, and no ADR names one. Adding it is additive and non-breaking, exactly as adding a `code` is.
+- ~~**An eighth `warning` kind must be minted.**~~ **Answered by implementation ticket 03,
+  2026-08-13**: the kind is `credential_file_permissions`, and it covers both ADR-0012 §3's
+  loose-permissions warning and ADR-0021 §8's Windows NTFS caveat. See the eight-kind list in §15.
 - Whether the `parser.patch` hoist of inline v2 response item schemas into `components/schemas`
   works in the per-path form. Only the whole-spec form was verified. The fallback — a hand-written
   three-field envelope schema with generated record schemas — leaves the two-stage validation split

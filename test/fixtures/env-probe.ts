@@ -7,8 +7,9 @@
  * credential chain, and `PD_BUNFIG_PRELOAD`, which a `bunfig.toml` sets through
  * a preloaded module. Both must read `unset`.
  *
- * Ticket 03 extends the `.env` half of the gate to run `pd auth status` against
- * `dist/pd` and assert the `env` tier is not reported.
+ * The `.env` half is also asserted in its normative form beside this one —
+ * `pd auth status` must not report the `env` tier — but no `pd` command reveals
+ * a `bunfig.toml` preload, so this probe stays for that half.
  */
 process.stdout.write(
   `${process.env["PD_API_TOKEN"] ?? "unset"} ${process.env["PD_BUNFIG_PRELOAD"] ?? "unset"}\n`,

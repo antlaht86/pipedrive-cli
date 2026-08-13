@@ -15,8 +15,12 @@ import { buildBinary } from "../scripts/build.ts";
  * would be a silent account switch. The build disables the autoload; this
  * asserts it against a real compiled binary rather than against the source.
  *
- * Ticket 03 extends this gate to `pd auth status` on `dist/pd`, asserting the
- * run does not report the `env` tier.
+ * Two halves, and the probe is still needed for one of them. The `.env` half is
+ * now asserted in its normative form — `pd auth status` run beside a `.env`,
+ * against a binary compiled from `src/cli.ts`, must not report the `env` tier —
+ * and the CI binary legs run the same assertion against `dist/pd`. The
+ * `bunfig.toml` half has no command that would reveal it, so the probe carries
+ * it.
  */
 
 const workspace = mkdtempSync(join(tmpdir(), "pd-dotenv-gate-"));
@@ -45,4 +49,33 @@ test("the built binary ignores a .env and a bunfig.toml in the process CWD", asy
   expect(run.exitCode).toBe(0);
   // First field is the `.env` half, second the `bunfig.toml` half.
   expect(run.stdout.toString().trim()).toBe("unset unset");
+});
+
+test("pd auth status beside a .env does not report the env tier", async () => {
+  const binary = await buildBinary({
+    entry: fileURLToPath(new URL("../src/cli.ts", import.meta.url)),
+    outfile: join(workspace, "pd"),
+    version: "0.0.0-gate",
+  });
+
+  const cwd = mkdtempSync(join(workspace, "cwd-"));
+  await Bun.write(join(cwd, ".env"), "PD_API_TOKEN=leaked-from-dotenv\n");
+
+  // An empty home, so tier 3 cannot answer either and the only credential on
+  // offer is the one the `.env` would leak.
+  const home = mkdtempSync(join(workspace, "home-"));
+  const run = Bun.spawnSync([binary, "auth", "status"], {
+    cwd,
+    env: {
+      PATH: process.env["PATH"] ?? "",
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, "config"),
+      XDG_CACHE_HOME: join(home, "cache"),
+    },
+  });
+
+  expect(run.exitCode).toBe(0);
+  const status = JSON.parse(run.stdout.toString()) as Record<string, unknown>;
+  expect(status["tier"]).toBeUndefined();
+  expect(status["found"]).toBe(false);
 });

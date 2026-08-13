@@ -35,3 +35,9 @@ This file is built lazily, as terms actually get settled. The design effort that
 **Strike** — one burst 429 against the whole gate. Strikes are counted per *run*, not per request, because a 429 pauses every request rather than the one that met it. Three strikes end the run as `rate_limited`. Contrast a **retry**, which is per request and counts 5xx and transport failures against a separate budget.
 
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.
+
+**Tier** — one step of the credential precedence chain: `--token-file`, `PD_API_TOKEN`, then the credentials file. First match wins, and the environment sits above the file so an exported credential never loses silently to a stored one. `pd` reads every tier and writes none. Settled in [ADR-0012](docs/adr/0012-authentication-and-credential-resolution.md).
+
+**Fingerprint** — the first 16 hex characters of the SHA-256 of the resolved API token. One value with two jobs: it names the cache directory ([ADR-0005](docs/adr/0005-cache-design.md) §2) and it is what `pd auth status` prints, so a human can match a running configuration to a cache directory without `pd` printing anything reversible. It is a derived value and not a secret.
+
+**Kind** — the discriminator on a `warning` line, read after `type`. Eight exist, enumerated by name in the spec and registered in `src/lib/warnings.ts`. `kind` is interface in the same sense `code` is; adding one is additive and non-breaking.

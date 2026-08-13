@@ -24,3 +24,14 @@ Notes for the implementer:
 - [ ] `cache_entry_skipped` goes to stderr under `--pretty`
 - [ ] The manifest marks `--pretty` `machine_readable: false` with the never-invoke instruction
 - [ ] `--pretty` is documented as unstable in `--help` and in `AGENTS.md`
+
+## Comments
+
+**2026-08-13 — handoff from ticket 03.** ADR-0012 §5 ends with "`--pretty` renders the same fields as
+human text" for `pd auth status`. Ticket 03 built the command and its JSON object but **not** the
+`--pretty` path: today `pd auth status --pretty` is a `usage` refusal, because the aligned renderer,
+the flag's registration and the never-invoke contract all live here and a one-off human renderer
+there would be a second implementation to delete. This ticket owes `pd auth status` a `--pretty`
+rendering of `found`, `tier`, the path, `fingerprint`, `cache_dir_exists`,
+`credential_is_write_capable` and the `warnings` array, and owes the argument parser in `src/cli.ts`
+the flag itself. The same applies to the other single-JSON-object surfaces as they arrive.
