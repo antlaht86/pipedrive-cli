@@ -4,7 +4,7 @@ Status: accepted
 Date: 2026-08-12
 Deciding ticket: [Related-entity expansion: pulling the whole related record](../../.scratch/pd-cli-design/issues/27-grilling-related-entity-expansion.md)
 Amends: [ADR-0017](0017-search-and-list-filtering.md) §7 — `--ids` gains client-side chunking above the API's 100-id ceiling
-Confirms: [ADR-0016](0016-field-projection.md) §2 — the selector grammar stays closed, and the question that ADR handed this one is answered by there being no nested block
+Confirms: [ADR-0016](0016-field-projection.md) §2 — the selector grammar stays closed, and the question that ADR handed this one is answered by there being no nested block *(corrected by [ADR-0020](0020-value-formatting-and-absence.md) §7: one nested block exists, `products.prices`, but no selector reaches inside it — the grammar still stays closed)*
 Extends: [ADR-0006](0006-validation-placement-and-rejection.md) §6 — one new `warning` kind, `unmatched_ids`
 
 ## Context
@@ -184,6 +184,9 @@ Implementation-level, decided rather than put to the user, per the map's altitud
 - **ADR-0016 §2's grammar is closed permanently.** The question that ADR handed forward — whether a
   nested block forces a deeper selector language — is answered by there being no nested block, so
   `manifest_version` does not move and no manifest-visible change ships.
+  *Corrected by [ADR-0020](0020-value-formatting-and-absence.md) §7: `products.prices` is a nested
+  block and it does exist. The conclusion is unchanged — no nested block is reachable by a selector,
+  because `prices` is selectable only whole — so this ADR's reasoning about expansion stands.*
 - **ADR-0017 §7's `--ids` is materially stronger**, and the 100-id ceiling that would have surprised
   an implementer is pinned before implementation rather than discovered during it.
 - `AGENTS.md` gains the two-command join as a worked recipe, next to the `pd fields list` recipe it

@@ -127,6 +127,9 @@ direction only: an agent given `12000.00 EUR` can format it for a human, while a
 **This settles formatting for resolved values only.** How raw `value` and `currency` are represented
 without `--resolve` is still the map's open *Value formatting* question.
 
+*Answered by [ADR-0020](0020-value-formatting-and-absence.md) §1 and §6 — raw money is a JSON number
+with `currency` as a flat sibling, time passes through unparsed, and an empty field is an absent key.*
+
 ### 5. `include_option_labels` is not used; option labels are resolved client-side
 
 The parameter replaces the plain id rather than adding to it, so passing it would change `custom_fields`

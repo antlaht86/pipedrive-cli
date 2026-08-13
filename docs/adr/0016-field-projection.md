@@ -58,6 +58,12 @@ No deeper dotting, no array indexing, no path expressions. The grammar stops her
 records are one level deep plus the custom-field block, and a path language sized for a shape that
 does not exist is a permanent surface for no gain.
 
+*Corrected by [ADR-0020](0020-value-formatting-and-absence.md) §7 — the premise is false. One nested
+block does exist, `products.prices`, an array of price objects on a resource inside ADR-0009 §2's
+nine. The decision stands: `prices` is selectable as a bare top-level name, whole, and no dotted path
+reaches inside it. A deeper grammar for one array on one resource is still a permanent surface for
+one case.*
+
 ### 3. Custom fields are named by hash, never by display name
 
 `--fields custom_fields.9a3f…c1`. A display name is not a legal selector.

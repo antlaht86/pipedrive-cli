@@ -1,7 +1,7 @@
 # Value formatting: money, currency and time in machine output
 
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 13, 15, 25
 
@@ -40,3 +40,42 @@ about the raw half, and the raw half is the default output.
   projected field that is absent still has to behave predictably.
 
 Record as an ADR.
+
+## Answer
+
+Recorded as [ADR-0020](../../../docs/adr/0020-value-formatting-and-absence.md).
+
+**Money.** JSON number, passed through, with `currency` staying a flat sibling key — `arr`, `mrr` and
+`acv` included, none of which carry a currency of their own. A string was rejected because its only
+argument needs an amount above 2^53; folding the pair into an object was rejected because it would
+create a block ADR-0016 §2's grammar cannot name, whereas `--fields value,currency` already works.
+
+**The ticket's `weighted_value` premise is false.** The field does not exist in the v2 API; the string
+appears only inside `probability`'s description. It is a UI figure, so there is no shape disagreement
+to settle and `pd` neither emits nor computes it.
+
+**Time.** Byte-for-byte passthrough, validated as a string and never parsed. The v2 spec declares these
+fields as bare `type: string` with no `format`, so there is no documented target to normalise to, and a
+normalising `pd` would become the component that can be silently wrong about time. `due_date` and
+`due_time` stay two fields, because joining them would require choosing the timezone the next point
+refuses to know.
+
+**Account timezone.** Never read — no request, `users/me` already excluded by ADR-0007 and ADR-0012.
+`pd` states that date-only fields are account-local wall clock and does not interpret them. The
+`timerange` custom field's `timezone_name` rides along as data and is applied to nothing.
+
+**Absence (user's decision).** A field with no value is omitted; a missing key means "no value". The
+agent's context budget wins over a fixed record shape — a deal carries eight to ten nullable keys, on
+every line of a 40,000-record walk. Boundaries: only `null`/absent are absent (`[]`, `""` and `0` are
+values), `custom_fields` is exempt under ADR-0008 §1's byte-identical rule, `id` is never absent, and
+`--fields` naming an empty field yields a shorter line with no warning — an unknown *name* is still
+exit 2 offline.
+
+**Found and corrected: one nested block does exist.** `products.prices` is an array of
+`{product_id, price, currency, cost, direct_cost, notes}`, on a resource inside ADR-0009 §2's nine. It
+is kept — a product without prices answers nothing — and selectable only as a bare `prices`, with no
+dotted path inside. This falsifies ADR-0016 §2's stated premise and ADR-0018's Consequences claim; both
+decisions survive, and both ADRs are backlinked.
+
+**Net surface: zero.** No flag, no line type, no warning kind, no error variant, no exit-code change,
+and `manifest_version` does not move.
