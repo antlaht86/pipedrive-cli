@@ -241,12 +241,12 @@ manual.
 
 ### 10. Fixtures keep real CRM data, and that has named consequences
 
-*Amended by [ADR-0021](0021-distribution-build-from-source.md) §9. The separation below is kept but
-moves: **the fixtures leave this repository** for a private one of their own, and the repository a user
-clones to build `pd` becomes public and carries none of them. The reason the section gave for calling
-the split expensive — fixtures persisting in git history — does not apply, because no fixture has been
-recorded yet. Read "private repository" below as "the fixture repository", and "the tarball" as "the
-built binary".*
+*Confirmed and extended by [ADR-0021](0021-distribution-build-from-source.md) §9. The repository stays
+private, and under ADR-0021 it is also the distribution channel — so this section now bounds who can
+obtain `pd` at all, not only who can read the fixtures. Splitting the fixtures into a second repository
+and sanitising them for a public one were both considered there and declined. Read "the tarball" below
+as "the built binary": the gate is the same, checked against `dist/pd`. The reference to ADR-0014 §1's
+public npm package is stale — there is no published package.*
 
 Recorded responses are committed verbatim: real deals, real organisation names, real contact addresses,
 real amounts, real owners. Anonymisation at record time was rejected in favour of the fixture being

@@ -8,7 +8,7 @@ Withdraws: [ADR-0001](0001-error-model-and-exit-codes.md)'s thirteenth variant `
 Releases: [ADR-0012](0012-authentication-and-credential-resolution.md) §4's constraint — the `Bun.*` ban is no longer load-bearing
 Reinforces: [ADR-0005](0005-cache-design.md) §6 — the original "the binary may sit on a read-only path" reason returns
 Amends: [ADR-0019](0019-testing-strategy.md) §7 and §8 — the Node smoke legs and the `Bun.*` lint gate are replaced
-Amends: [ADR-0019](0019-testing-strategy.md) §10 — the fixtures leave this repository so it can be public (§9)
+Confirms: [ADR-0019](0019-testing-strategy.md) §10 — the repository's privacy is kept, and now bounds who can obtain `pd` at all (§9)
 
 ## Context
 
@@ -66,10 +66,10 @@ and the scope is dropped. The **command** name stays `pd`, as every ADR in this 
 collision ADR-0014 accepted with `pd-cli`'s own `pd` bin no longer exists unless the user creates it,
 because nothing installs a `pd` on their behalf.
 
-**The repository is public and there is no access control**, which §9 pays for by moving the fixture
-tree out of it. Nothing secret ships — ADR-0012 keeps every credential out of the tree, and
-[ADR-0013](0013-read-only-enforcement.md) keeps every write out of the code — so the clone is
-uninteresting to anyone without a Pipedrive token of their own.
+**The repository is the access control**, and §9 keeps it private. Whoever can clone can build; there
+is no second gate. No credential is in the tree to protect — ADR-0012 keeps every credential out of it
+and [ADR-0013](0013-read-only-enforcement.md) keeps every write out of the code — but the fixtures are
+company data, so the clone is not something to hand out.
 
 ### 2. Bun is the only runtime, at build time and at run time
 
@@ -242,41 +242,44 @@ ADR-0019 §10's "no fixture in the tarball" gate becomes **no fixture in the bin
 concern, checked against `dist/pd` instead of a `npm pack` output, since a fixture tree reachable
 from the entrypoint would be embedded rather than published.
 
-### 9. This repository becomes public, and the fixtures leave it
+### 9. The repository stays private, and that bounds who can have `pd`
 
 [ADR-0019](0019-testing-strategy.md) §10 made the repository's privacy a design constraint with a
 name: fixtures are recorded verbatim from the real company account — real deals, real organisation
 names, real amounts, real owners — and they persist in git history, so the repository "cannot become
 public by flipping a setting."
 
-Making the repository the distribution channel would otherwise fuse two audiences that ADR-0014 kept
-apart: under npm a stranger could install `pd` without seeing a fixture, and under a clone-to-build
-channel anyone who can obtain `pd` can read the company's CRM.
+Making the repository the distribution channel fuses two audiences that ADR-0014 kept apart. Under
+npm, a stranger could install `pd` without seeing a fixture. Under this ADR, **obtaining `pd` is
+cloning**, so anyone who can build it can read the company's recorded CRM data.
 
-**The fixtures move out instead.** They live in a separate private repository, consumed by the test
-suite as a submodule or a fetched path, and this repository — the one a user clones to build `pd` —
-is public and carries none of them.
+**The privacy wins and the audience narrows.** `pd`'s users are whoever already has access to this
+repository — colleagues, and harnesses running under their credentials. That is coherent rather than
+merely convenient: those are the same people who already hold a write-capable Pipedrive token
+([ADR-0012](0012-authentication-and-credential-resolution.md) §2), so the fixture tree shows them
+nothing they cannot already read live. There is no third party this design was ever trying to serve.
 
-The reason this is cheap rather than a git-history excavation: **no fixture has been recorded yet.**
-Nothing is implemented, the tree holds design documents and prototypes, and
-[ticket 05](../../.scratch/pd-impl/issues/05-deals-list-the-full-walk.md) is where the first recording
-would land. The constraint is being honoured *before* it binds, which is the only moment it is free.
-Splitting after the first fixture lands means rewriting history, and ADR-0019 §10 already says that is
-not a thing a setting can undo.
+Two alternatives were considered and declined:
 
-Three consequences follow and are accepted:
+- **Splitting the fixtures into a second private repository**, leaving a public code repository. It
+  buys an audience `pd` does not have, and costs a submodule, a CI deploy credential and two
+  checkouts to keep in step — permanent overhead for a project with one maintainer.
+- **Sanitising fixtures at record time** so they could live in a public repository. This would have
+  reopened ADR-0019 §10, whose rejection of anonymisation was argued partly *from* the repository
+  being private. Structure is what replay asserts and key-level diffs are what the live suite
+  signals, so scrubbed values would have cost neither — but a sanitiser is code that must be trusted
+  on every field forever, and one missed field is public and permanent. The risk is asymmetric and
+  the benefit was an audience of nobody.
 
-- **The replay suite is not runnable from a clean public clone.** An outside contributor gets the
-  offline unit and contract tests of ADR-0019 §1 and the CI gates; the fixture-replay layer needs
-  fixture-repository access. This is stated in the README rather than discovered.
-- **CI needs a credential to reach the fixture repository**, and it is a repository read token — never
-  a Pipedrive token. ADR-0019's whole point is that `bun test` costs zero Pipedrive requests, and that
-  is unchanged: the gate is fixture replay with no passthrough.
-- **The live suite of ADR-0019 §9 stays where the fixtures are.** It is the thing that records them,
-  it runs against the real account, and it is invoked by hand. It has no business in a public tree.
+**`.gitignore` is not an option** and the reason is worth recording, because it is the obvious first
+idea. Fixtures must be *versioned*, not merely present: ADR-0019 §9 defines the live suite's output as
+a re-recording plus a **git diff** — values changing is noise, keys changing is Pipedrive moving under
+`pd` — and an ignored directory has no diff and therefore no signal. Untracked fixtures also exist on
+exactly one machine, so CI's replay gate, which has no passthrough by §2, would have nothing to serve
+and every fresh checkout would have to re-record against the live account. That is the shared daily
+budget this whole design protects, spent on setup.
 
-`AGENTS.md` documents a public clone with no mention of fixtures; the fixture repository is a
-contributor concern, not a user one.
+`AGENTS.md` states plainly that the clone is of a private repository.
 
 ## Consequences
 
@@ -295,14 +298,12 @@ contributor concern, not a user one.
   decision — an absolute, CWD-independent user path, never a path beside the executable — is now
   load-bearing rather than merely still-correct. Research 07 §3 is explicit that a compiled binary has
   no writable location next to itself.
-- **[ADR-0019](0019-testing-strategy.md) §7, §8 and §10 are amended.** The gate count is unchanged in
-  spirit: one gate leaves (the `Bun.*` ban) and one arrives (the CWD `.env` assertion). §10's "the
-  repository must stay private" is replaced by §9's split — the constraint is honoured by where the
-  fixtures live rather than by where the code lives, and the credential-shaped-string gate follows the
-  fixtures into their own repository.
-- **The fixture split is work that must happen before ticket 05**, which is where the first recording
-  would otherwise land in a tree that is about to become public. It is free today and expensive the
-  day after.
+- **[ADR-0019](0019-testing-strategy.md) §7 and §8 are amended; §10 is confirmed.** The gate count is
+  unchanged in spirit: one gate leaves (the `Bun.*` ban) and one arrives (the CWD `.env` assertion).
+  §10's "the repository must stay private" is not merely preserved but promoted: it was a constraint on
+  where the *data* could live, and it is now also the answer to who can obtain the *tool*.
+- **`pd` has no audience outside this repository's access list**, and the design should stop implying
+  one. Anything written for "a user who installs `pd`" means a colleague with a clone.
 - **The credential threat model gains one entry and loses none.** A CWD `.env` is a credential-
   substitution vector unique to the compiled artifact, closed by a build flag rather than by code,
   which means it is closed only as long as the documented build is the one that runs. That is why §3

@@ -284,8 +284,8 @@ ergonomics conflict, the agent wins; `--pretty` is the human's opt-in, and it is
 95. As a maintainer, I want the live suite invoked by hand and producing a re-recording rather than a
     pass or fail, so that a colleague editing a deal does not turn the build red.
 96. As a maintainer, I want a CI gate asserting no credential-shaped string is in the fixture tree and
-    no fixture is embedded in the built binary, so that the private fixture repository and the public
-    code repository stay distinct by enforcement rather than by intention.
+    no fixture is embedded in the built binary, so that the private repository and the binary a
+    colleague builds stay distinct by enforcement rather than by intention.
 
 ---
 
@@ -798,10 +798,9 @@ target and no `unsupported_runtime` variant.*
   hidden. First release from this spec is `1.0.0`.
 - Windows is supported by the same source path with `%LOCALAPPDATA%` / `%APPDATA%`, and the NTFS
   permission gap is stated in `pd auth status` warnings rather than papered over.
-- **This repository becomes public and the fixtures leave it** for a private repository of their own.
-  It is free today because no fixture has been recorded yet, and a history rewrite the day after the
-  first one lands. A clean public clone runs the offline tests and the gates; the replay layer needs
-  fixture-repository access.
+- **The repository stays private, and is therefore also the audience boundary.** `pd`'s users are
+  whoever has a clone — colleagues, and harnesses under their credentials. They already hold a
+  write-capable Pipedrive token, so the fixture tree shows them nothing they cannot read live.
 
 ### 20. The manifest — [ADR-0009](../../docs/adr/0009-command-surface-and-manifest.md) §10, [ADR-0016](../../docs/adr/0016-field-projection.md) §8
 
@@ -954,13 +953,18 @@ the injected clock, and nowhere else.
 Recorded responses are committed verbatim — real deals, real organisation names, real amounts, real
 owners. Two consequences are load-bearing rather than incidental:
 
-- **The fixtures live in their own private repository**, consumed by the suite as a submodule or a
-  fetched path. This repository — the one a user clones to build `pd` — is public and carries none of
-  them. Per ADR-0021 §9 the split is free only until the first fixture is recorded; after that it is a
-  history rewrite.
+- **The repository must stay private**, and cannot become public by flipping a setting, because
+  fixtures persist in git history. Under ADR-0021 the repository is also the distribution channel, so
+  this now bounds who can obtain `pd` at all: its users are whoever already has a clone. Two escapes
+  were considered and declined — a second private repository for the fixtures (permanent submodule and
+  CI-credential overhead for an audience `pd` does not have) and sanitising fixtures at record time (a
+  sanitiser must be trusted on every field forever, and one missed field is public and permanent).
+  `.gitignore` is not an escape at all: ADR-0019 §9 defines the live suite's signal as a **git diff**,
+  which an ignored directory cannot produce, and untracked fixtures leave CI's no-passthrough replay
+  gate with nothing to serve.
 - **No fixture is embedded in the binary.** A CI gate asserts it against `dist/pd`, so the separation
-  between the private data and the public artifact is enforced rather than intended. A clean public
-  clone can run the offline tests and the gates, but not the replay layer.
+  between the private repository and the artifact a colleague builds is enforced rather than
+  intended.
 
 The credential is stripped mechanically and separately: the recorder never writes request headers at
 all, and a CI gate greps the whole fixture tree for credential-shaped strings.

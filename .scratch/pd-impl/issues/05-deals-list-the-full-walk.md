@@ -8,12 +8,6 @@ This is the tracer bullet: argument parsing, the walk, two-stage validation, ded
 
 **Status:** ready-for-agent
 
-> **Do this first.** This ticket records the project's first fixture, and
-> [ADR-0021](../../../docs/adr/0021-distribution-build-from-source.md) §9 makes this repository public
-> with the fixtures in a private repository of their own. Moving them is free until the first
-> recording lands and a history rewrite afterwards. Set up the fixture repository before recording
-> anything here. Ticket 20 owns the gates that keep the two apart.
-
 Normative: ADR-0001 (error model and exit codes), ADR-0002 (output format), ADR-0003 (pagination), ADR-0004 (streaming and composition), ADR-0006 (validation placement).
 
 ## The line grammar
