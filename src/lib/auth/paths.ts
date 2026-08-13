@@ -28,10 +28,14 @@ export type PathContext = {
   home: string;
 };
 
-/** An environment variable set to the empty string is not set. */
+/** An empty or whitespace-only environment variable is not set — ADR-0022 §2. */
 const envValue = (env: PathContext["env"], name: string): string | undefined => {
   const raw = env[name];
-  return raw === undefined || raw === "" ? undefined : raw;
+  // Emptiness is judged on the trimmed value, but the raw value is what is
+  // returned: a directory name with a trailing space is legal, if pathological,
+  // and trimming it would point `pd` at a different directory than the operator
+  // named.
+  return raw === undefined || raw.trim() === "" ? undefined : raw;
 };
 
 /**

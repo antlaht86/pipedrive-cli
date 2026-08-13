@@ -376,6 +376,12 @@ violation; the manifest carries `read_only: true` beside `read_only_scope: "pipe
   `%APPDATA%\pd\` on Windows). Otherwise `auth`, exit 1, with a message naming every tier searched.
 - **No `--token <value>` flag in any form** — argv is world-readable. Consequently no argument value
   `pd` accepts is sensitive, and usage errors may echo the offending argument back.
+- **A `--token-file` that yields no token is `usage`, exit 2, and never falls through**
+  ([ADR-0022](../../docs/adr/0022-credential-resolution-edge-cases.md) §1). Falling through to
+  `PD_API_TOKEN` is the wrong-account accident the tier order exists to prevent. An absent or empty
+  tier-3 file is *not* this case: nobody named it, so the chain continues and ends at `auth`, exit 1.
+- **An environment variable that is empty or whitespace-only is unset** (ADR-0022 §2), for
+  `PD_API_TOKEN` and for the four directory variables alike.
 - **`pd` never writes a credential.** No `login`, no `logout`, no keychain tier, no `Bun.secrets`.
   Tier 3 is a file a human writes with an editor. Loose permissions produce one `warning` and the run
   continues.

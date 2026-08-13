@@ -23,9 +23,16 @@ describe("the config directory", () => {
     );
   });
 
-  test("ignores an empty XDG_CONFIG_HOME", () => {
-    expect(configDir({ ...posix, env: { XDG_CONFIG_HOME: "" } })).toBe(
+  // ADR-0022 §2: an empty or whitespace-only variable is unset.
+  test.each(["", "   "])("ignores XDG_CONFIG_HOME set to %p", (value) => {
+    expect(configDir({ ...posix, env: { XDG_CONFIG_HOME: value } })).toBe(
       "/home/ada/.config/pd",
+    );
+  });
+
+  test("keeps a trailing space in a directory name the operator did name", () => {
+    expect(configDir({ ...posix, env: { XDG_CONFIG_HOME: "/xdg/cfg " } })).toBe(
+      "/xdg/cfg /pd",
     );
   });
 

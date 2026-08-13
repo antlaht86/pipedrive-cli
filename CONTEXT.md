@@ -36,7 +36,7 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.
 
-**Tier** — one step of the credential precedence chain: `--token-file`, `PD_API_TOKEN`, then the credentials file. First match wins, and the environment sits above the file so an exported credential never loses silently to a stored one. `pd` reads every tier and writes none. Settled in [ADR-0012](docs/adr/0012-authentication-and-credential-resolution.md).
+**Tier** — one step of the credential precedence chain: `--token-file`, `PD_API_TOKEN`, then the credentials file. First match wins, and the environment sits above the file so an exported credential never loses silently to a stored one. `pd` reads every tier and writes none. A tier that is *named on the command line* and does not answer stops the run as `usage`; a tier nobody named simply does not answer, and the chain continues. Settled in [ADR-0012](docs/adr/0012-authentication-and-credential-resolution.md) and [ADR-0022](docs/adr/0022-credential-resolution-edge-cases.md).
 
 **Fingerprint** — the first 16 hex characters of the SHA-256 of the resolved API token. One value with two jobs: it names the cache directory ([ADR-0005](docs/adr/0005-cache-design.md) §2) and it is what `pd auth status` prints, so a human can match a running configuration to a cache directory without `pd` printing anything reversible. It is a derived value and not a secret.
 

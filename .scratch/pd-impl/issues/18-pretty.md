@@ -35,3 +35,9 @@ there would be a second implementation to delete. This ticket owes `pd auth stat
 rendering of `found`, `tier`, the path, `fingerprint`, `cache_dir_exists`,
 `credential_is_write_capable` and the `warnings` array, and owes the argument parser in `src/cli.ts`
 the flag itself. The same applies to the other single-JSON-object surfaces as they arrive.
+
+**2026-08-13 — ratified as [ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md)
+§3.** The deferral above is now recorded at ADR level rather than only as a handoff note, and
+ADR-0012 §5 carries an inline pointer to it. `pd auth status --pretty` is a `usage` refusal until
+this ticket lands; closing it means the flag renders `found`, `tier`, the path, `fingerprint`,
+`cache_dir_exists`, `credential_is_write_capable` and the `warnings` array as human text.

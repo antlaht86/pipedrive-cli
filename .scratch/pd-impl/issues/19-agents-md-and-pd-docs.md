@@ -44,3 +44,13 @@ Notes for the implementer:
 - [ ] The administrator-token risk paragraph is present in `AGENTS.md` and echoed in the root `--help` opening
 - [ ] Harness-specific pointer files are written
 - [ ] `CONTEXT.md` gains entries for hit, push-down, sentinel, seam, anomaly line, projection and absence
+
+## Comments
+
+**2026-08-13 — from ticket 03.** `AGENTS.md` owes ADR-0012's credential list in full: the three tiers
+in order, `PD_API_TOKEN`, `~/.config/pd/credentials` at mode `0600` (`%APPDATA%\pd\` on Windows), the
+`auth`/exit 1 contract with the message that names every tier, `pd auth status`, and the honest
+paragraph saying the token is write-capable and that a Pipedrive permission set on the user is the
+only account-level restriction available. Add one line from
+[ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md) §1 beside it: a `--token-file`
+that does not resolve is a usage error, exit 2, and `pd` never silently falls back from it.

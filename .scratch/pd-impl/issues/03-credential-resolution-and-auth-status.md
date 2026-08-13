@@ -123,3 +123,13 @@ of `.github/workflows/ci.yml`, and assert the run does not report the `env` tier
   `src/cli.ts` as the boundary where "parse external input at the boundary" bites hardest. That loop
   is a placeholder for one command; ticket 16 builds the command table and the manifest generated
   from it, and the schema belongs there, once, rather than twice.
+
+**2026-08-13 — ratified as [ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md).**
+The three points above that were recorded here as inventions or deferrals are now decisions at ADR
+level, because the spec's rule is that an ADR beats a ticket — a decision living only in a ticket
+comment is one the next implementer may reverse without noticing. ADR-0022 §1 settles the
+`--token-file` refusal and scopes ADR-0012 §5's "finding no credential is not a failure" to the
+chain; §2 settles the empty-or-whitespace environment variable, for `PD_API_TOKEN` and the four
+directory variables alike; §3 confirms `--pretty` and names ticket 18 as its owner. ADR-0012 §3 and
+§5 carry inline amendment notes pointing at it, and the spec's authentication section and
+`CONTEXT.md`'s **Tier** entry are updated. No code changed: the implementation already matched.

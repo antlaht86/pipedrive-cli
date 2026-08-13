@@ -45,3 +45,14 @@ Notes for the implementer:
 - [ ] Manifest and every `--help` text are generated from one in-code table, asserted by a test that changing the table changes both
 - [ ] Root `--help` opens with the read-only statement and splits into `RESOURCES` and `OTHER`
 - [ ] `pd --version` and the manifest's `pd_version` agree, asserted against the **built bundle**
+
+## Comments
+
+**2026-08-13 — from ticket 03.** `pd auth status` and its `--token-file` flag are wired by a
+placeholder argv loop in `src/cli.ts`, deliberately the smallest thing that serves one command.
+Replace it with the command table rather than growing it. Two things it already owes the manifest:
+`pd auth status` as an emitter of a single JSON object rather than an NDJSON stream (ADR-0012 §5),
+and the `usage` refusal of a `--token-file` that does not resolve
+([ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md) §1). No new error `code` is
+involved — `usage` and `auth` already exist and ADR-0001's union is unchanged. Zod on argv is
+deferred to this ticket too, so the schema is written once against the real table.

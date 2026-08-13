@@ -62,6 +62,13 @@ be regenerated to revoke it.
 
 ### 3. The precedence chain has three tiers, first match wins
 
+*Amended by [ADR-0022](0022-credential-resolution-edge-cases.md) §1 and §2 in two places this section
+left open. A `--token-file` that names a file yielding no token is `usage`, exit 2, and **never falls
+through** to a lower tier — falling through is the wrong-account accident this section's ordering
+exists to prevent. And an environment variable that is empty or whitespace-only counts as unset, so
+`PD_API_TOKEN=""` moves to tier 3 rather than sending an empty header. The three tiers and their
+order are unchanged.*
+
 1. **`--token-file <path>`** — read the token from the named file. Explicit, per-invocation.
 2. **`PD_API_TOKEN`** — the container, CI and agent-harness path.
 3. **`$XDG_CONFIG_HOME/pd/credentials`**, defaulting to `~/.config/pd/credentials`, mode `0600`.
@@ -120,6 +127,12 @@ because there is no local file `pd` authors.
 - whether a cache directory exists for that fingerprint.
 
 It never prints the token, and no `--show-token` flag exists.
+
+*Amended by [ADR-0022](0022-credential-resolution-edge-cases.md) §1 and §3. The "finding no
+credential is not a failure" sentence below is scoped to **the chain** coming up empty; a
+`--token-file` that does not resolve is a mistyped argument rather than a configuration to describe,
+and exits 2. And the `--pretty` sentence stands but is not yet built — implementation ticket 18 owes
+it, and the flag is a usage refusal until then.*
 
 **Finding no credential is not a failure of `pd auth status`.** It exits 0 and reports the absence in
 its `found` field, because the command's job is to describe the configuration rather than to use it —

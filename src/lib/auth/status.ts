@@ -13,7 +13,12 @@
  *
  * The one thing that *is* an error here is a `--token-file` that holds no token:
  * that is a mistyped argument rather than a configuration to describe, and
- * `resolveCredential` refuses it as `usage`.
+ * `resolveCredential` refuses it as `usage`. ADR-0022 §1 scopes ADR-0012 §5's
+ * sentence accordingly — this command's exit surface is 0 and 2, never 1.
+ *
+ * `--pretty` renders the same fields as human text (ADR-0012 §5) and is not
+ * built yet: ADR-0022 §3 assigns it to the `--pretty` ticket, which owns the
+ * aligned renderer, the flag's registration and the never-invoke instruction.
  *
  * Output is **one JSON object**, not an NDJSON stream — the same exception
  * ADR-0009 §7 grants `pd manifest`, on the same grounds: it is not a record

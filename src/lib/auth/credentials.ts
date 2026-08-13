@@ -165,7 +165,7 @@ const credential = (
 
 /**
  * An explicit `--token-file` that yields no token is `usage`, exit 2 — not
- * `auth`, and never a silent fall-through to a lower tier.
+ * `auth`, and never a silent fall-through to a lower tier. ADR-0022 §1.
  *
  * Falling through would be the wrong-account astonishment the tier order exists
  * to prevent: a mistyped path would quietly run against whatever `PD_API_TOKEN`
@@ -211,9 +211,12 @@ export const resolveCredential = (
     );
   }
 
-  // A whitespace-only `PD_API_TOKEN` is treated as unset, on the same rule the
-  // file tiers use: a variable exported to the empty string is what an unset
-  // variable looks like in a shell script that meant to skip it.
+  // An empty or whitespace-only `PD_API_TOKEN` is unset — ADR-0022 §2. It is
+  // what a shell script that meant to skip the variable actually produces, and
+  // what a container runtime produces for an unset secret; counting it as a
+  // credential would send an empty `x-api-token` header and turn a
+  // configuration mistake into an `auth` failure one round trip away from its
+  // cause.
   const fromEnv = tokenOf(context.env["PD_API_TOKEN"]);
   if (fromEnv !== undefined) {
     return ok(credential("env", fromEnv, undefined, []));
