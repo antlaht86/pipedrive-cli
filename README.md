@@ -37,3 +37,34 @@ bun test           # the suite and the CI gates; costs zero Pipedrive requests
 bun run typecheck
 bun run lint
 ```
+
+### Regenerating the Pipedrive clients
+
+```bash
+bun run openapi-ts
+```
+
+This reads Pipedrive's two published OpenAPI documents and rewrites
+`src/lib/pipedrive/v2/generated/` and `src/lib/pipedrive/v1/generated/`. It makes no
+Pipedrive API call and costs nothing from the shared daily budget. The output is
+committed; review the diff like any other change.
+
+**Never hand-edit a file under `generated/`.** A regeneration overwrites it. Spec
+corrections belong in `parser.patch` in `openapi-ts.config.ts`, which patches Pipedrive's
+document before generation, so the types and the zod schemas are corrected together.
+
+Two settings in that config are a safety property rather than a preference, per
+[ADR-0013](docs/adr/0013-read-only-enforcement.md) §1:
+
+- `parser.filters.operations.include: ['/^GET /']` — a write operation is never
+  generated, so no call site can reach one.
+- `sdk.client: false` — no ambient client exists, so a generated function cannot be
+  called without being handed the client the wrapper module built.
+
+`bun test` fails the build if a regeneration reintroduces a non-GET operation into either
+client. If that happens, do not edit the generated file: find out why the filter stopped
+holding.
+
+The dependency versions are pinned exactly, because the generator's configuration surface
+changes between minor releases. Regenerating with a different version is a deliberate
+upgrade, with its own review of the diff.
