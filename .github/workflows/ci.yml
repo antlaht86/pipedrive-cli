@@ -1,0 +1,69 @@
+# Three legs — ADR-0021 §8, ADR-0019 §7.
+#
+#   1. the Bun suite plus lint, typecheck and the gates
+#   2. the binary smoke leg on Linux
+#   3. the same leg on Windows, whose whole purpose is the
+#      %LOCALAPPDATA% / %APPDATA% resolution that is the only
+#      Windows-specific code in pd
+#
+# The CWD `.env` gate (ADR-0021 §3) runs in leg 1, against a binary compiled by
+# the same `buildBinary` as `dist/pd` — `pd` has no command that reads the
+# credential chain yet. Ticket 03 moves it here as `pd auth status` beside a
+# `.env`, asserting the run does not report the `env` tier.
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  suite:
+    name: bun suite, lint and gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
+
+  binary-linux:
+    name: binary smoke (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: pd --version prints the stamped version
+        run: |
+          set -euo pipefail
+          version="$(./dist/pd --version)"
+          echo "$version"
+          case "$version" in
+            1.*) ;;
+            *) echo "unexpected version output: $version" >&2; exit 1 ;;
+          esac
+
+  binary-windows:
+    name: binary smoke (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: pd --version prints the stamped version
+        shell: pwsh
+        run: |
+          $version = & .\dist\pd.exe --version
+          Write-Host $version
+          if ($version -notmatch '^1\.') { exit 1 }

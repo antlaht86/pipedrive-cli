@@ -26,5 +26,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+
+  // `openapi-ts.ts` is a generation script whose dependency is not installed for
+  // a build; ticket 02 owns it.
+  "include": ["src/**/*", "scripts/**/*", "test/**/*", "eslint.config.ts"]
 }

@@ -6,7 +6,7 @@ This is the skeleton every later ticket lands in: the package identity, the comp
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0021](../../../docs/adr/0021-distribution-build-from-source.md) (distribution), ADR-0019 §runtimes (CI legs).
 
@@ -33,12 +33,35 @@ Notes for the implementer:
 - Bun's own version floor is a **build-time** concern: `engines.bun` in `package.json`, plus a build script that fails with a plain message below it. It is not a runtime error variant.
 - On macOS the binary runs as built; `codesign -v` failing on fresh `--compile` output is expected and not fixed by the build.
 
-- [ ] `package.json` has no `bin`, no npm scope and no `dependencies` intended for a consumer; `engines.bun` declares the build floor
-- [ ] `bun run build` produces `dist/pd`, executable, running with nothing installed on the host
-- [ ] The build passes `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`, and no documented build path omits them
-- [ ] A `.env` setting `PD_API_TOKEN` in the process CWD does not reach the credential chain — asserted against the built binary, as a CI gate
-- [ ] `pd --version` prints the bare stamped string and exits 0, with the `+g<sha>` and `.dirty` suffixes behaving as specified
-- [ ] The build fails with a readable message when `Bun.version` is below `engines.bun`
-- [ ] CI runs three legs: Bun suite + lint + gates, binary smoke on Linux, binary smoke on Windows
-- [ ] `bun test` runs and passes with the initial suite
-- [ ] `dist/` is in `.gitignore`
+- [x] `package.json` has no `bin`, no npm scope and no `dependencies` intended for a consumer; `engines.bun` declares the build floor
+- [x] `bun run build` produces `dist/pd`, executable, running with nothing installed on the host
+- [x] The build passes `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`, and no documented build path omits them
+- [x] A `.env` setting `PD_API_TOKEN` in the process CWD does not reach the credential chain — asserted against the built binary, as a CI gate
+- [x] `pd --version` prints the bare stamped string and exits 0, with the `+g<sha>` and `.dirty` suffixes behaving as specified
+- [x] The build fails with a readable message when `Bun.version` is below `engines.bun`
+- [x] CI runs three legs: Bun suite + lint + gates, binary smoke on Linux, binary smoke on Windows
+- [x] `bun test` runs and passes with the initial suite
+- [x] `dist/` is in `.gitignore`
+
+## Comments
+
+**2026-08-13 — implemented.**
+
+- `scripts/build.ts` is the single build path, exporting `buildBinary` with
+  `compile: { autoloadDotenv: false, autoloadBunfig: false }` — ADR-0021 §3's documented
+  equivalent of the two normative flags. `bun run build` and the gate test both call it, so no
+  build path can omit them.
+- `src/version.ts` holds `stampVersion`, the pure seam under the three version shapes; the git
+  plumbing (`rev-parse --short`, `tag --points-at`, `status --porcelain`) stays thin around it. A
+  release tag is `v<version>`.
+- The CWD `.env` gate (`test/dotenv-autoload.test.ts`) compiles a probe entrypoint through
+  `buildBinary` and asserts it prints `unset` beside a `.env` setting `PD_API_TOKEN`. `pd` has no
+  command reading the credential chain yet — **ticket 03 must promote this gate to `pd auth status`
+  against `dist/pd`, in the binary smoke leg of `.github/workflows/ci.yml`**, asserting the run does
+  not report the `env` tier. The probe was verified to fail when `autoloadDotenv` is flipped on.
+- `test/binary-smoke.test.ts` asserts `pd --version` on a compiled binary for all three stamps —
+  the stamp only exists after the build substitutes `PD_VERSION`.
+- `src/cli.ts` wires `--version` only; anything else is a placeholder refusal on stderr with exit 2
+  until ticket 16 lands the command table.
+- Lint is a baseline flat config. The `no-restricted-imports` ban on `**/generated/**` belongs to
+  ticket 02, when there is a generated client to ban.
