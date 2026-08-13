@@ -221,6 +221,92 @@ describe("concurrency", () => {
   });
 });
 
+describe("the --max-requests ceiling", () => {
+  test("aborts before the ceiling is exceeded, never after", async () => {
+    const guard = createGuardedFetch({
+      clock: new FakeClock(),
+      transport: createReplayTransport([ok]),
+      maxRequests: 2,
+    });
+
+    await guard.fetch(url("/deals"));
+    await guard.fetch(url("/deals"));
+    const error = await failureOf(guard.fetch(url("/deals")));
+
+    expect(error.code).toBe("request_ceiling");
+    expect(error.exit_code).toBe(3);
+    expect(error.retry).toBe("never");
+    expect(error.details).toMatchObject({ max_requests: 2 });
+    // The third request was refused instead of being made, so the counter the
+    // trailer reports never exceeds the ceiling.
+    expect(guard.dispatches()).toBe(2);
+  });
+
+  test("retries spend the headroom, because every attempt is a request", async () => {
+    const guard = createGuardedFetch({
+      clock: new FakeClock(),
+      transport: createReplayTransport([
+        { path: "/api/v2/deals", status: 500, body: { success: false } },
+      ]),
+      maxRequests: 3,
+    });
+
+    const error = await failureOf(guard.fetch(url("/deals")));
+
+    // Three attempts, all 5xx, and the fourth meets the ceiling before the
+    // retry budget of ADR-0011 §8 is spent. The guard is the reported cause.
+    expect(error.code).toBe("request_ceiling");
+    expect(guard.dispatches()).toBe(3);
+  });
+
+  test("the headroom is reserved before dispatch, so concurrent requests cannot overspend it", async () => {
+    // Four requests admitted at once against two slots. The reservation is
+    // taken synchronously, ahead of the gate's first await, so two of them are
+    // refused rather than all four finding the counter still at zero.
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const transport: Transport = async () => {
+      await held;
+      return new Response("{}", { status: 200 });
+    };
+
+    const guard = createGuardedFetch({
+      clock: new FakeClock(),
+      transport,
+      maxRequests: 2,
+    });
+
+    const all = Array.from({ length: 4 }, () =>
+      guard.fetch(url("/deals")).then(
+        () => "ok" as const,
+        (error: unknown) => (error as PdFailure).error.code,
+      ),
+    );
+    release();
+
+    expect(await Promise.all(all)).toEqual([
+      "ok",
+      "ok",
+      "request_ceiling",
+      "request_ceiling",
+    ]);
+    expect(guard.dispatches()).toBe(2);
+  });
+
+  test("an absent ceiling is unbounded, which is the default", async () => {
+    const guard = createGuardedFetch({
+      clock: new FakeClock(),
+      transport: createReplayTransport([ok]),
+    });
+
+    for (let i = 0; i < 20; i += 1) await guard.fetch(url("/deals"));
+
+    expect(guard.dispatches()).toBe(20);
+  });
+});
+
 describe("a 429 inferred as burst", () => {
   const burst = (reset?: string): Fixture => ({
     path: "/api/v2/deals",

@@ -11,6 +11,7 @@
  * - the whole-gate 429 pause and the three-strike burst budget (ADR-0011 §6, §7);
  * - the 5xx and transport retry budget (ADR-0011 §8);
  * - request accounting (ADR-0011 §9);
+ * - the `--max-requests` ceiling and its headroom (ADR-0010 §3, ADR-0026 §3);
  * - URL redaction before anything reaches `details` (ADR-0001 §"The error object").
  *
  * If any of these ever appears in a page loop, in a resolver, or in a command,
@@ -263,6 +264,11 @@ export const throwingTransport: Transport = (request) => {
 export type GuardedFetchOptions = {
   transport?: Transport;
   clock?: Clock;
+  /**
+   * ADR-0010 §3's `--max-requests`, the only quantitative guard `pd` offers.
+   * `undefined` is the default: absent the flag, a run is unbounded in requests.
+   */
+  maxRequests?: number;
 };
 
 export type GuardedFetch = {
@@ -295,6 +301,7 @@ const toRequest = (input: FetchInput, init?: FetchInit): Request => {
 export const createGuardedFetch = ({
   transport = throwingTransport,
   clock = systemClock,
+  maxRequests,
 }: GuardedFetchOptions = {}): GuardedFetch => {
   const gate = new BurstGate(clock);
   const limiter = pLimit(CONCURRENCY);
@@ -323,13 +330,40 @@ export const createGuardedFetch = ({
     return Math.min(reset * 1_000, MAX_BURST_WAIT_MS);
   };
 
+  /**
+   * ADR-0010 §3: the guard aborts **before** the ceiling is exceeded, so the
+   * headroom is taken here — synchronously, at the top of the retry loop and
+   * ahead of `gate.admit`'s first `await`.
+   *
+   * Two properties come out of that placement and neither is incidental. The
+   * reservation and its test cannot be split by another request's turn, so four
+   * concurrent walkers cannot each read the same last slot. And a retry passes
+   * through this point again, which is what makes a retried 5xx spend headroom
+   * — ADR-0011 §9 counts every attempt as a request, and a guard that a retry
+   * storm could walk past would not be a ceiling.
+   *
+   * `dispatches` is the reservation counter as well as the trailer's `requests`,
+   * because a reservation is always followed by a dispatch: nothing between here
+   * and `transport` can decline. One counter cannot disagree with itself.
+   */
+  const reserve = (path: string): void => {
+    if (maxRequests !== undefined && dispatches >= maxRequests) {
+      throw fail({
+        code: "request_ceiling",
+        message: `Stopped after ${maxRequests} requests; raise --max-requests and run again.`,
+        details: { max_requests: maxRequests, path },
+      });
+    }
+    dispatches += 1;
+  };
+
   const dispatch = async (request: Request, path: string): Promise<Response> => {
     const family = familyOf(path);
     let retriesForThisRequest = 0;
 
     for (;;) {
+      reserve(path);
       await gate.admit(family);
-      dispatches += 1;
 
       const attempt = await ResultAsync.fromPromise(
         transport(request),

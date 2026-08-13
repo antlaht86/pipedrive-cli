@@ -79,18 +79,74 @@ const TOKEN_REFUSAL = pdError({
  * The two do different jobs and neither replaces the other. `parseArgs` in
  * `strict` mode knows the *grammar*: an unknown flag, a missing value, a
  * positional where none is allowed. The schema knows the *values*, which is the
- * half that grows: ticket 06's `--limit` is a positive integer with no upper
- * bound, and `z.coerce.number().int().positive()` is where that lives rather
- * than in a hand-rolled check beside it.
+ * half that grows: `--limit` and `--max-requests` are positive integers with no
+ * upper bound, and `positiveInteger` below is where that lives rather than in a
+ * hand-rolled check beside it.
  *
  * No CLI framework. One would have added a second opinion about exit codes and
  * a second place for the help text to live.
  */
+
+/**
+ * The value both quantitative flags take — ADR-0003: a positive integer of 1 or
+ * greater, and nothing else. `0`, a negative number, a fraction and a
+ * non-number are all `usage`, exit 2, and they are refused offline: no request
+ * is made to discover that `--limit 0` was a typo.
+ *
+ * The pattern is exact rather than `z.coerce`, for the reason `Id` below gives:
+ * `Number(" 4")` is 4, `Number("1e3")` is 1000 and `Number("")` is 0, so a
+ * coercion would silently accept three spellings the caller did not write.
+ *
+ * The message names its own flag, because the two flags that use this share
+ * nothing else and a caller reading `--max-requests: …` under a `--limit`
+ * heading would be reading about the wrong one.
+ */
+const positiveInteger = (flag: string) =>
+  z
+    .string()
+    .regex(/^[1-9][0-9]*$/, {
+      error: `--${flag} takes a positive integer of 1 or greater.`,
+    })
+    .transform(Number);
+
 const Arguments = z.object({
-  "token-file": z.string().min(1).optional(),
+  "token-file": z.string().min(1, { error: "--token-file needs a path." }).optional(),
+  /** ADR-0003 §1: a record count, never a page size, and with no upper bound. */
+  limit: positiveInteger("limit").optional(),
+  /** ADR-0010 §3: network requests, no default, the only quantitative guard. */
+  "max-requests": positiveInteger("max-requests").optional(),
 });
 
 type Arguments = z.infer<typeof Arguments>;
+
+/**
+ * ADR-0003: `--limit` **does not exist on non-list commands**, so passing it to
+ * `pd deals get 42` is a usage error rather than a silent no-op. It is left out
+ * of the option table for that verb, which makes the refusal `parseArgs`'s
+ * unknown-option path and keeps one wording for every flag a command lacks.
+ *
+ * `--max-requests` is on both. ADR-0003 scopes only the bound to list commands,
+ * and ADR-0010 §3 defines the guard over the requests a run makes — `get` is a
+ * run, and a `get` under a spent ceiling is the same refusal for the same
+ * reason. Ticket 16's manifest documents the flag under both verbs.
+ *
+ * The names are bare, and the `--` is added where a name is printed. They are
+ * typed as keys of `Arguments`, so the option table and the schema cannot drift
+ * apart: a flag `parseArgs` would accept and the schema would not validate is a
+ * compile error rather than a value that reaches the walk unchecked.
+ */
+const FLAGS: Record<Verb, readonly (keyof Arguments)[]> = {
+  list: ["token-file", "limit", "max-requests"],
+  get: ["token-file", "max-requests"],
+};
+
+/** `--a, --b and --c` — the Oxford-less list the refusal below reads best with. */
+const listed = (flags: readonly string[]): string => {
+  const named = flags.map((flag) => `--${flag}`);
+  return named.length < 2
+    ? (named[0] ?? "")
+    : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1] ?? ""}`;
+};
 
 /**
  * A Pipedrive record id, validated offline and at the same boundary as the
@@ -109,27 +165,33 @@ const Id = z
  * and the flags that exist, so the unknown-option case is reworded and every
  * other grammar failure passes through.
  */
-const usageMessage = (command: string, cause: unknown): string => {
+const usageMessage = (
+  command: string,
+  verb: Verb,
+  cause: unknown,
+): string => {
   const node = cause instanceof Error ? cause : undefined;
   const code = (node as { code?: string } | undefined)?.code;
   if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
     const flag = /'([^']+)'/.exec(node?.message ?? "")?.[1] ?? "that flag";
-    return `${command} does not accept ${flag}. It takes --token-file and no other flag.`;
+    return `${command} does not accept ${flag}. It takes ${listed(FLAGS[verb])} and no other flag.`;
   }
   return node?.message ?? String(cause);
 };
 
-const tokenise = (command: string) =>
+const tokenise = (command: string, verb: Verb) =>
   Result.fromThrowable(
     (argv: readonly string[]) =>
       parseArgs({
         args: [...argv],
         strict: true,
         allowPositionals: true,
-        options: { "token-file": { type: "string" } },
+        options: Object.fromEntries(
+          FLAGS[verb].map((flag) => [flag, { type: "string" as const }]),
+        ),
       }),
     (cause): PdError =>
-      pdError({ code: "usage", message: usageMessage(command, cause) }),
+      pdError({ code: "usage", message: usageMessage(command, verb, cause) }),
   );
 
 type Parsed = {
@@ -184,7 +246,7 @@ const parse = (
   verb: Verb,
   argv: readonly string[],
 ): Result<Parsed, PdError> =>
-  tokenise(command)(argv).andThen(({ values, positionals: found }) =>
+  tokenise(command, verb)(argv).andThen(({ values, positionals: found }) =>
     positionals(command, verb, found).andThen((id) => {
       const flags = Arguments.safeParse(values);
       return flags.success
@@ -192,9 +254,9 @@ const parse = (
         : err(
             pdError({
               code: "usage",
-              message: flags.error.issues
-                .map((issue) => `--${issue.path.join(".")}: ${issue.message}`)
-                .join(" "),
+              // Each schema above names its own flag, so the issues are already
+              // sentences a caller can act on and need no path prefix.
+              message: flags.error.issues.map((issue) => issue.message).join(" "),
             }),
           );
     }),
@@ -214,24 +276,38 @@ export const resourceCommand = async ({
 }: ResourceCommandInput): Promise<number> => {
   const command = `pd ${resource.name} ${verb}`;
 
+  // Parsing is pure and comes first, because the two things built below take
+  // their configuration from it: the gate needs `--max-requests` before its
+  // first request, and the writer needs to know whether the run is bounded
+  // before its first record. A parse failure is still reported through the
+  // writer, so the trailer invariant holds either way.
+  const refused = argv.some((arg) => TOKEN_FLAG.test(arg));
+  const parsed = parse(command, verb, argv);
+  const flags = parsed.isOk() ? parsed.value.flags : undefined;
+
   const guarded = createGuardedFetch({
     ...(transport === undefined ? {} : { transport }),
     ...(clock === undefined ? {} : { clock }),
+    ...(flags?.["max-requests"] === undefined
+      ? {}
+      : { maxRequests: flags["max-requests"] }),
   });
 
   const writer = new NdjsonWriter({
     recordType: resource.recordType,
     rename: resource.rename,
     requests: guarded.dispatches,
+    // ADR-0003: the stderr size warning is for an **unbounded** run. A caller
+    // who passed `--limit` has already said how much output it wants.
+    bounded: flags?.limit !== undefined,
     ...(sink === undefined ? {} : { sink }),
     ...(stderr === undefined ? {} : { stderr }),
   });
 
-  if (argv.some((arg) => TOKEN_FLAG.test(arg))) {
-    return writer.error(TOKEN_REFUSAL);
-  }
-
-  const parsed = parse(command, verb, argv);
+  // Before the parse failure, and deliberately: `--token abc` tokenises as an
+  // unknown flag, and answering it with the generic refusal would drop the one
+  // sentence that says where a token may come from instead.
+  if (refused) return writer.error(TOKEN_REFUSAL);
   if (parsed.isErr()) return writer.error(parsed.error);
 
   const credential = resolveCredential({
@@ -255,7 +331,9 @@ export const resourceCommand = async ({
 
   const id = parsed.value.id;
   return stream(
-    id === undefined ? resource.list(client) : resource.get(client, id),
+    id === undefined
+      ? resource.list(client, flags?.limit)
+      : resource.get(client, id),
     writer,
   );
 };

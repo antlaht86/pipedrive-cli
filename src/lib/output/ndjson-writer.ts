@@ -59,6 +59,19 @@ export const stderrSink: Sink = (line) => {
  */
 const MAX_WARNING_CAUSES = 50;
 
+/**
+ * ADR-0003: an unbounded run writes a warning to **stderr** on crossing 10,000
+ * emitted records, and again on every subsequent 10,000. The run continues; the
+ * locked pagination property is untouched, and stdout never learns of it.
+ *
+ * It counts records rather than pages, because an agent's context is consumed
+ * by records and a page is a locked-away internal concept. It is **not
+ * configurable** — a configurable warning threshold is a switch nobody ever
+ * turns — and it is not injectable either, which would be the test-only surface
+ * ADR-0019 §5 forbids. The unit test drives 20,001 records through the writer.
+ */
+const SIZE_WARNING_EVERY = 10_000;
+
 export type NdjsonWriterOptions = {
   /** ADR-0009: singular — `"deal"` for `pd deals list`. */
   recordType: string;
@@ -70,6 +83,13 @@ export type NdjsonWriterOptions = {
    * table supplies it, and it is empty for every resource but `activities`.
    */
   rename?: Readonly<Record<string, string>>;
+  /**
+   * True when the caller passed `--limit`. A bounded run gets no size warning:
+   * it already said how much output it wants, and telling it that it received
+   * what it asked for is noise. `--max-requests` is a guard rather than a bound
+   * and does not suppress the warning.
+   */
+  bounded?: boolean;
   sink?: Sink;
   /**
    * ADR-0001 sends a human one-line summary of every error to stderr beside the
@@ -240,6 +260,7 @@ export class NdjsonWriter {
   readonly #requests: () => number;
   readonly #resolved: Resolved;
   readonly #rename: Readonly<Record<string, string>>;
+  readonly #bounded: boolean;
   readonly #causes = new Set<string>();
 
   #emitted = 0;
@@ -252,6 +273,7 @@ export class NdjsonWriter {
     requests,
     resolved = "off",
     rename = {},
+    bounded = false,
     sink = stdoutSink,
     stderr = stderrSink,
   }: NdjsonWriterOptions) {
@@ -259,6 +281,7 @@ export class NdjsonWriter {
     this.#requests = requests;
     this.#resolved = resolved;
     this.#rename = rename;
+    this.#bounded = bounded;
     this.#sink = sink;
     this.#stderr = stderr;
   }
@@ -331,7 +354,20 @@ export class NdjsonWriter {
         record_type: this.#recordType,
         ...present(record, this.#rename),
       });
+      this.#warnOnSize();
     }
+  }
+
+  /** ADR-0003's stderr size warning, on crossing each 10,000 emitted records. */
+  #warnOnSize(): void {
+    if (this.#bounded) return;
+    if (this.#emitted % SIZE_WARNING_EVERY !== 0) return;
+    // The wording does not claim the walk continues. The threshold can be met
+    // by the very last record of a complete run, and a line that said "still
+    // going" would then be false on the one channel a human is reading.
+    this.#stderr(
+      `pd: ${this.#emitted} records emitted so far. Pass --limit to bound the walk.\n`,
+    );
   }
 
   /** A `warning` that did not come from a rejected record — a cache skip, say. */

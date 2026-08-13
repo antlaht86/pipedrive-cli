@@ -472,7 +472,7 @@ describe("argument and credential failures still end in a trailer", () => {
     // pd's own wording, not node:util's — that message advises a `--` positional
     // syntax this command does not have, and an agent is the one reading it.
     expect(last["message"]).toBe(
-      "pd deals list does not accept --frobnicate. It takes --token-file and no other flag.",
+      "pd deals list does not accept --frobnicate. It takes --token-file, --limit and --max-requests and no other flag.",
     );
     expect(last).toMatchObject({
       type: "error",

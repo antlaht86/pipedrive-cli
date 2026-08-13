@@ -68,7 +68,8 @@ export type Resource = {
    * overwrite ADR-0002's line discriminator.
    */
   readonly rename: Readonly<Record<string, string>>;
-  readonly list: (client: PipedriveClient) => Pages;
+  /** `limit` is ADR-0003's `--limit`, a record count; `undefined` is everything. */
+  readonly list: (client: PipedriveClient, limit?: number) => Pages;
   readonly get: (client: PipedriveClient, id: number) => Pages;
 };
 
@@ -104,12 +105,13 @@ const define = <T extends { id: number }>({
   name,
   recordType,
   rename,
-  list: (client) =>
+  list: (client, limit) =>
     walk<T>({
       resource: recordType,
       record,
       keyOf: (parsed) => parsed.id,
       fetchPage: (cursor) => page(cursor)(client),
+      ...(limit === undefined ? {} : { limit }),
     }),
   get: (client, id) =>
     single<T>({

@@ -18,7 +18,9 @@ import { NdjsonWriter } from "./ndjson-writer.ts";
 import { collect, stream } from "./stream.ts";
 import { capture, type Line } from "../../../test/support/ndjson.ts";
 
-const writerOf = (): {
+const writerOf = (
+  bounded = false,
+): {
   writer: NdjsonWriter;
   lines: () => Line[];
   stderr: string[];
@@ -27,6 +29,7 @@ const writerOf = (): {
   const writer = new NdjsonWriter({
     recordType: "deal",
     requests: () => 3,
+    bounded,
     sink: out.sink,
     stderr: out.stderr,
   });
@@ -139,6 +142,66 @@ describe("the single trailer", () => {
       emitted: 1,
       reason: "limit",
     });
+  });
+});
+
+/**
+ * ADR-0003's size warning. Twenty thousand records is the cheapest honest test
+ * of "every 10,000" — the threshold is deliberately not injectable, because a
+ * knob that exists only for a test is the surface ADR-0019 §5 forbids.
+ */
+describe("the unbounded-run size warning", () => {
+  const many = (count: number): Record<string, unknown>[] =>
+    Array.from({ length: count }, (_, i) => ({ id: i + 1 }));
+
+  test("an unbounded run warns on stderr at every 10,000 emitted records", () => {
+    const { writer, stderr } = writerOf();
+    writer.records(many(20_001));
+    writer.finish(null);
+
+    expect(stderr).toEqual([
+      "pd: 10000 records emitted so far. Pass --limit to bound the walk.\n",
+      "pd: 20000 records emitted so far. Pass --limit to bound the walk.\n",
+    ]);
+  });
+
+  test("it says nothing below the first threshold", () => {
+    const { writer, stderr } = writerOf();
+    writer.records(many(9_999));
+    writer.finish(null);
+
+    expect(stderr).toEqual([]);
+  });
+
+  test("stdout is untouched by it", () => {
+    const { writer, lines } = writerOf();
+    writer.records(many(10_000));
+    writer.finish(null);
+
+    expect(lines().filter((line) => line["type"] === "record")).toHaveLength(10_000);
+    expect(lines().at(-1)).toMatchObject({ type: "summary", emitted: 10_000 });
+  });
+
+  test("a bounded run is not warned about the size it asked for", () => {
+    const { writer, stderr } = writerOf(true);
+    writer.records(many(20_000));
+    writer.finish("limit");
+
+    expect(stderr).toEqual([]);
+  });
+
+  test("the warning survives the page boundaries it straddles", () => {
+    // The counter is cumulative and lives on the writer, so a run that arrives
+    // as forty pages of 500 warns in the same place as one that arrives whole.
+    const { writer, stderr } = writerOf();
+    for (let i = 0; i < 40; i += 1) {
+      writer.records(
+        Array.from({ length: 500 }, (_, j) => ({ id: i * 500 + j + 1 })),
+      );
+    }
+    writer.finish(null);
+
+    expect(stderr).toHaveLength(2);
   });
 });
 

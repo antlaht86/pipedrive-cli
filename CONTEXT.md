@@ -10,9 +10,11 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **`code`** — the field carrying a variant's name in machine-readable output. It is interface, not prose: the spelling never changes, is never translated, and is never reused for a different meaning. Agents branch on `code`. Contrast `message`, which is for humans and free to change.
 
-**Bound** — a limit expressing what the caller *wanted*: `--limit`, `--max-pages`. Reaching a bound is success, and exits 0.
+**Bound** — a limit expressing what the caller *wanted*. `--limit` is the only one: [ADR-0003](docs/adr/0003-pagination-bounding-and-partiality.md) rejected `--max-pages`, because a page count is the abstraction complete pagination promises to hide. Reaching a bound is success, exits 0, and the trailer is a `summary` carrying `reason: "limit"`. A bound exists on list commands only.
 
-**Guard** — a limit expressing what the caller would *tolerate*: `--max-requests`. Reaching a guard means the work was larger than the allowance, and exits 3. The bound/guard distinction is the reason two superficially similar flags produce different exit codes. `--max-requests` is the only one: [ADR-0010](docs/adr/0010-budget-guard.md) decided there is no budget guard, and `--resolve-budget` is not one either, because exhausting it degrades and exits 0.
+**Guard** — a limit expressing what the caller would *tolerate*: `--max-requests`. Reaching a guard means the work was larger than the allowance, and exits 3 with an `error` trailer carrying `code: "request_ceiling"` and no `reason`. The bound/guard distinction is the reason two superficially similar flags produce different exit codes. `--max-requests` is the only one: [ADR-0010](docs/adr/0010-budget-guard.md) decided there is no budget guard, and `--resolve-budget` is not one either, because exhausting it degrades and exits 0. It exists on every data command, not just list ones — see [ADR-0026](docs/adr/0026-the-guards-scope-and-the-size-warnings-one-suppressor.md) §1.
+
+**Headroom** — the unspent part of a run's `--max-requests` allowance. It is *reserved* before a request is dispatched rather than measured after, so concurrent requests cannot overspend it and a retry spends it like any other attempt. [ADR-0010](docs/adr/0010-budget-guard.md) §4 requires that an enrichment request is issued only if the headroom would survive it, so that only the walk the caller asked for can ever reach the ceiling; `pd` makes no enrichment request yet, and the rule binds the tickets that add one.
 
 **Completeness marker** — the field on every list output stating whether the result set is complete. Present always, including on full success, so an agent never infers completeness from a record count.
 
