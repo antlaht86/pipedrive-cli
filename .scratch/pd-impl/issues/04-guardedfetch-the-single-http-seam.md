@@ -6,7 +6,7 @@ No command uses this yet — it is verified by unit tests and by every later tic
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0011 (concurrency and retry), ADR-0013 §1, §4–5 (read-only layer b), ADR-0019 §seams (the replay seam and the clock), ADR-0010 §429 inference.
 
@@ -28,13 +28,44 @@ Notes for the implementer:
 - Replay is **strict**: no passthrough, a request with no matching fixture is a test failure. The default gate is constructed with a transport that **throws**, so zero requests per `bun test` is mechanical rather than disciplinary. Fixtures are keyed by method, path and the sorted query parameters `pd` actually varies.
 - The replay store is **not** the cache — fixtures are committed, never expire, and are not credential-keyed. Keep them separate.
 
-- [ ] A non-GET driven through the client yields `write_blocked`, exit 1, and the gate records zero dispatches
-- [ ] The burst gate holds 10 requests per rolling 2 s by default, and raises (never lowers) on an observed `x-ratelimit-limit`
-- [ ] Search operations use a separate `search` family at 5 per 2 s and spend both allowances
-- [ ] Concurrency is fixed at 4 with no way to change it
-- [ ] A 429 pauses the whole gate; three burst strikes end the run as `rate_limited`, exit 3, in milliseconds under the injected clock
-- [ ] 5xx and transport retries run 250 ms / 1 s / 4 s with seeded jitter, cap at 10 per run, then `upstream`, exit 1
-- [ ] An unattributable 429 produces `budget_exhausted` immediately with no retry
-- [ ] A Cloudflare HTML 403 body is never parsed as JSON and is never retried
-- [ ] Fixture replay is installed at this seam, is strict, and the default transport throws
-- [ ] Injected `Clock` covers `now()` and `sleep()`, and jitter is seeded from it
+- [x] A non-GET driven through the client yields `write_blocked`, exit 1, and the gate records zero dispatches
+- [x] The burst gate holds 10 requests per rolling 2 s by default, and raises (never lowers) on an observed `x-ratelimit-limit`
+- [x] Search operations use a separate `search` family at 5 per 2 s and spend both allowances
+- [x] Concurrency is fixed at 4 with no way to change it
+- [x] A 429 pauses the whole gate; three burst strikes end the run as `rate_limited`, exit 3, in milliseconds under the injected clock
+- [x] 5xx and transport retries run 250 ms / 1 s / 4 s with seeded jitter, cap at 10 per run, then `upstream`, exit 1
+- [x] An unattributable 429 produces `budget_exhausted` immediately with no retry
+- [x] A Cloudflare HTML 403 body is never parsed as JSON and is never retried
+- [x] Fixture replay is installed at this seam, is strict, and the default transport throws
+- [x] Injected `Clock` covers `now()` and `sleep()`, and jitter is seeded from it
+
+## What the implementation settled, for the tickets that inherit it
+
+- **`guardedFetch` throws one carrier, `PdFailure`, and returns everything else.**
+  Its type is `typeof fetch`, so there is no channel on it for a `Result`. The
+  refusals and the exhausted budgets — `write_blocked`, `rate_limited`,
+  `budget_exhausted`, `blocked`, `upstream` — travel as a thrown `PdFailure`
+  holding an ADR-0001 error object; **every other status is handed back as a
+  `Response` untouched**, including 401, a JSON 403 and 404. Mapping those to
+  `auth` / `forbidden` / `not_found` is ticket 05's, at the wrapper seam, with
+  `fromPromise` unwrapping the carrier.
+- **ADR-0011 §8's "3 attempts" is implemented as three *waits*** — 250 ms, 1 s,
+  4 s — so a request that keeps meeting a 5xx is dispatched at most four times.
+  The three named delays are the checklist's own wording and are what the tests
+  assert.
+- **The Clock carries `random()`** beside `now()` and `sleep()`, because
+  ADR-0019 §4 requires the full jitter to be seeded from the same injected
+  source. Nothing else in `pd` gains a parameter.
+- **`--max-requests` is not wired here.** `dispatches()` is the counter every
+  *"and no request was made"* assertion in the map reads; ticket 06 adds the
+  reservation-before-dispatch rule of ADR-0011 §9 on top of it.
+- **The `blocked` sentinel is not written here.** This module produces the
+  `blocked` error; ticket 09 owns the on-disk sentinel and the refusal that
+  reads it.
+- **Nothing is wired into the generated `client.gen.ts` singletons**, which are
+  regenerated output. `PIPEDRIVE_V1_BASE_URL` and `PIPEDRIVE_V2_BASE_URL` are
+  exported for ticket 05 to configure the clients from the wrapper.
+- **The fake clock and the replay transport live in `test/support/`**, and the
+  test file lives beside the module rather than under `test/`, because it drives
+  a non-GET through the generated client and ESLint layer (c) confines that
+  import to `src/lib/pipedrive/**`.
