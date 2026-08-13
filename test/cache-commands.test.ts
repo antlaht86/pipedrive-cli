@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 import { cacheCommand, isCacheVerb } from "../src/commands/cache.ts";
 import { SENTINEL_FILE } from "../src/lib/cache/entries.ts";
@@ -208,6 +209,44 @@ describe("pd cache clear", () => {
     run("clear");
 
     expect(run("info").report["entries"]).toEqual([]);
+  });
+});
+
+describe("the cli wires both, outside the resource grammar", () => {
+  // `route()` never sees `cache`, so this is the one place the ADR-0009 §8
+  // exception is exercised end to end. Run from source rather than from a
+  // compiled binary: the wiring is the subject, and the build is not.
+  const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+
+  const pd = (...argv: string[]) =>
+    Bun.spawnSync(["bun", cli, ...argv], {
+      env: {
+        PATH: process.env["PATH"] ?? "",
+        HOME: home,
+        XDG_CACHE_HOME: `${home}/cache`,
+      },
+    });
+
+  test("pd cache info runs with no credential at all", () => {
+    place("users.json", entry([{ id: 1 }]));
+
+    const run = pd("cache", "info");
+
+    expect(run.exitCode).toBe(0);
+    const report = JSON.parse(run.stdout.toString()) as Record<string, unknown>;
+    expect(report["path"]).toBe(root());
+    expect((report["entries"] as unknown[]).length).toBe(1);
+  });
+
+  test("pd cache clear runs, and an unknown verb is exit 2", () => {
+    place("users.json", entry([]));
+
+    expect(pd("cache", "clear").exitCode).toBe(0);
+    expect(existsSync(`${directory()}/users.json`)).toBe(false);
+
+    const bad = pd("cache", "purge");
+    expect(bad.exitCode).toBe(2);
+    expect(JSON.parse(bad.stdout.toString())["code"]).toBe("usage");
   });
 });
 

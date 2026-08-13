@@ -31,6 +31,7 @@
  */
 
 import { err, ok, type Result } from "neverthrow";
+import type { z } from "zod";
 
 import { pdError, type PdError } from "../lib/errors.ts";
 import { resolveCredential } from "../lib/auth/credentials.ts";
@@ -311,24 +312,32 @@ export const cachedCommand = async ({
   const find = (records: readonly unknown[]): unknown | undefined =>
     records.find((record) => source.key(record) === id);
 
-  let match = find(loaded.value.records);
+  const matched = (
+    records: readonly unknown[],
+  ): Result<Record<string, unknown>, z.ZodError> | undefined => {
+    const found = find(records);
+    return found === undefined ? undefined : source.parse(found);
+  };
 
-  // ADR-0005 §3's unrecognised-key refresh: an id absent from a *cached* list is
-  // one re-fetch regardless of TTL, so a user who joined this morning is found
-  // and a deleted one is still reported missing.
-  if (match === undefined && loaded.value.fromCache) {
+  let record = matched(loaded.value.records);
+
+  // Two reasons to spend one re-fetch on a warm entry, and they are the same
+  // reason: what is on disk is behind. ADR-0005 §3's unrecognised-key refresh
+  // covers the id that is simply absent — a user who joined this morning is
+  // found, and a deleted one is still reported missing. A record that no longer
+  // parses covers the other half, and is the `get` half of the list path's
+  // no-survivors branch above: the version stamp cannot see a regenerated
+  // schema, so a warm `get` would otherwise fail where the same `get` on a cold
+  // cache succeeds.
+  if (loaded.value.fromCache && (record === undefined || record.isErr())) {
     const fresh = await fetchFresh();
     if (fresh.isErr()) return writer.error(fresh.error);
-    match = find(fresh.value.records);
+    record = matched(fresh.value.records);
   }
 
-  if (match === undefined) return writer.error(notFound(resource, id));
-
-  const record = source.parse(match);
+  if (record === undefined) return writer.error(notFound(resource, id));
   if (record.isErr()) {
-    return writer.error(
-      rejectedRecord(resource.recordType, id, record.error),
-    );
+    return writer.error(rejectedRecord(resource.recordType, id, record.error));
   }
 
   return stream(

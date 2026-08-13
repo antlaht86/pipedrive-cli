@@ -688,6 +688,38 @@ describe("get filters the cached list", () => {
     expect(last).toMatchObject({ code: "invalid_response", emitted: 0 });
   });
 
+  test("a warm record the schema no longer accepts is refetched, not refused", async () => {
+    // The `get` half of the list path's no-survivors branch: the version stamp
+    // cannot see a regenerated schema, so without the re-fetch a warm `get`
+    // would fail where the same `get` on a cold cache succeeds.
+    mkdirSync(cacheDirectory(), { recursive: true });
+    writeFileSync(
+      `${cacheDirectory()}/pipelines.json`,
+      JSON.stringify({
+        version: 1,
+        fetched_at: clock.now(),
+        records: [{ id: 2, pipeline: "a shape a past schema accepted" }],
+      }),
+    );
+
+    const { exit, lines, last } = await runWith(
+      [cachedPage("pipelines", [pipeline(2)])],
+      ["pipelines", "get", "2"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toMatchObject({ id: 2, name: "Sales 2" });
+    expect(last).toMatchObject({ complete: true, emitted: 1, requests: 1 });
+  });
+
+  test("pd fields get without --entity is a usage error, exit 2", async () => {
+    const { exit, last } = await runWith(undefined, ["fields", "get", "title"]);
+
+    expect(exit).toBe(2);
+    expect(last["code"]).toBe("usage");
+    expect(String(last["message"])).toContain("requires --entity");
+  });
+
   test("a non-integer id is a usage error on a resource whose ids are integers", async () => {
     const { exit, last } = await runWith(undefined, ["users", "get", "abc"]);
 

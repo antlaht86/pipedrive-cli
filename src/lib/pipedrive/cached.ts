@@ -86,11 +86,6 @@ export type CachedResource = {
   /** True for `fields` alone: `--entity` exists, and it is required. */
   readonly needsEntity: boolean;
   /**
-   * ADR-0009 §3: `fields` is the one resource whose id is not an integer.
-   * `undefined` is a usage error the command words, not a request.
-   */
-  readonly id: (raw: string) => string | number | undefined;
-  /**
    * The entity is present exactly when `needsEntity` is true, and `undefined`
    * comes back when it is not — which the command answers with the `usage`
    * refusal below rather than with a throw.
@@ -242,19 +237,6 @@ const FIELD_SOURCES: Record<Entity, CachedSource> = {
   }),
 };
 
-/** A positive integer id, the same spelling `resources.ts` accepts. */
-const integerId = (raw: string): number | undefined =>
-  /^[1-9][0-9]*$/.test(raw) ? Number(raw) : undefined;
-
-/**
- * ADR-0009 §3 and the ticket: a field's id is `field_code`, which is a
- * fixed-length hex hash for a custom field and a plain name — `title`, `value` —
- * for a standard one. Any non-empty string is therefore a candidate, and
- * whether it exists is a question for the cached list rather than for a regex.
- */
-const codeId = (raw: string): string | undefined =>
-  raw === "" ? undefined : raw;
-
 const single = (source: CachedSource) => (): CachedSource => source;
 
 const CACHED: readonly CachedResource[] = [
@@ -262,7 +244,6 @@ const CACHED: readonly CachedResource[] = [
     name: "users",
     recordType: "user",
     needsEntity: false,
-    id: integerId,
     source: single(
       defineSource({
         entry: "users",
@@ -276,7 +257,6 @@ const CACHED: readonly CachedResource[] = [
     name: "pipelines",
     recordType: "pipeline",
     needsEntity: false,
-    id: integerId,
     source: single(
       defineSource({
         entry: "pipelines",
@@ -293,7 +273,6 @@ const CACHED: readonly CachedResource[] = [
     name: "stages",
     recordType: "stage",
     needsEntity: false,
-    id: integerId,
     source: single(
       defineSource({
         entry: "stages",
@@ -310,7 +289,6 @@ const CACHED: readonly CachedResource[] = [
     name: "fields",
     recordType: "field",
     needsEntity: true,
-    id: codeId,
     source: (entity) =>
       entity === undefined ? undefined : FIELD_SOURCES[entity],
   },
