@@ -33,3 +33,12 @@ Notes for the implementer:
 - [ ] A credential file with loose permissions emits one `warning` line and the run continues
 - [ ] The new eighth warning kind is named and documented alongside the other seven
 - [ ] No `--token <value>` flag exists in any form
+
+## Comments
+
+**2026-08-13 — handoff from ticket 01.** The CWD autoload gate (ADR-0021 §3, ADR-0019 §8) currently
+asserts against a **probe** binary in `test/dotenv-autoload.test.ts`, because no command reads the
+credential chain yet. This ticket promotes the `.env` half to the normative form: run `pd auth status`
+from a directory holding a `.env` that sets `PD_API_TOKEN`, against `dist/pd`, in the binary smoke legs
+of `.github/workflows/ci.yml`, and assert the run does not report the `env` tier. Both compile through
+`buildBinary` in `scripts/build.ts`, the single build path.
