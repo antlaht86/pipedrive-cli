@@ -35,14 +35,15 @@ banners and prose on stdout.
 
 ## Solution
 
-`pd` — a single-binary-feeling npm CLI that reads Pipedrive and cannot write it.
+`pd` — a single compiled binary, built from this repository with Bun, that reads Pipedrive and cannot
+write it.
 
 - **Read-only, structurally.** GET requests only, enforced by four independent layers of `pd`'s own
   code, not by a promise in the README.
 - **Machine-first output.** stdout is NDJSON, one `type`-tagged JSON value per line, ending in
   exactly one trailer that always states whether the answer is complete. stderr carries no fact that
   stdout does not also carry.
-- **Errors are data.** A typed union of thirteen variants, each with a stable `code`, a `retry`
+- **Errors are data.** A typed union of twelve variants, each with a stable `code`, a `retry`
   advisory and an exit code, emitted on stdout in the same shape family as success.
 - **Complete pagination by default.** "All deals" means all of them. The cursor is never visible.
   `--limit` bounds the answer in records; `--max-requests` guards the run in network requests, and
@@ -257,32 +258,34 @@ ergonomics conflict, the agent wins; `--pretty` is the human's opt-in, and it is
 
 ### Installation and versioning
 
-85. As a harness author, I want `npm install -g @zimple/pd` as the one documented install, so that
-    setup has no platform matrix.
-86. As a harness author, I want a Node ≥ 20 runtime check that emits a typed `unsupported_runtime`
-    error, so that an old runtime does not hand my agent a raw `SyntaxError`.
+85. As a harness author, I want `git clone` plus `bun run build` as the one documented install, so
+    that setup has no registry, no platform matrix and no signing step.
+86. As a harness author, I want the built binary to ignore a `.env` in the directory it is invoked
+    from, so that standing in an arbitrary repository cannot silently switch my Pipedrive account.
 87. As a harness author, I want `pd` never to poll a registry for updates, so that the tool makes no
     HTTP request that is not a Pipedrive GET.
 88. As a harness author, I want MAJOR defined against the agent-visible contract and
     `manifest_version` in lockstep, so that "did the contract break" is answerable from one object.
-89. As a Windows user, I want `%LOCALAPPDATA%` and `%APPDATA%` supported and the NTFS permission gap
+89. As a harness author, I want `pd --version` to name the commit it was built from, so that two
+    self-built binaries reporting the same tag are still distinguishable.
+90. As a Windows user, I want `%LOCALAPPDATA%` and `%APPDATA%` supported and the NTFS permission gap
     stated in `pd auth status`, so that the platform works and its weaker promise is not hidden.
 
 ### Development
 
-90. As a maintainer, I want `bun test` to cost zero Pipedrive requests mechanically, so that no
+91. As a maintainer, I want `bun test` to cost zero Pipedrive requests mechanically, so that no
     developer can take the company CRM offline by adding a test case.
-91. As a maintainer, I want the replay seam below the write guard, so that no test can test its way
+92. As a maintainer, I want the replay seam below the write guard, so that no test can test its way
     past the read-only property.
-92. As a maintainer, I want one injected clock, so that a retry test costs milliseconds instead of
+93. As a maintainer, I want one injected clock, so that a retry test costs milliseconds instead of
     six seconds and a TTL test is possible at all.
-93. As a maintainer, I want no test-only flag or environment variable, so that isolation cannot
+94. As a maintainer, I want no test-only flag or environment variable, so that isolation cannot
     become surface an agent can reach.
-94. As a maintainer, I want the live suite invoked by hand and producing a re-recording rather than a
+95. As a maintainer, I want the live suite invoked by hand and producing a re-recording rather than a
     pass or fail, so that a colleague editing a deal does not turn the build red.
-95. As a maintainer, I want a CI gate asserting no credential-shaped string is in the fixture tree and
-    no fixture is in the tarball, so that the private repository and the public artifact stay
-    distinct by enforcement rather than by intention.
+96. As a maintainer, I want a CI gate asserting no credential-shaped string is in the fixture tree and
+    no fixture is embedded in the built binary, so that the private fixture repository and the public
+    code repository stay distinct by enforcement rather than by intention.
 
 ---
 
@@ -653,14 +656,13 @@ exit 3. It expires after **15 minutes**. There is no override flag; `pd cache cl
 `--no-cache` does not bypass it. Only the expiry and a human deleting the file remove it. An
 unparseable sentinel is treated as absent.
 
-### 15. Error model — [ADR-0001](../../docs/adr/0001-error-model-and-exit-codes.md), [ADR-0013](../../docs/adr/0013-read-only-enforcement.md), [ADR-0014](../../docs/adr/0014-distribution.md)
+### 15. Error model — [ADR-0001](../../docs/adr/0001-error-model-and-exit-codes.md), [ADR-0013](../../docs/adr/0013-read-only-enforcement.md)
 
-**Thirteen variants**, each earning its place by a distinct caller response:
+**Twelve variants**, each earning its place by a distinct caller response:
 
 | Variant | Exit | `retry` | When |
 | --- | --- | --- | --- |
 | `usage` | 2 | never | Bad argument, unknown command |
-| `unsupported_runtime` | 2 | never | Node below major 20 |
 | `auth` | 1 | never | Credential missing, invalid or revoked |
 | `forbidden` | 1 | never | Credential valid, permission insufficient |
 | `not_found` | 1 | never | The named single resource does not exist |
@@ -760,30 +762,46 @@ the second command issues exactly the request an in-run expansion would have iss
 against the shared budget is identical either way**, which removes expansion's only real argument and
 leaves it paying five contract questions for one saved invocation.
 
-### 19. Distribution — [ADR-0014](../../docs/adr/0014-distribution.md)
+### 19. Distribution — [ADR-0021](../../docs/adr/0021-distribution-build-from-source.md)
 
-- One channel: `@zimple/pd`, public npm, `bin: { "pd": … }`, `npm install -g @zimple/pd`. The scope is
-  forced — `pd`, `pipedrive-cli` and `pd-cli` are taken, and `pd-cli` already ships a bin named `pd`.
-  That PATH collision is accepted rather than solved.
-- The tarball is **one bundled `.js`** with `#!/usr/bin/env node`, `zod`, `neverthrow`, `p-limit` and
-  the generated client inlined. `dependencies` is empty. `engines.node >= 20`. Raw TypeScript is
-  refused.
-- **Bun is the build and test runtime; Node is the shipped runtime.** No `Bun.*` or `bun:*` reference
-  may reach `src/**`, enforced by ESLint plus a CI gate.
-- **`pd` never checks for a newer version of itself.** A registry poll is the one non-Pipedrive HTTP
-  request the design forbids, whichever side of the client it sits on.
-- `pd --version` prints the bare semver string. The manifest carries `pd_version` beside
-  `manifest_version`. Semver MAJOR is defined against the agent-visible contract — a line shape, a
-  `type` tag, a trailer field, an exit code, a `code` string, or a command changing or disappearing —
-  and `manifest_version` moves in lockstep. First release from this spec is `1.0.0`. A new field on
-  an existing line is MINOR, and that cost is named rather than hidden.
-- Windows is supported with `%LOCALAPPDATA%` / `%APPDATA%`, and the NTFS permission gap is stated in
-  `pd auth status` warnings rather than papered over. CI runs a Windows leg because path resolution is
-  the only Windows-specific code and is exactly what an untested platform gets wrong.
-- `AGENTS.md` ships in the tarball and `pd docs` emits it verbatim.
-- `engines` only warns, so `pd` reads `process.versions.node` first and emits `unsupported_runtime`,
-  exit 2. The check must **parse** on the runtime it refuses: the bundle targets ES2020 and the
-  version prelude uses nothing newer.
+*Supersedes [ADR-0014](../../docs/adr/0014-distribution.md) in full. There is no npm package, no Node
+target and no `unsupported_runtime` variant.*
+
+- **One channel: this repository.** `git clone` → `bun install` → `bun run build` → `dist/pd`
+  (`dist\pd.exe` on Windows), a compiled `bun build --compile` binary. No registry, no release
+  artifact, no installer, no Homebrew, no code signing, no notarization, no platform matrix.
+  Notarization is not needed because a locally built binary carries no `com.apple.quarantine` xattr —
+  that xattr, set by the downloader, is what SIGKILLs an unsigned binary.
+- **No install script.** `bun run build` writes into the checkout and stops. Putting `dist/pd` on
+  `PATH` is the user's business, and `pd` ships no code that writes outside its own checkout.
+- **Bun is the only runtime**, at build time and at run time — the binary embeds it, so the host needs
+  nothing. `Bun.*` and `bun:*` are permitted in `src/**`, and the ESLint ban is removed. Two
+  temptations stay refused on their own grounds: `Bun.secrets` (no `login` command puts anything in a
+  store) and `bun:sqlite` (a relative database path resolves against the process CWD).
+- **The build command is normative, and two flags are a safety property:**
+  `--no-compile-autoload-dotenv --no-compile-autoload-bunfig`. Without them a compiled binary
+  auto-loads `.env` from the process CWD, so a repository the agent happens to stand in can set
+  `PD_API_TOKEN` and win tier 2 of the credential chain from outside it. A CI gate asserts the
+  property against the built binary. `--minify --bytecode` is kept on measurement: 21.5 ms startup
+  against 27.1 ms, for +2.9 MB.
+- **Everything the binary needs is embedded**, `AGENTS.md` included: `pd docs` writes the embedded copy
+  and never reads from disk, the executable's directory or the CWD.
+- **`pd --version` reports the commit**, because every binary is built from whatever commit its builder
+  had: `1.0.0` at a clean tag, `1.0.0+g3f9a1c2` off a tag, `1.0.0+g3f9a1c2.dirty` with local changes.
+  The base is `package.json`'s version, stamped through `--define`; the suffix is semver build
+  metadata and does not affect precedence.
+- **`pd` never checks for a newer version of itself.** There is no registry to poll. Updating is
+  `git pull && bun run build`.
+- Semver MAJOR is defined against the agent-visible contract — a line shape, a `type` tag, a trailer
+  field, an exit code, a `code` string, or a command changing or disappearing — and `manifest_version`
+  moves in lockstep. A new field on an existing line is MINOR, and that cost is named rather than
+  hidden. First release from this spec is `1.0.0`.
+- Windows is supported by the same source path with `%LOCALAPPDATA%` / `%APPDATA%`, and the NTFS
+  permission gap is stated in `pd auth status` warnings rather than papered over.
+- **This repository becomes public and the fixtures leave it** for a private repository of their own.
+  It is free today because no fixture has been recorded yet, and a history rewrite the day after the
+  first one lands. A clean public clone runs the offline tests and the gates; the replay layer needs
+  fixture-repository access.
 
 ### 20. The manifest — [ADR-0009](../../docs/adr/0009-command-surface-and-manifest.md) §10, [ADR-0016](../../docs/adr/0016-field-projection.md) §8
 
@@ -877,10 +895,10 @@ Each exists because another decision requires it. Their shape is negotiable; the
 | ADR-0013 §2 | Both generated clients contain zero non-GET operations after regeneration | CI gate |
 | ADR-0013 §2 | ESLint `no-restricted-imports` on `**/generated/**` | CI gate |
 | ADR-0013 §1, §4 | A non-GET driven through the client yields `write_blocked`, exit 1, and dispatches nothing | Unit |
-| ADR-0014 §3 | ESLint ban on the `Bun` global and every `bun:*` import in `src/**` | CI gate |
+| ADR-0021 §3 | The built binary ignores a `.env` in the process CWD: `pd auth status` beside one setting `PD_API_TOKEN` does not report the `env` tier | CI gate, on the binary |
 | ADR-0015 §6 | No unredacted query value and no non-allowlisted header can reach stderr | CI gate |
 | ADR-0019 §10 | No credential-shaped string anywhere in the fixture tree | CI gate |
-| ADR-0019 §10 | The published tarball contains no fixture | CI gate |
+| ADR-0019 §10 | No fixture is embedded in the built binary | CI gate |
 | ADR-0015 §1 | A non-TTY run emits exactly two things on stderr, and neither is progress | Replay |
 | ADR-0016 §7 | The same projection **with and without** the `custom_fields` push-down is byte-identical | Replay, fixture pair |
 | ADR-0016 §6 | An unknown top-level selector exits 2 with zero dispatches | Offline |
@@ -906,15 +924,16 @@ examples** of the output format and the only guard against shape drift. They cur
 
 ### Runtimes and CI legs
 
-The suite runs under **Bun**. A separate short **bundle smoke leg** runs the built artifact under Node
-20 and current LTS, and a third under Windows. The smoke legs exist because the lint gate proves the
-*source* uses no Bun API while users run the *bundle* under Node, and a bundler can introduce exactly
-the gap the lint rule bans. Three things are asserted only against the built bundle: version
-agreement between `pd --version` and the manifest's `pd_version`, the `unsupported_runtime` refusal,
-and the tarball contents.
+The suite runs under **Bun**. A separate short **binary smoke leg** builds `dist/pd` and runs a fixed
+set of end-to-end invocations against the binary, on Linux and on Windows. The leg exists because
+three things cannot be asserted in source form: version agreement between `pd --version` and the
+manifest's `pd_version`, the embedded `AGENTS.md` behind `pd docs`, and that no fixture is embedded.
+It also carries ADR-0021 §3's assertion that a `.env` in the process CWD does not reach the credential
+chain.
 
-CI runs four legs: the Bun suite plus lint and the gates; Node 20 smoke; Node LTS smoke; Windows
-smoke.
+CI runs three legs: the Bun suite plus lint and the gates; the binary smoke leg on Linux; the same leg
+on Windows, whose whole purpose is the `%LOCALAPPDATA%` / `%APPDATA%` resolution that is the only
+Windows-specific code in `pd`.
 
 ### The live suite
 
@@ -935,11 +954,13 @@ the injected clock, and nowhere else.
 Recorded responses are committed verbatim — real deals, real organisation names, real amounts, real
 owners. Two consequences are load-bearing rather than incidental:
 
-- **The repository must stay private**, and cannot become public by flipping a setting, because
-  fixtures persist in git history. This is a design constraint with a name.
-- **No fixture ships to npm.** The package manifest carries an explicit `files` **allowlist** rather
-  than an ignore list, so a new directory is excluded by default, and a CI gate asserts the packed
-  tarball's contents.
+- **The fixtures live in their own private repository**, consumed by the suite as a submodule or a
+  fetched path. This repository — the one a user clones to build `pd` — is public and carries none of
+  them. Per ADR-0021 §9 the split is free only until the first fixture is recorded; after that it is a
+  history rewrite.
+- **No fixture is embedded in the binary.** A CI gate asserts it against `dist/pd`, so the separation
+  between the private data and the public artifact is enforced rather than intended. A clean public
+  clone can run the offline tests and the gates, but not the replay layer.
 
 The credential is stripped mechanically and separately: the recorder never writes request headers at
 all, and a CI gate greps the whole fixture tree for credential-shaped strings.

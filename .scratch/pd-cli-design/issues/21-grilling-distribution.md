@@ -1,5 +1,10 @@
 # Distribution
 
+> **Superseded 2026-08-13.** This ticket's decision became
+> [ADR-0014](../../../docs/adr/0014-distribution.md), which
+> [ADR-0021](../../../docs/adr/0021-distribution-build-from-source.md) supersedes whole: `pd` is built
+> from a clone with `bun build --compile` and there is no npm package. Kept as decision history.
+
 Type: grilling
 Status: resolved
 

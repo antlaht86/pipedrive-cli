@@ -83,6 +83,13 @@ does not unexpose it.
 
 ### 4. There is no keychain tier, and that is what keeps the cheap distribution open
 
+*Amended by [ADR-0021](0021-distribution-build-from-source.md) §2. **The title's reasoning no longer
+holds**: the cheap npm distribution this section protected is gone, `pd` ships as a compiled Bun
+binary, and `Bun.*` APIs are permitted in `src/**` again. The decision below is unchanged, because it
+never rested only on the distribution argument — §5 declines to have a command that puts a credential
+anywhere, which leaves the keychain tier unreachable whatever the API surface allows. Read the second
+half of this section as history rather than as a live constraint.*
+
 Research 08's tier 3, `Bun.secrets`, is cut. The reason is mechanical: `Bun.secrets` is a programmatic
 API, so the only way a credential gets into the keychain is a `pd` command that puts it there. §5
 declines to have one, which leaves the tier unreachable.

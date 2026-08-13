@@ -1,7 +1,12 @@
 # ADR-0014: How `pd` reaches a machine
 
-Status: accepted
+Status: superseded
 Date: 2026-08-12
+Superseded by: [ADR-0021](0021-distribution-build-from-source.md) — `pd` is built from source with
+`bun build --compile`; the npm channel, the Node target, `unsupported_runtime` and the `Bun.*` ban are
+all withdrawn. Nothing below is normative. ADR-0021 restates the parts that survive — the semver
+contract, the Windows path mapping, the no-self-update refusal and `pd docs` — so this document need
+not be read to know what holds.
 Deciding ticket: [Distribution](../../.scratch/pd-cli-design/issues/21-grilling-distribution.md)
 Extends: [ADR-0001](0001-error-model-and-exit-codes.md) — adds a thirteenth variant, `unsupported_runtime`
 Extends: [ADR-0005](0005-cache-design.md) §6 and [ADR-0012](0012-authentication-and-credential-resolution.md) §3 — both per-user paths gain a Windows mapping

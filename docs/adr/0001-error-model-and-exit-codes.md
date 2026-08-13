@@ -25,6 +25,12 @@ The cost, accepted: `pd deals list > deals.json` writes a file containing an err
 
 ### Eleven variants, each earning its place by a distinct caller response
 
+*Amended: the union is **twelve**. [ADR-0013](0013-read-only-enforcement.md) §4 adds `write_blocked`
+(exit 1, `retry: never`) — a write reached the guard and no request left the process.
+[ADR-0014](0014-distribution.md) §9 added a thirteenth, `unsupported_runtime`, which
+[ADR-0021](0021-distribution-build-from-source.md) §7 **withdraws**: the compiled binary carries its
+own runtime, so there is no host runtime to be wrong.*
+
 A variant exists only if the caller must respond differently to it — not because it has a distinct origin. Two HTTP statuses leading to the same action are one variant.
 
 | Variant | When | Caller's response |

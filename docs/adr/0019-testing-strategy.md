@@ -132,6 +132,16 @@ moving time.
 
 ### 7. Tests run under Bun; the shipped bundle is smoke-tested under Node
 
+*Amended by [ADR-0021](0021-distribution-build-from-source.md) §8. The shipped artifact is a compiled
+Bun binary, not a Node-targeting bundle, so the two Node smoke legs are removed and replaced by a
+**binary smoke leg** on Linux and Windows: build `dist/pd`, then run the same fixed set of end-to-end
+invocations against the binary. This section's argument is unchanged — assertions about the artifact
+cannot be made about the source — only its referent is. Of the three artifact-only assertions below,
+the version agreement survives with `pd --version` now carrying ADR-0021 §6's commit suffix; the
+`unsupported_runtime` refusal is **deleted** with the variant; and "no fixture in the tarball" becomes
+**no fixture embedded in the binary**. One assertion is added: a `.env` in the process CWD does not
+reach `pd auth status` as the `env` tier (ADR-0021 §3).*
+
 ADR-0014 §3 handed this ticket the question and it is answered in two parts, because the risk is in two
 places.
 
@@ -167,10 +177,11 @@ existence.
 | ADR-0013 §2 | Both generated clients contain zero non-GET operations after regeneration | CI gate |
 | ADR-0013 §2 | ESLint `no-restricted-imports` on `**/generated/**` | CI gate |
 | ADR-0013 §1, §4 | A non-GET driven through the single client yields `write_blocked`, exit 1, and dispatches nothing | Unit |
-| ADR-0014 §3 | ESLint ban on the `Bun` global and every `bun:*` import in `src/**` | CI gate |
+| ~~ADR-0014 §3~~ | ~~ESLint ban on the `Bun` global and every `bun:*` import in `src/**`~~ — removed by [ADR-0021](0021-distribution-build-from-source.md) §2 | — |
+| ADR-0021 §3 | The built binary ignores a `.env` in the process CWD: `pd auth status` run beside one setting `PD_API_TOKEN` does not report the `env` tier | CI gate, on the binary |
 | ADR-0015 §6 | No unredacted query value and no non-allowlisted header can reach stderr | CI gate |
 | §10 below | No credential-shaped string exists anywhere in the fixture tree | CI gate |
-| §10 below | The published tarball contains no fixture | CI gate |
+| §10 below | The published artifact contains no fixture — per [ADR-0021](0021-distribution-build-from-source.md) §8 this is checked against the built binary, not an `npm pack` output | CI gate |
 | ADR-0015 §1 | A non-TTY run emits exactly two things on stderr, and neither is progress | Replay |
 | ADR-0016 §7 | The same projection with and without the `custom_fields` push-down is **byte-identical** | Replay, fixture pair |
 | ADR-0016 §6 | An unknown top-level selector exits 2 with zero dispatches | Offline |
@@ -229,6 +240,13 @@ Accepted. The alternative — never re-recording — makes the same failure perm
 manual.
 
 ### 10. Fixtures keep real CRM data, and that has named consequences
+
+*Amended by [ADR-0021](0021-distribution-build-from-source.md) §9. The separation below is kept but
+moves: **the fixtures leave this repository** for a private one of their own, and the repository a user
+clones to build `pd` becomes public and carries none of them. The reason the section gave for calling
+the split expensive — fixtures persisting in git history — does not apply, because no fixture has been
+recorded yet. Read "private repository" below as "the fixture repository", and "the tarball" as "the
+built binary".*
 
 Recorded responses are committed verbatim: real deals, real organisation names, real contact addresses,
 real amounts, real owners. Anonymisation at record time was rejected in favour of the fixture being

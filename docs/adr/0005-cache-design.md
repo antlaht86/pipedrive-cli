@@ -121,6 +121,9 @@ These follow from the decisions above and are recorded rather than argued.
 - Location `$XDG_CACHE_HOME/pd/<token-hash>/`, defaulting to `~/.cache/pd/`. Separate from the
   credential path `$XDG_CONFIG_HOME/pd/` fixed by research 08. Never beside the binary, never in the
   working directory — ticket 21 may ship `pd` as a compiled binary on a read-only path.
+  *Confirmed by [ADR-0021](0021-distribution-build-from-source.md): `pd` **is** a compiled binary, so
+  this reason is load-bearing rather than hypothetical. It has no writable location beside itself, and
+  a CWD-relative store would follow the agent between repositories.*
 - Writes go to a temporary file in the same directory followed by `rename`, so a half-written entry
   is never observable. No locking: two concurrent `pd` processes write identical content, the last
   write wins, and both readers see an intact file.
