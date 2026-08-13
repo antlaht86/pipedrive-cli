@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildBinary } from "../scripts/build.ts";
 
@@ -21,7 +22,7 @@ const stamps = ["1.0.0", "1.0.0+g3f9a1c2", "1.0.0+g3f9a1c2.dirty"];
 for (const stamp of stamps) {
   test(`pd --version prints the bare stamp ${stamp}`, async () => {
     const binary = await buildBinary({
-      entry: new URL("../src/cli.ts", import.meta.url).pathname,
+      entry: fileURLToPath(new URL("../src/cli.ts", import.meta.url)),
       outfile: join(workspace, `pd-${stamp.replace(/[+.]/g, "_")}`),
       version: stamp,
     });

@@ -9,7 +9,12 @@
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
 
-/** Running from source — `bun src/cli.ts` — has no stamp. */
+/**
+ * Running from source — `bun src/cli.ts` — has no stamp. A built binary always
+ * has one, so the artifact only ever prints the three shapes of ADR-0021 §6;
+ * this fourth string cannot come out of `dist/pd`, and the binary smoke leg
+ * asserts as much.
+ */
 const version = (): string =>
   typeof PD_VERSION === "undefined" ? "0.0.0+source" : PD_VERSION;
 

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildBinary } from "../scripts/build.ts";
 
@@ -21,16 +22,20 @@ import { buildBinary } from "../scripts/build.ts";
 const workspace = mkdtempSync(join(tmpdir(), "pd-dotenv-gate-"));
 afterAll(() => rmSync(workspace, { recursive: true, force: true }));
 
-test("the built binary ignores a .env in the process CWD", async () => {
+test("the built binary ignores a .env and a bunfig.toml in the process CWD", async () => {
   const probe = await buildBinary({
-    entry: new URL("./fixtures/env-probe.ts", import.meta.url).pathname,
+    entry: fileURLToPath(new URL("./fixtures/env-probe.ts", import.meta.url)),
     outfile: join(workspace, "probe"),
     version: "0.0.0-probe",
   });
 
   const cwd = mkdtempSync(join(workspace, "cwd-"));
   await Bun.write(join(cwd, ".env"), "PD_API_TOKEN=leaked-from-dotenv\n");
-  await Bun.write(join(cwd, "bunfig.toml"), "[run]\nbun = true\n");
+  await Bun.write(join(cwd, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+  await Bun.write(
+    join(cwd, "preload.ts"),
+    'process.env.PD_BUNFIG_PRELOAD = "leaked-from-bunfig";\n',
+  );
 
   const run = Bun.spawnSync([probe], {
     cwd,
@@ -38,5 +43,6 @@ test("the built binary ignores a .env in the process CWD", async () => {
   });
 
   expect(run.exitCode).toBe(0);
-  expect(run.stdout.toString().trim()).toBe("unset");
+  // First field is the `.env` half, second the `bunfig.toml` half.
+  expect(run.stdout.toString().trim()).toBe("unset unset");
 });

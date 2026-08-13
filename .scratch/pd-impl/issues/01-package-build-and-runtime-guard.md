@@ -36,7 +36,7 @@ Notes for the implementer:
 - [x] `package.json` has no `bin`, no npm scope and no `dependencies` intended for a consumer; `engines.bun` declares the build floor
 - [x] `bun run build` produces `dist/pd`, executable, running with nothing installed on the host
 - [x] The build passes `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`, and no documented build path omits them
-- [x] A `.env` setting `PD_API_TOKEN` in the process CWD does not reach the credential chain — asserted against the built binary, as a CI gate
+- [~] A `.env` setting `PD_API_TOKEN` in the process CWD does not reach the credential chain — asserted against the built binary, as a CI gate *(partial: asserted against a probe binary compiled by the same `buildBinary`, because no command reads the credential chain yet. Ticket 03 promotes it to `pd auth status` against `dist/pd`.)*
 - [x] `pd --version` prints the bare stamped string and exits 0, with the `+g<sha>` and `.dirty` suffixes behaving as specified
 - [x] The build fails with a readable message when `Bun.version` is below `engines.bun`
 - [x] CI runs three legs: Bun suite + lint + gates, binary smoke on Linux, binary smoke on Windows
@@ -54,8 +54,10 @@ Notes for the implementer:
 - `src/version.ts` holds `stampVersion`, the pure seam under the three version shapes; the git
   plumbing (`rev-parse --short`, `tag --points-at`, `status --porcelain`) stays thin around it. A
   release tag is `v<version>`.
-- The CWD `.env` gate (`test/dotenv-autoload.test.ts`) compiles a probe entrypoint through
-  `buildBinary` and asserts it prints `unset` beside a `.env` setting `PD_API_TOKEN`. `pd` has no
+- The CWD autoload gate (`test/dotenv-autoload.test.ts`) compiles a probe entrypoint through
+  `buildBinary` and asserts both halves: it prints `unset` beside a `.env` setting `PD_API_TOKEN`
+  **and** beside a `bunfig.toml` whose `preload` would otherwise set a variable. Both halves were
+  verified to fail when the matching autoload flag is flipped on. `pd` has no
   command reading the credential chain yet — **ticket 03 must promote this gate to `pd auth status`
   against `dist/pd`, in the binary smoke leg of `.github/workflows/ci.yml`**, asserting the run does
   not report the `env` tier. The probe was verified to fail when `autoloadDotenv` is flipped on.

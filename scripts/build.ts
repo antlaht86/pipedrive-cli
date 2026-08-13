@@ -18,6 +18,8 @@
  * startup against 27.1 ms, for +2.9 MB on a ~63 MB binary.
  */
 
+import { fileURLToPath } from "node:url";
+
 import { stampVersion } from "../src/version.ts";
 
 export type BuildBinaryOptions = {
@@ -138,7 +140,7 @@ const main = async (): Promise<number> => {
 
   const version = gitStamp(pkg.version ?? "0.0.0");
   const outfile = await buildBinary({
-    entry: new URL("../src/cli.ts", import.meta.url).pathname,
+    entry: fileURLToPath(new URL("../src/cli.ts", import.meta.url)),
     outfile: "dist/pd",
     version,
   });

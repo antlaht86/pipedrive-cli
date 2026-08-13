@@ -33,7 +33,7 @@ does not re-sign it.
 ## Develop
 
 ```bash
-bun test           # the suite, lint gates included; costs zero Pipedrive requests
+bun test           # the suite and the CI gates; costs zero Pipedrive requests
 bun run typecheck
 bun run lint
 ```
