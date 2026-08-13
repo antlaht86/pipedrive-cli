@@ -344,6 +344,36 @@ describe("a 429 that is not inferable as burst", () => {
     expect(clock.now()).toBe(0);
   });
 
+  test.each([
+    ["blank", ""],
+    ["whitespace", "   "],
+    ["not a number", "unknown"],
+    ["fractional", "0.5"],
+  ])(
+    "a %s x-ratelimit-remaining is no inference at all, so it stops",
+    async (_label, value) => {
+      const clock = new FakeClock();
+      const guard = createGuardedFetch({
+        clock,
+        transport: createReplayTransport([
+          {
+            path: "/api/v2/deals",
+            status: 429,
+            headers: { "x-ratelimit-remaining": value },
+          },
+        ]),
+      });
+
+      // The failure this guards against is specific: a blank header coerces to
+      // zero, which reads as a spent burst window and earns the retry loop that
+      // blocks the whole company.
+      const error = await failureOf(guard.fetch(url("/deals")));
+      expect(error.code).toBe("budget_exhausted");
+      expect(guard.dispatches()).toBe(1);
+      expect(clock.now()).toBe(0);
+    },
+  );
+
   test("with the header absent it is budget_exhausted too — in doubt, stop", async () => {
     const clock = new FakeClock();
     const guard = createGuardedFetch({
@@ -490,36 +520,41 @@ describe("5xx and transport retries", () => {
 
 describe("the default transport", () => {
   test("throws, so zero Pipedrive requests under bun test is mechanical", async () => {
-    const guard = createGuardedFetch({ clock: new FakeClock({ random: () => 0 }) });
+    const clock = new FakeClock({ random: () => 0 });
+    const guard = createGuardedFetch({ clock });
     const error = await failureOf(guard.fetch(url("/deals")));
-    // A missing transport is a transport failure: it is retried and then
-    // reported, carrying the reason a developer needs.
-    expect(error.code).toBe("upstream");
-    expect(String(error.details?.transport_error)).toContain(
-      "guardedFetch has no transport",
-    );
+    // An absent transport is a programmer error, reported as one. It is not
+    // retried: burning three of the run's ten retries and calling it `upstream`
+    // would disguise the one failure ADR-0019 §3 wants to be unmistakable.
+    expect(error.code).toBe("internal");
+    expect(error.message).toContain("guardedFetch has no transport");
+    expect(guard.dispatches()).toBe(1);
+    expect(clock.now()).toBe(0);
   });
 
   test("names the redacted path and not the query string", async () => {
-    const rejection = await throwingTransport(
-      new Request(url("/deals?term=secret")),
-    ).then(
-      () => undefined,
-      (error: unknown) => String(error),
+    const error = await failureOf(
+      throwingTransport(new Request(url("/deals?term=secret"))),
     );
-    expect(rejection).toContain("GET /api/v2/deals");
-    expect(rejection).not.toContain("secret");
+    expect(error.message).toContain("GET /api/v2/deals");
+    expect(JSON.stringify(error)).not.toContain("secret");
   });
 });
 
 describe("fixture replay", () => {
   test("is strict: a request with no fixture is a failure, not a network call", async () => {
-    const transport = createReplayTransport([ok]);
-    const rejection = await transport(new Request(url("/persons"))).then(
-      () => undefined,
-      (error: unknown) => String(error),
-    );
-    expect(rejection).toContain("No fixture for GET /api/v2/persons");
+    const clock = new FakeClock({ random: () => 0 });
+    const guard = createGuardedFetch({
+      clock,
+      transport: createReplayTransport([ok]),
+    });
+
+    const error = await failureOf(guard.fetch(url("/persons")));
+    expect(error.code).toBe("internal");
+    expect(error.message).toContain("No fixture for GET /api/v2/persons");
+    // Not retried, so a miss cannot quietly consume the run's retry budget and
+    // corrupt the accounting a surrounding test may be asserting.
+    expect(guard.dispatches()).toBe(1);
   });
 
   test("keys on method, path and the sorted query parameters", async () => {

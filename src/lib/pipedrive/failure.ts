@@ -1,5 +1,6 @@
 /**
  * The one place `pd` throws on purpose, and why that is not a violation.
+ * Ratified as [ADR-0023](../../../docs/adr/0023-the-guardedfetch-failure-carrier-and-the-retry-attempt-count.md) §1.
  *
  * `CLAUDE.md` says application code returns `Result` instead of throwing, and
  * wraps third-party throws at the boundary. `guardedFetch` **is** that boundary:

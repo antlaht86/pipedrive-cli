@@ -36,11 +36,16 @@
 
 import pLimit from "p-limit";
 import { Result, ResultAsync } from "neverthrow";
+import { z } from "zod";
 
 import { pdError } from "../errors.ts";
+import type { PdErrorInput } from "../errors.ts";
 import type { Clock } from "./clock.ts";
 import { systemClock } from "./clock.ts";
-import { PdFailure } from "./failure.ts";
+import { PdFailure, isPdFailure } from "./failure.ts";
+
+/** Every refusal out of this module has the same shape; ADR-0023 §1 explains the throw. */
+const fail = (input: PdErrorInput): PdFailure => new PdFailure(pdError(input));
 
 /**
  * The per-company form (`https://<company>.pipedrive.com`) is not used: learning
@@ -82,10 +87,11 @@ const MAX_BURST_STRIKES = 3;
 const MAX_BURST_WAIT_MS = 2_000;
 
 /**
- * ADR-0011 §8. Three waits, so a request that keeps meeting 5xx is dispatched at
- * most four times. `retriesUsed` is a **separate** counter from the burst
- * strikes: a 5xx is Pipedrive failing, not `pd` being too fast, and the two must
- * not exhaust each other.
+ * ADR-0011 §8, as fixed by ADR-0023 §2: "3 attempts per request" is the first
+ * dispatch plus these three waits, so a request that keeps meeting a 5xx is
+ * dispatched at most four times. `retriesUsed` is a **separate** counter from
+ * the burst strikes: a 5xx is Pipedrive failing, not `pd` being too fast, and
+ * the two must not exhaust each other.
  */
 const BACKOFF_MS = [250, 1_000, 4_000] as const;
 const MAX_RETRIES_PER_RUN = 10;
@@ -116,14 +122,28 @@ const isSearchPath = (path: string): boolean =>
 const familyOf = (path: string): GateFamily =>
   isSearchPath(path) ? "search" : "default";
 
-const positiveIntHeader = (
+/**
+ * The three burst headers, parsed at the boundary rather than read. `undefined`
+ * means *the header said nothing usable*, and the callers below are built on
+ * that meaning: ADR-0001 turns an unavailable inference into `budget_exhausted`
+ * and a stop, so a header that coerces to a number it does not contain is a
+ * safety bug, not a rounding error.
+ *
+ * `z.coerce.number()` maps a blank string to `0` — which is exactly the value
+ * that would make an unattributable 429 look like a spent burst window and earn
+ * the retry loop that blocks the whole company. The blank is rejected before the
+ * coercion for that reason and no other.
+ */
+const RateLimitHeader = z.coerce.number().int().nonnegative();
+
+const rateLimitHeader = (
   response: Response,
   name: string,
 ): number | undefined => {
-  const raw = response.headers.get(name);
-  if (raw === null) return undefined;
-  const value = Number(raw.trim());
-  return Number.isFinite(value) && value >= 0 ? value : undefined;
+  const raw = response.headers.get(name)?.trim();
+  if (raw === undefined || raw === "") return undefined;
+  const parsed = RateLimitHeader.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
 };
 
 /**
@@ -226,10 +246,17 @@ class BurstGate {
 export const throwingTransport: Transport = (request) => {
   const method = request.method.toUpperCase();
   return Promise.reject(
-    new Error(
-      `guardedFetch has no transport: ${method} ${redactUrl(request.url)} was not served by a fixture. ` +
+    // A `PdFailure` rather than an `Error` so the retry loop lets it through
+    // untouched: an absent transport is a programmer error, and burning three
+    // retries and reporting it as `upstream` would disguise the one failure
+    // ADR-0019 §3 wants to be unmistakable.
+    fail({
+      code: "internal",
+      message:
+        `guardedFetch has no transport: ${method} ${redactUrl(request.url)} was not served by a fixture. ` +
         "Record one, or construct the gate with an explicit transport.",
-    ),
+      details: { method, path: redactUrl(request.url) },
+    }),
   );
 };
 
@@ -278,7 +305,7 @@ export const createGuardedFetch = ({
 
   /** ADR-0011 §5: half of an observed ceiling, for the rest of the process. */
   const observeCeiling = (response: Response): void => {
-    const observed = positiveIntHeader(response, "x-ratelimit-limit");
+    const observed = rateLimitHeader(response, "x-ratelimit-limit");
     if (observed !== undefined && observed > 0) {
       gate.raiseDefaultTo(Math.floor(observed / 2));
     }
@@ -291,7 +318,7 @@ export const createGuardedFetch = ({
    * because the window it describes is only 2 seconds wide.
    */
   const burstWaitMs = (response: Response): number => {
-    const reset = positiveIntHeader(response, "x-ratelimit-reset");
+    const reset = rateLimitHeader(response, "x-ratelimit-reset");
     if (reset === undefined || reset <= 0) return MAX_BURST_WAIT_MS;
     return Math.min(reset * 1_000, MAX_BURST_WAIT_MS);
   };
@@ -309,30 +336,35 @@ export const createGuardedFetch = ({
         (cause) => cause,
       );
 
-      // A transport failure and a 5xx share one budget: both are "Pipedrive or
-      // the network failed", and neither escalates to Cloudflare.
+      // A transport that refuses with a `PdFailure` has already said what went
+      // wrong and that waiting cannot fix it — a missing fixture, an absent
+      // transport. Retrying it would burn three of the run's ten retries and
+      // report `upstream`, which disguises the very failure ADR-0019 §3 wants
+      // to be unmistakable.
+      if (attempt.isErr() && isPdFailure(attempt.error)) throw attempt.error;
+
+      // Anything else the transport threw, and every 5xx, share one budget:
+      // both are "Pipedrive or the network failed", and neither escalates to
+      // Cloudflare.
       if (attempt.isErr() || attempt.value.status >= 500) {
         if (
           retriesForThisRequest >= BACKOFF_MS.length ||
           retriesUsed >= MAX_RETRIES_PER_RUN
         ) {
-          throw new PdFailure(
-            pdError({
-              code: "upstream",
-              message:
-                "Pipedrive failed to answer and the retry budget is spent.",
-              retryAfterSeconds: Math.ceil(
-                (BACKOFF_MS[BACKOFF_MS.length - 1] ?? 0) / 1_000,
-              ),
-              details: {
-                path,
-                ...(attempt.isErr()
-                  ? { transport_error: String(attempt.error) }
-                  : { status: attempt.value.status }),
-                retries_used: retriesUsed,
-              },
-            }),
-          );
+          throw fail({
+            code: "upstream",
+            message: "Pipedrive failed to answer and the retry budget is spent.",
+            retryAfterSeconds: Math.ceil(
+              (BACKOFF_MS[BACKOFF_MS.length - 1] ?? 0) / 1_000,
+            ),
+            details: {
+              path,
+              ...(attempt.isErr()
+                ? { transport_error: String(attempt.error) }
+                : { status: attempt.value.status }),
+              retries_used: retriesUsed,
+            },
+          });
         }
         const base = BACKOFF_MS[retriesForThisRequest] ?? 0;
         // Full jitter, seeded from the injected clock (ADR-0019 §4).
@@ -351,34 +383,26 @@ export const createGuardedFetch = ({
         // rather than the spent burst window. When the inference is unavailable
         // `pd` chooses `budget_exhausted` and stops, because the opposite
         // mistake is the retry loop that blocks the whole company.
-        const remaining = positiveIntHeader(response, "x-ratelimit-remaining");
+        const remaining = rateLimitHeader(response, "x-ratelimit-remaining");
         if (remaining !== 0) {
-          throw new PdFailure(
-            pdError({
-              code: "budget_exhausted",
-              message:
-                "Pipedrive refused the request and it cannot be attributed to the 2-second burst window. " +
-                "The shared daily token budget is the likely cause; pd stops rather than risk a company-wide block.",
-              details: {
-                path,
-                status: 429,
-                rate_limit_remaining: remaining ?? null,
-              },
-            }),
-          );
+          throw fail({
+            code: "budget_exhausted",
+            message:
+              "Pipedrive refused the request and it cannot be attributed to the 2-second burst window. " +
+              "The shared daily token budget is the likely cause; pd stops rather than risk a company-wide block.",
+            details: { path, status: 429, rate_limit_remaining: remaining ?? null },
+          });
         }
 
         const wait = burstWaitMs(response);
         if (burstStrikes >= MAX_BURST_STRIKES) {
-          throw new PdFailure(
-            pdError({
-              code: "rate_limited",
-              message:
-                "The 2-second burst window was exhausted three times and the retries are spent.",
-              retryAfterSeconds: Math.ceil(wait / 1_000),
-              details: { path, status: 429, burst_strikes: burstStrikes },
-            }),
-          );
+          throw fail({
+            code: "rate_limited",
+            message:
+              "The 2-second burst window was exhausted three times and the retries are spent.",
+            retryAfterSeconds: Math.ceil(wait / 1_000),
+            details: { path, status: 429, burst_strikes: burstStrikes },
+          });
         }
         burstStrikes += 1;
         gate.pauseFor(wait);
@@ -393,14 +417,12 @@ export const createGuardedFetch = ({
           () => undefined,
         ).unwrapOr("");
         if (looksLikeHtml(body, response.headers.get("content-type"))) {
-          throw new PdFailure(
-            pdError({
-              code: "blocked",
-              message:
-                "Pipedrive's edge is blocking this company's API traffic. Stop using pd and tell a human.",
-              details: { path, status: 403 },
-            }),
-          );
+          throw fail({
+            code: "blocked",
+            message:
+              "Pipedrive's edge is blocking this company's API traffic. Stop using pd and tell a human.",
+            details: { path, status: 403 },
+          });
         }
       }
 
@@ -419,14 +441,12 @@ export const createGuardedFetch = ({
     // dispatch is counted and — ADR-0013 §5 — no write reached Pipedrive.
     if (method !== "GET") {
       return Promise.reject(
-        new PdFailure(
-          pdError({
-            code: "write_blocked",
-            message:
-              "pd attempted a non-GET request. This is a bug in pd, not a usage error.",
-            details: { method, path },
-          }),
-        ),
+        fail({
+          code: "write_blocked",
+          message:
+            "pd attempted a non-GET request. This is a bug in pd, not a usage error.",
+          details: { method, path },
+        }),
       );
     }
 

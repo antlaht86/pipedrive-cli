@@ -19,6 +19,8 @@
  * credential, and are committed.
  */
 
+import { pdError } from "../../src/lib/errors.ts";
+import { PdFailure } from "../../src/lib/pipedrive/failure.ts";
 import type { Transport } from "../../src/lib/pipedrive/guarded-fetch.ts";
 
 export type Fixture = {
@@ -93,16 +95,24 @@ export const createReplayTransport = (fixtures: readonly Fixture[]): Transport =
 
   return (request) => {
     const key = keyOfRequest(request);
-    const sequence = byKey.get(key);
-    if (sequence === undefined || sequence.length === 0) {
+    const sequence = byKey.get(key) ?? [];
+    const index = Math.min(served.get(key) ?? 0, sequence.length - 1);
+    const fixture = sequence[index];
+    if (fixture === undefined) {
+      // A `PdFailure` rather than an `Error`, so `guardedFetch` reports the miss
+      // instead of retrying it three times and calling it `upstream`. A missing
+      // fixture is a programmer error, which is what `internal` means.
       return Promise.reject(
-        new Error(
-          `No fixture for ${key}. Known keys: ${[...byKey.keys()].join(", ") || "(none)"}`,
+        new PdFailure(
+          pdError({
+            code: "internal",
+            message:
+              `No fixture for ${key}. Known keys: ${[...byKey.keys()].join(", ") || "(none)"}`,
+          }),
         ),
       );
     }
-    const index = Math.min(served.get(key) ?? 0, sequence.length - 1);
     served.set(key, index + 1);
-    return Promise.resolve(toResponse(sequence[index] as Fixture));
+    return Promise.resolve(toResponse(fixture));
   };
 };

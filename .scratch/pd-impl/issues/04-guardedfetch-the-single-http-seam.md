@@ -41,24 +41,43 @@ Notes for the implementer:
 
 ## What the implementation settled, for the tickets that inherit it
 
-- **`guardedFetch` throws one carrier, `PdFailure`, and returns everything else.**
-  Its type is `typeof fetch`, so there is no channel on it for a `Result`. The
-  refusals and the exhausted budgets — `write_blocked`, `rate_limited`,
-  `budget_exhausted`, `blocked`, `upstream` — travel as a thrown `PdFailure`
-  holding an ADR-0001 error object; **every other status is handed back as a
-  `Response` untouched**, including 401, a JSON 403 and 404. Mapping those to
-  `auth` / `forbidden` / `not_found` is ticket 05's, at the wrapper seam, with
-  `fromPromise` unwrapping the carrier.
-- **ADR-0011 §8's "3 attempts" is implemented as three *waits*** — 250 ms, 1 s,
-  4 s — so a request that keeps meeting a 5xx is dispatched at most four times.
-  The three named delays are the checklist's own wording and are what the tests
-  assert.
+Two of these were inventions rather than readings, so they are ratified in
+[ADR-0023](../../../docs/adr/0023-the-guardedfetch-failure-carrier-and-the-retry-attempt-count.md)
+rather than left here: where a ticket and an ADR disagree, the ADR wins.
+
+- **`guardedFetch` throws one carrier, `PdFailure`, and returns everything else**
+  (ADR-0023 §1). Its type is `typeof fetch`, so there is no channel on it for a
+  `Result`. The refusals and the exhausted budgets — `write_blocked`,
+  `rate_limited`, `budget_exhausted`, `blocked`, `upstream`, and `internal` for
+  an absent transport — travel as a thrown `PdFailure` holding an ADR-0001 error
+  object; **every other status is handed back as a `Response` untouched**,
+  including 401, a JSON 403 and 404. Mapping those to `auth` / `forbidden` /
+  `not_found` is ticket 05's, at the wrapper seam, with `fromPromise` unwrapping
+  the carrier.
+- **ADR-0011 §8's "3 attempts" is three *waits*** — 250 ms, 1 s, 4 s — so a
+  request that keeps meeting a 5xx is dispatched at most four times, and the
+  ten-retry run cap buys three fully-retried requests plus one (ADR-0023 §2).
+- **Concurrent 429s burn strikes together.** Four in-flight requests meeting a
+  429 from the same window increment the strike count four times, so the run
+  ends as `rate_limited` at once rather than after three paused windows. That is
+  a reading rather than a stated rule, and it errs toward stopping, which is the
+  direction ADR-0001 asks for. It can only fire during enrichment fan-out — a
+  cursor walk is sequential — so tickets 11 and 12 are the ones that meet it.
+- **A transport that refuses with a `PdFailure` is never retried** (ADR-0023 §3).
+  An absent transport and a missing fixture both report `internal` at the first
+  dispatch, instead of being retried three times and disguised as `upstream`.
+- **stderr logging is *not* implemented here**, though locked point 7 places it
+  in this module. `redactUrl` is, and ADR-0013 §4's "stderr logs the same, at
+  error level" is inherited by ticket 17, which owns the format. Ticket 17 must
+  add it to this module and to no other.
 - **The Clock carries `random()`** beside `now()` and `sleep()`, because
   ADR-0019 §4 requires the full jitter to be seeded from the same injected
   source. Nothing else in `pd` gains a parameter.
-- **`--max-requests` is not wired here.** `dispatches()` is the counter every
-  *"and no request was made"* assertion in the map reads; ticket 06 adds the
-  reservation-before-dispatch rule of ADR-0011 §9 on top of it.
+- **`--max-requests` is not wired here.** `dispatches()` counts every attempt,
+  before the transport is called, and is the counter every *"and no request was
+  made"* assertion in the map reads — but it is accounting, not a ceiling.
+  Ticket 06 inherits the hook and owes the **reservation** half of ADR-0011 §9:
+  a request takes its slot before it is sent, and releases nothing on success.
 - **The `blocked` sentinel is not written here.** This module produces the
   `blocked` error; ticket 09 owns the on-disk sentinel and the refusal that
   reads it.

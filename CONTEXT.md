@@ -30,9 +30,11 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Burst gate** — the rolling 2-second rate limiter in the client module, distinct from the `p-limit` concurrency limiter beside it. `p-limit` bounds requests *in flight*; the gate bounds requests *per window*, which is the quantity Pipedrive's burst limit actually counts. Latency converts between the two, so no concurrency value alone protects the window. Settled in [ADR-0011](docs/adr/0011-concurrency-and-retry.md).
 
-**Endpoint family** — the key the burst gate is partitioned by. Every current operation sits in one `default` family; the Search API's uniform 10 requests per 2 seconds becomes a second family when a search command exists.
+**Endpoint family** — the key the burst gate is partitioned by. Two exist: every non-search operation sits in `default` at 10 requests per 2 seconds, and the search paths sit in `search` at 5. A search request spends **both** allowances, which is the conservative reading of an undocumented question. Only `default` is raised by an observed `x-ratelimit-limit`; the Search API's ceiling is uniform across plans and does not move with one.
 
-**Strike** — one burst 429 against the whole gate. Strikes are counted per *run*, not per request, because a 429 pauses every request rather than the one that met it. Three strikes end the run as `rate_limited`. Contrast a **retry**, which is per request and counts 5xx and transport failures against a separate budget.
+**Strike** — one burst 429 against the whole gate. Strikes are counted per *run*, not per request, because a 429 pauses every request rather than the one that met it. Three strikes end the run as `rate_limited`. Contrast a **retry**, which is per request and counts 5xx and transport failures against a separate budget: three retries per request at 250 ms / 1 s / 4 s, ten per run, then `upstream`.
+
+**Failure carrier** — the one value `pd` throws on purpose. `guardedFetch` is typed as `typeof fetch`, so its signature has no channel for a `Result`; a refusal or an exhausted budget therefore travels as a thrown `PdFailure` holding an error object, and the wrapper converts it back with `fromPromise`. It is confined to that seam, and every status the seam does not own is handed back as a `Response` untouched. Settled in [ADR-0023](docs/adr/0023-the-guardedfetch-failure-carrier-and-the-retry-attempt-count.md).
 
 **Cause** — the deduplication key of a `warning` line: `(resource, field path, zod issue code)`. One `warning` is emitted per distinct cause, however many records share it. `skipped` still counts every record.
 
