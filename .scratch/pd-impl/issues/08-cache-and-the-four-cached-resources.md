@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0005 (cache design), ADR-0007 (the narrow v1 users client), ADR-0009 (command surface).
 
@@ -33,16 +33,16 @@ Notes for the implementer:
 - `pd cache info` and `pd cache clear` sit **outside the grammar** — they are named exceptions, not resources. Their stdout is a single JSON object, not NDJSON.
 - Read-only is scoped to the **Pipedrive API**: `pd cache clear` deletes local files and that is not a violation.
 
-- [ ] The eight entries cache with their stated TTLs and nothing else is ever cached
-- [ ] The cache directory is keyed by the first 16 hex of SHA-256 of the token, on POSIX and Windows paths
-- [ ] Entries are written temp-plus-rename at mode `0600` and carry a schema version; an unrecognised version reads as missing
-- [ ] No credential string is ever written into a cache file
-- [ ] A warm cache reports `requests: 0` and a cache hit does not count against `--max-requests`
-- [ ] A corrupt entry produces one `cache_entry_skipped` warning, refetches, and never fails the run
-- [ ] Cached data is revalidated on read against the same record schema
-- [ ] `--no-cache` skips the read and still writes
-- [ ] `pd users list`, `pd pipelines list`, `pd stages list` and `pd fields list --entity <name>` all work
-- [ ] `pd fields list` without `--entity` is exit 2, and `pd fields get --entity deal <field_code>` takes a non-integer id
-- [ ] `get` on a cached resource filters the cached list at zero requests
-- [ ] A `users` fetch failure is fatal to `pd users list`
-- [ ] `pd cache info` reports path, entries and ages; `pd cache clear` accepts no argument, pattern or flag
+- [x] The eight entries cache with their stated TTLs and nothing else is ever cached
+- [x] The cache directory is keyed by the first 16 hex of SHA-256 of the token, on POSIX and Windows paths
+- [x] Entries are written temp-plus-rename at mode `0600` and carry a schema version; an unrecognised version reads as missing
+- [x] No credential string is ever written into a cache file
+- [x] A warm cache reports `requests: 0` and a cache hit does not count against `--max-requests`
+- [x] A corrupt entry produces one `cache_entry_skipped` warning, refetches, and never fails the run
+- [x] Cached data is revalidated on read against the same record schema
+- [x] `--no-cache` skips the read and still writes
+- [x] `pd users list`, `pd pipelines list`, `pd stages list` and `pd fields list --entity <name>` all work
+- [x] `pd fields list` without `--entity` is exit 2, and `pd fields get --entity deal <field_code>` takes a non-integer id
+- [x] `get` on a cached resource filters the cached list at zero requests
+- [x] A `users` fetch failure is fatal to `pd users list`
+- [x] `pd cache info` reports path, entries and ages; `pd cache clear` accepts no argument, pattern or flag

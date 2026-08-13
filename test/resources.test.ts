@@ -369,10 +369,11 @@ describe("one probe ends the search", () => {
     expect(JSON.stringify(last)).not.toContain("sekrit");
   });
 
-  test("the four cached resources and items are not live yet", async () => {
-    // Ticket 08 adds pipelines, stages, users and fields; tickets 14–15 add
-    // items. Until then they are refused like anything else the table has no
-    // entry for, rather than half-answered.
+  test("the live table is the five that fetch on every invocation", async () => {
+    // Ticket 08's four — `pipelines`, `stages`, `users`, `fields` — route
+    // through `cached.ts` instead and are covered by
+    // `cached-resources.test.ts`; `items` arrives with tickets 14–15 and is
+    // still refused like anything else neither table has an entry for.
     expect([...LIVE_RESOURCES]).toEqual([
       "deals",
       "persons",

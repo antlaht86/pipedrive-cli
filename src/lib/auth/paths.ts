@@ -73,13 +73,20 @@ export type CacheDirContext = PathContext & {
   fingerprint: string;
 };
 
-export const cacheDirFor = ({
-  fingerprint,
-  ...context
-}: CacheDirContext): string => {
+/**
+ * The subtree `pd cache clear` targets and `pd cache info` reports — ADR-0005
+ * §7, where it is "a constant". It is the parent of every credential's
+ * directory, and it takes no fingerprint: both commands are local, perform zero
+ * HTTP requests, and must work for a human whose credential is exactly what is
+ * broken.
+ */
+export const cacheRootDir = (context: PathContext): string => {
   const base =
     context.platform === "win32"
       ? root(context, "LOCALAPPDATA", ["AppData", "Local"])
       : root(context, "XDG_CACHE_HOME", [".cache"]);
-  return [base, "pd", fingerprint].join(separator(context.platform));
+  return [base, "pd"].join(separator(context.platform));
 };
+
+export const cacheDirFor = ({ fingerprint, ...context }: CacheDirContext): string =>
+  [cacheRootDir(context), fingerprint].join(separator(context.platform));

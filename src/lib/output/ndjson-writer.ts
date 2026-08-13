@@ -236,6 +236,17 @@ export const ZERO_COUNTERS: TrailerCounters = {
  * `details` is always present, `{}` when the error carried none. A field that
  * comes and goes is a field a consumer has to test for.
  */
+/**
+ * The same error object without the trailer fields, for the three commands
+ * ADR-0009 §8 puts outside the NDJSON grammar — `pd auth status`, `pd cache
+ * info` and `pd cache clear`. None of them is a record stream, so there is
+ * nothing for `complete`, `emitted` or `requests` to say about one.
+ */
+export const bareErrorLine = (error: PdError): Record<string, unknown> => ({
+  type: "error",
+  ...error,
+});
+
 export const errorLine = (
   error: PdError,
   counters: TrailerCounters,

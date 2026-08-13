@@ -12,8 +12,13 @@ import { homedir } from "node:os";
 import { pdError, type PdError } from "./lib/errors.ts";
 import { authStatus } from "./lib/auth/status.ts";
 import { route } from "./router.ts";
+import { cacheCommand, isCacheVerb, CACHE_VERBS } from "./commands/cache.ts";
 import { isPdFailure } from "./lib/pipedrive/failure.ts";
-import { errorLine, ZERO_COUNTERS } from "./lib/output/ndjson-writer.ts";
+import {
+  bareErrorLine,
+  errorLine,
+  ZERO_COUNTERS,
+} from "./lib/output/ndjson-writer.ts";
 
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
@@ -35,7 +40,7 @@ const version = (): string =>
  * trailer to say about it.
  */
 const fail = (error: PdError): number => {
-  process.stdout.write(`${JSON.stringify({ type: "error", ...error })}\n`);
+  process.stdout.write(`${JSON.stringify(bareErrorLine(error))}\n`);
   process.stderr.write(`pd: ${error.message}\n`);
   return error.exit_code;
 };
@@ -116,6 +121,30 @@ const main = async (argv: readonly string[]): Promise<number> => {
 
   if (argv[0] === "auth" && argv[1] === "status") {
     return runAuthStatus(argv.slice(2));
+  }
+
+  // ADR-0009 §8: `cache` is not a resource and `info` / `clear` are not verbs of
+  // the grammar, so both are named exceptions wired here. Neither resolves a
+  // credential and neither makes a request (ADR-0005 §7).
+  if (argv[0] === "cache") {
+    const verb = argv[1];
+    if (!isCacheVerb(verb)) {
+      return fail(
+        pdError({
+          code: "usage",
+          message:
+            `pd cache takes one of: ${CACHE_VERBS.join(", ")}. ` +
+            "Both are local and make no request to Pipedrive.",
+        }),
+      );
+    }
+    return cacheCommand({
+      verb,
+      argv: argv.slice(2),
+      platform: process.platform,
+      env: process.env,
+      home: homedir(),
+    });
   }
 
   // Everything else is the resource grammar of ADR-0009 §1, including the

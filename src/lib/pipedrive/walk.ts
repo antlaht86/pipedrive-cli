@@ -100,7 +100,7 @@ const idOf = (raw: unknown): number | undefined => {
  *
  * Key order here is the key order on the wire; the writer does not reorder.
  */
-const rejection = (
+export const rejection = (
   resource: string,
   raw: unknown,
   error: z.ZodError,
@@ -117,7 +117,7 @@ const rejection = (
   };
 };
 
-const noSurvivors = (resource: string, count: number): PdError =>
+export const noSurvivors = (resource: string, count: number): PdError =>
   pdError({
     code: "invalid_response",
     message:

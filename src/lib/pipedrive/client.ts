@@ -37,9 +37,18 @@ import { Result, ResultAsync, err } from "neverthrow";
 import { pdError, type PdError } from "../errors.ts";
 import { isPdFailure } from "./failure.ts";
 import type { GuardedFetch } from "./guarded-fetch.ts";
-import { PIPEDRIVE_V2_BASE_URL, redactUrl } from "./guarded-fetch.ts";
+import {
+  PIPEDRIVE_V1_BASE_URL,
+  PIPEDRIVE_V2_BASE_URL,
+  redactUrl,
+} from "./guarded-fetch.ts";
 import { createClient, createConfig } from "./v2/generated/client/index.ts";
 import type { Auth, Client } from "./v2/generated/client/index.ts";
+import {
+  createClient as createV1Client,
+  createConfig as createV1Config,
+} from "./v1/generated/client/index.ts";
+import type { Client as V1Client } from "./v1/generated/client/index.ts";
 
 /**
  * The v2 spec declares two security schemes on every operation — the
@@ -141,9 +150,14 @@ const readBody = (result: ClientResult): Result<unknown, PdError> => {
  * A generated SDK function, seen from here: it takes a `client` and returns the
  * fields form. Every operation in both surfaces matches this, because the
  * generation filter admits only GETs.
+ *
+ * The client type is a parameter because the two generation jobs emit two
+ * `Client` types in two module namespaces (ADR-0007 §1). They are structurally
+ * the same, and saying so with a cast would be the one place a v1 operation
+ * could be handed the v2 client and reach `/api/v2/users`.
  */
-export type SdkCall<TOptions> = (
-  options: TOptions & { client: Client },
+export type SdkCall<TOptions, TClient = Client> = (
+  options: TOptions & { client: TClient },
 ) => Promise<ClientResult>;
 
 export type PipedriveClient = {
@@ -154,6 +168,16 @@ export type PipedriveClient = {
    */
   v2: <TOptions>(
     call: SdkCall<TOptions>,
+    options: TOptions,
+  ) => ResultAsync<unknown, PdError>;
+  /**
+   * The same, for the one v1 operation `pd` calls — `GET /users` (ADR-0007 §1).
+   * It differs from `v2` in its `baseUrl` and in nothing else: both clients are
+   * given the same `guardedFetch`, so a v1 request queues in the same limiter
+   * and decrements the same counter (ADR-0007 §2).
+   */
+  v1: <TOptions>(
+    call: SdkCall<TOptions, V1Client>,
     options: TOptions,
   ) => ResultAsync<unknown, PdError>;
   /** ADR-0011 §9's counter, for the trailer's `requests` field. */
@@ -179,21 +203,34 @@ export const createPipedriveClient = ({
     }),
   );
 
+  const v1Client: V1Client = createV1Client(
+    createV1Config({
+      baseUrl: PIPEDRIVE_V1_BASE_URL,
+      fetch: guarded.fetch,
+      auth: apiKeyOnly(token),
+      parseAs: "text",
+      throwOnError: false,
+    }),
+  );
+
+  /**
+   * The generated client only rejects when an interceptor does, and `pd`
+   * installs none. Reaching the rejection path at all is a programmer error —
+   * except for the carrier, which is unwrapped rather than reworded.
+   */
+  const run = (call: Promise<ClientResult>): ResultAsync<unknown, PdError> =>
+    ResultAsync.fromPromise(call, (cause) =>
+      isPdFailure(cause)
+        ? cause.error
+        : pdError({
+            code: "internal",
+            message: `The generated client rejected unexpectedly: ${String(cause)}`,
+          }),
+    ).andThen(readBody);
+
   return {
-    v2: (call, options) =>
-      ResultAsync.fromPromise(
-        call({ ...options, client: v2Client }),
-        // The generated client only rejects when an interceptor does, and `pd`
-        // installs none. Reaching here at all is a programmer error — except
-        // for the carrier, which is unwrapped rather than reworded.
-        (cause) =>
-          isPdFailure(cause)
-            ? cause.error
-            : pdError({
-                code: "internal",
-                message: `The generated client rejected unexpectedly: ${String(cause)}`,
-              }),
-      ).andThen(readBody),
+    v2: (call, options) => run(call({ ...options, client: v2Client })),
+    v1: (call, options) => run(call({ ...options, client: v1Client })),
     requests: guarded.dispatches,
   };
 };

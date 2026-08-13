@@ -63,6 +63,19 @@ export class FakeClock implements Clock {
   };
 
   /**
+   * Jumps virtual time forward between runs, which is how ADR-0005's TTLs are
+   * tested: one invocation writes a cache entry, the clock moves an hour, and
+   * the next invocation decides whether the entry is still live. Waiters that
+   * come due are resolved, so this is safe to call mid-run as well.
+   */
+  advance = (ms: number): void => {
+    this.#now += ms;
+    const due = this.#waiters.filter((w) => w.at <= this.#now);
+    this.#waiters = this.#waiters.filter((w) => w.at > this.#now);
+    for (const waiter of due) waiter.resolve();
+  };
+
+  /**
    * A drain runs on the real timer queue, which is what makes it fire only after
    * every already-runnable continuation has had its turn. Without that, time
    * would jump past work that was about to register its own sleep.

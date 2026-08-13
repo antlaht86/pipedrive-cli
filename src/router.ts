@@ -33,7 +33,9 @@
 
 import { pdError, type PdError } from "./lib/errors.ts";
 import { resourceNamed } from "./lib/pipedrive/resources.ts";
+import { cachedResourceNamed } from "./lib/pipedrive/cached.ts";
 import { resourceCommand, type Verb } from "./commands/resource.ts";
+import { cachedCommand } from "./commands/cached.ts";
 import type { Clock } from "./lib/pipedrive/clock.ts";
 import type { Transport } from "./lib/pipedrive/guarded-fetch.ts";
 import {
@@ -130,16 +132,15 @@ export const route = async ({
   sink = stdoutSink,
   stderr = stderrSink,
 }: RouteInput): Promise<number> => {
-  const resource = argv[0] === undefined ? undefined : resourceNamed(argv[0]);
+  const noun = argv[0];
+  const resource = noun === undefined ? undefined : resourceNamed(noun);
+  // The two tables are disjoint and are consulted in turn rather than merged: a
+  // live resource walks a cursor, a cached one loads a whole list from disk,
+  // and the commands behind them take different flags (ADR-0005 §1).
+  const cached = noun === undefined ? undefined : cachedResourceNamed(noun);
   const verb = argv[1];
 
-  if (resource === undefined || !isVerb(verb)) {
-    return refuse(unrecognised(argv, resource !== undefined), sink, stderr);
-  }
-
-  return resourceCommand({
-    resource,
-    verb,
+  const common = {
     argv: argv.slice(2),
     platform,
     env,
@@ -148,5 +149,19 @@ export const route = async ({
     ...(clock === undefined ? {} : { clock }),
     sink,
     stderr,
-  });
+  };
+
+  if (!isVerb(verb)) {
+    return refuse(
+      unrecognised(argv, resource !== undefined || cached !== undefined),
+      sink,
+      stderr,
+    );
+  }
+
+  if (resource !== undefined) return resourceCommand({ resource, verb, ...common });
+  if (cached !== undefined) return cachedCommand({ resource: cached, verb, ...common });
+
+  // A verb `pd` knows on a noun it does not: `pd frobnicate list`.
+  return refuse(unrecognised(argv, false), sink, stderr);
 };

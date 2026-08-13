@@ -51,9 +51,16 @@ export type SingleOptions<T> = {
   fetch: () => ReturnType<PipedriveClient["v2"]>;
 };
 
-const rejected = (
+/**
+ * Exported for the cached resources, whose `get` filters a list rather than
+ * fetching one record but reaches the identical situation: the record that
+ * **is** the answer does not match `pd`'s schema. `id` is widened to a string
+ * because ADR-0009 §3 makes `fields` the one resource whose id is not an
+ * integer.
+ */
+export const rejectedRecord = (
   resource: string,
-  id: number,
+  id: number | string,
   error: z.ZodError,
 ): PdError => {
   const issue = error.issues[0];
@@ -96,7 +103,7 @@ export async function* single<T>({
 
   const parsed = record.safeParse(envelope.data.data);
   if (!parsed.success) {
-    yield err(rejected(resource, id, parsed.error));
+    yield err(rejectedRecord(resource, id, parsed.error));
     return;
   }
 

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { cacheDirFor, configDir, credentialsPath } from "./paths.ts";
+import {
+  cacheDirFor,
+  cacheRootDir,
+  configDir,
+  credentialsPath,
+} from "./paths.ts";
 
 /**
  * ADR-0021 §8 keeps ADR-0014 §6's mapping. Both platforms are asserted from
@@ -97,6 +102,15 @@ describe("the cache directory", () => {
   test("falls back to the Windows default when LOCALAPPDATA is unset", () => {
     expect(cacheDirFor({ ...windows, env: {}, fingerprint })).toBe(
       "C:\\Users\\Ada\\AppData\\Local\\pd\\0123456789abcdef",
+    );
+  });
+
+  test("the root is the parent of every credential's directory", () => {
+    // ADR-0005 §7's constant: what `pd cache clear` targets and what
+    // `pd cache info` reports, on both platforms and with no fingerprint.
+    expect(cacheRootDir({ ...posix, env: {} })).toBe("/home/ada/.cache/pd");
+    expect(cacheRootDir({ ...windows, env: {} })).toBe(
+      "C:\\Users\\Ada\\AppData\\Local\\pd",
     );
   });
 });
