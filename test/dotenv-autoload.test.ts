@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildBinary } from "../scripts/build.ts";
+import { buildBinaryRetrying as buildBinary } from "./support/build.ts";
 
 /**
  * CI gate — ADR-0021 §3, ADR-0019 §8.

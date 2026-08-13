@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildBinary } from "../scripts/build.ts";
+import { buildBinaryRetrying as buildBinary } from "./support/build.ts";
 
 /**
  * Binary smoke — ADR-0019 §7 as amended by ADR-0021 §8.

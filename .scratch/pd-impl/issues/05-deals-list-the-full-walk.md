@@ -6,7 +6,7 @@ This is the tracer bullet: argument parsing, the walk, two-stage validation, ded
 
 **Blocked by:** 03, 04
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0001 (error model and exit codes), ADR-0002 (output format), ADR-0003 (pagination), ADR-0004 (streaming and composition), ADR-0006 (validation placement).
 
@@ -41,16 +41,76 @@ Notes for the implementer:
 - **Errors are data on stdout**, in the same shape family as success — never stderr-only. `code`, `message`, `exit_code` and `retry` on every error. `details` is explicitly unstable and has URLs redacted before entry.
 - **Regenerate the prototype samples** under `.scratch/pd-cli-design/prototypes/10-output-format/`. ADR-0002 declares them the normative examples and the only guard against format drift, and they currently predate `skipped` and `duplicates`. Every later ticket tests against them, so this is correctness work rather than tidying.
 
-- [ ] `pd deals list` walks every page to a `null` cursor and emits one `record` line per deal
-- [ ] The run ends in exactly one trailer, `summary` or `error`, carrying `complete`, `emitted`, `skipped`, `duplicates`, `resolved`, `requests`
-- [ ] `resolved` is `"off"` on an unresolved run
-- [ ] A last page with `next_cursor: null` completes the walk rather than failing the envelope (replay test)
-- [ ] A structural failure ends the walk as `invalid_response`, exit 1
-- [ ] One bad record produces one `warning` and `skipped += 1`, and the page's other records survive
-- [ ] A first page whose non-empty `data` yields zero survivors is `invalid_response`, exit 1
-- [ ] Warnings deduplicate by cause and stop at 50 distinct causes while `skipped` keeps counting
-- [ ] Records repeated across pages are suppressed and counted in `duplicates`
-- [ ] First records reach stdout in roughly 250 ms, not after the whole walk
-- [ ] The writer refuses a second trailer, and a trailerless exit surfaces as `internal`
-- [ ] Absent values are omitted keys; `[]`, `""` and `0` survive; `custom_fields` passes through byte-identical
-- [ ] The prototype sample files are regenerated and match the writer's output byte for byte
+- [~] `pd deals list` walks every page to a `null` cursor and emits one `record` line per deal — **true under replay, not yet against a live account.** `zGetDealsItem` types `won_time` and `lost_time` non-nullable and requires `expected_close_date`, which an open deal has none of, so a real first page is wholly rejected and the run is `invalid_response` under ADR-0006 §4. The walk is not what is wrong; the spec is. Closing this box is the `parser.patch` task of ADR-0006 §9, which needs observed responses. Filed as [ticket 21](21-the-nullability-patch-list.md); see also ADR-0024's consequences.
+- [x] The run ends in exactly one trailer, `summary` or `error`, carrying `complete`, `emitted`, `skipped`, `duplicates`, `resolved`, `requests`
+- [x] `resolved` is `"off"` on an unresolved run
+- [x] A last page with `next_cursor: null` completes the walk rather than failing the envelope (replay test)
+- [x] A structural failure ends the walk as `invalid_response`, exit 1
+- [x] One bad record produces one `warning` and `skipped += 1`, and the page's other records survive
+- [x] A first page whose non-empty `data` yields zero survivors is `invalid_response`, exit 1
+- [x] Warnings deduplicate by cause and stop at 50 distinct causes while `skipped` keeps counting
+- [x] Records repeated across pages are suppressed and counted in `duplicates`
+- [x] First records reach stdout in roughly 250 ms, not after the whole walk
+- [x] The writer refuses a second trailer, and a trailerless exit surfaces as `internal`
+- [x] Absent values are omitted keys; `[]`, `""` and `0` survive; `custom_fields` passes through byte-identical
+- [x] The prototype sample files are regenerated and match the writer's output byte for byte
+
+## What the implementation settled, for the tickets that inherit it
+
+Four of these were inventions rather than readings, so they are ratified in
+[ADR-0024](../../../docs/adr/0024-the-unclassified-4xx-the-reported-cause-and-the-stderr-pair.md)
+rather than left here: where a ticket and an ADR disagree, the ADR wins.
+
+- **An unclassified 4xx is `internal`, exit 1** (ADR-0024 §1). 401 → `auth`, a
+  JSON 403 → `forbidden`, 404 → `not_found`; everything else is a request `pd`
+  composed itself and Pipedrive refused, which is a bug in `pd`. Ticket 07's
+  eight remaining resources inherit this and add no classification of their own.
+- **The reported cause of a rejected record is its first zod issue**, and a
+  record that failed as a whole has `path: ""` (ADR-0024 §2). Reporting every
+  issue would enter one fault under three deduplication keys.
+- **`NdjsonWriter.error()` writes both of ADR-0001's channels** — the object to
+  stdout and the one-line summary to stderr (ADR-0024 §3). It does not own
+  stderr in general: ADR-0015's diagnostics and ADR-0003's every-10,000-records
+  notice are ticket 17's, on a different channel.
+- **`ListEnvelope` is hand-written and shared by every list endpoint**
+  (ADR-0024 §4). The hoist worked and gives `zGetDealsItem` as the record
+  schema, but the generated *envelope* is a `ZodIntersection` that fails as a
+  whole, which is the failure ADR-0006 §2 split validation to prevent. An absent
+  `additional_data`, and an absent, `null` or empty `next_cursor`, all end the
+  walk; only a wrong-typed `next_cursor` is structural.
+- **The prototype samples are generated by driving the shipped writer**, and
+  `test/output-samples.test.ts` compares the committed files byte for byte.
+  ADR-0002 made them the only guard against drift; this is what makes the guard
+  mechanical. Regenerate with
+  `bun run .scratch/pd-cli-design/prototypes/10-output-format/generate.ts`.
+- **`--limit` mechanics are built, the flag is not.** ADR-0004's
+  marker-may-not-lie table lives in `walk.ts` and is tested in
+  `src/lib/pipedrive/walk.test.ts`; ticket 06 owes the flag, its validation, its
+  acceptance tests and the whole of `--max-requests`.
+- **`collect` ships unused**, with unit tests, exactly as ADR-0004 said it would.
+- **The v2 record schemas are stricter than the live API.** `won_time`,
+  `lost_time` and `expected_close_date` are non-nullable and required, while an
+  open deal has none of them — so against a real account the first page is
+  wholly rejected and the run is `invalid_response`. That is the patch-list task
+  of ADR-0006 §9, it must be driven by observed responses rather than guesswork,
+  and it is named in ADR-0024's consequences so the finding is recognised as
+  expected work rather than as a bug in the walk.
+- **A Bun bundler flake was found and worked around, in tests only.** Under
+  `bun test`, `Bun.build` intermittently fails with `Could not resolve` on an
+  import that plainly resolves — roughly one build in five to ten on Bun 1.3.14,
+  only on the first build of a process, and naming a *random* module (the
+  generated SDK on one run, `../errors.ts` on the next). It surfaced when this
+  ticket grew the module graph. `bun run build` did not reproduce it in fifteen
+  consecutive runs, so the artifact is sound and the test was flaky.
+  `test/support/build.ts` retries the build up to three times; `scripts/build.ts`
+  is untouched, because a retry there would swallow the one failure a real build
+  must report. Delete the helper when Bun fixes the resolver.
+- **The trailerless-exit check covers the throw path, deliberately.** ADR-0004
+  says a run that exits with no trailer surfaces as `internal`, "checked on
+  process exit". `cli.ts` catches anything that escapes `main` — the writer's
+  second-trailer refusal, `guardedFetch`'s carrier, a genuine bug — and writes
+  the `internal` error line with zero counters. A run that *returns cleanly*
+  without a trailer is not checked, because `stream()` is the only consuming
+  loop and it always ends in `finish` or `error`; there is no path that returns
+  0 with nothing written. A second loop written by hand is what would reopen
+  this, and ADR-0004's answer to that is that there must not be one.

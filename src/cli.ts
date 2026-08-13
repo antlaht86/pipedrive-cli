@@ -12,6 +12,9 @@ import { homedir } from "node:os";
 
 import { pdError, type PdError } from "./lib/errors.ts";
 import { authStatus } from "./lib/auth/status.ts";
+import { dealsList } from "./commands/deals-list.ts";
+import { isPdFailure } from "./lib/pipedrive/failure.ts";
+import { errorLine, ZERO_COUNTERS } from "./lib/output/ndjson-writer.ts";
 
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
@@ -106,7 +109,7 @@ const runAuthStatus = (argv: readonly string[]): number => {
   return 0;
 };
 
-const main = (argv: readonly string[]): number => {
+const main = async (argv: readonly string[]): Promise<number> => {
   if (argv.length === 1 && argv[0] === "--version") {
     process.stdout.write(`${version()}\n`);
     return 0;
@@ -116,8 +119,54 @@ const main = (argv: readonly string[]): number => {
     return runAuthStatus(argv.slice(2));
   }
 
+  if (argv[0] === "deals" && argv[1] === "list") {
+    return dealsList({
+      argv: argv.slice(2),
+      platform: process.platform,
+      env: process.env,
+      home: homedir(),
+      transport: globalThis.fetch,
+    });
+  }
+
   process.stderr.write("pd: not implemented yet\n");
   return 2;
 };
 
-process.exitCode = main(process.argv.slice(2));
+/**
+ * ADR-0004: a run that exits with no trailer is a bug and surfaces as
+ * `internal`. The writer refuses a second trailer by throwing the `PdFailure`
+ * carrier (there is no `Result` channel on a void method), and `guardedFetch`
+ * throws the same carrier for its refusals — so this is the one place both come
+ * back to being the values the rest of `pd` deals in.
+ *
+ * A throw that reaches here means no trailer was written — with **one
+ * exception, and it is the reason for the check below**. The writer's own
+ * second-trailer refusal happens precisely because a trailer already went out,
+ * so answering it with an `error` line would commit the violation the refusal
+ * exists to catch. That case is told apart by `details.trailer_already_written`
+ * (ADR-0024 §3) and gets the stderr line and the exit code only.
+ *
+ * In every other case the `error` line is still owed, and `internal` is what an
+ * escaped programmer error is called.
+ */
+main(process.argv.slice(2)).then(
+  (code) => {
+    process.exitCode = code;
+  },
+  (cause: unknown) => {
+    const error = isPdFailure(cause)
+      ? cause.error
+      : pdError({
+          code: "internal",
+          message: `pd ended without writing a trailer: ${String(cause)}`,
+        });
+    if (error.details?.["trailer_already_written"] !== true) {
+      process.stdout.write(
+        `${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`,
+      );
+    }
+    process.stderr.write(`pd: ${error.message}\n`);
+    process.exitCode = error.exit_code;
+  },
+);

@@ -50,3 +50,43 @@ export type PdWarning = {
   kind: WarningKind;
   message: string;
 } & Record<string, unknown>;
+
+/** Any character no field can contain would do; a tab is the least surprising. */
+const CAUSE_SEPARATOR = "\t";
+
+/**
+ * The one `kind` with a field set worth naming — ADR-0006 §6. `kind`,
+ * `resource`, `path` and `issue` are interface; `message` is prose. `id` is
+ * best-effort and **omitted** when unrecoverable, never `null`, so a consumer
+ * never has to tell "no id" from "id was null".
+ */
+export type RecordRejected = {
+  kind: "record_rejected";
+  resource: string;
+  id?: number;
+  /** Record-relative — `person_id`, never `data.7.person_id`. Empty at the root. */
+  path: string;
+  /** The zod issue code of the reported cause. */
+  issue: string;
+  message: string;
+};
+
+/**
+ * The **cause** of a rejection: `(resource, field path, zod issue code)`. One
+ * `warning` line is emitted per distinct cause however many records share it,
+ * while `skipped` counts every record (ADR-0006 §5).
+ *
+ * It lives here, beside the registry that mints the `kind`, rather than in the
+ * writer that deduplicates on it: the key is a property of the warning, and a
+ * writer that derived it by reaching into an open `Record<string, unknown>`
+ * would silently key on `undefined` the day a field is renamed.
+ */
+export const causeOf = (warning: PdWarning): string =>
+  isRecordRejected(warning)
+    ? [warning.resource, warning.path, warning.issue].join(CAUSE_SEPARATOR)
+    : [warning.kind, warning.message].join(CAUSE_SEPARATOR);
+
+export const isRecordRejected = (
+  warning: PdWarning,
+): warning is RecordRejected & Record<string, unknown> =>
+  warning.kind === "record_rejected";

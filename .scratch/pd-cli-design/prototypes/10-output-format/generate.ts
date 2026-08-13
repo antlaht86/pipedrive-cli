@@ -1,9 +1,18 @@
 /**
- * Throwaway prototype for ticket 10 — output format for large paginated results.
+ * Regenerates `samples/` — the normative examples of the NDJSON format.
  *
- * Generates the same realistic result set rendered as (a) a JSON envelope around
- * an array and (b) NDJSON, across five cases: complete, empty, bounded-partial,
- * mid-stream failure, and a record that failed validation.
+ * ADR-0002 decided that nothing validates output at runtime, which makes these
+ * files the only guard against format drift. Ticket 05 therefore stopped
+ * hand-writing them: every `*.ndjson` file below is produced by driving the
+ * shipped `NdjsonWriter`, and `test/output-samples.test.ts` re-runs this script's
+ * cases and compares byte for byte. A change to the writer that nobody meant to
+ * make fails that test; a change somebody did mean to make is a diff on these
+ * files, in the same commit, which is what a normative example is for.
+ *
+ * The `*.array.json` files are the **rejected** envelope candidate, kept as the
+ * artifact that was reacted to. They are still written by hand here, because
+ * there is no code that produces them and there never will be. Only their
+ * embedded error objects track the final field set.
  *
  * Run: bun run .scratch/pd-cli-design/prototypes/10-output-format/generate.ts
  */
@@ -11,226 +20,264 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const OUT = join(import.meta.dir, "samples");
-mkdirSync(OUT, { recursive: true });
+import { dealsList } from "../../../../src/commands/deals-list.ts";
+import { pdError } from "../../../../src/lib/errors.ts";
+import { NdjsonWriter } from "../../../../src/lib/output/ndjson-writer.ts";
+import type { Page } from "../../../../src/lib/pipedrive/walk.ts";
+import { deal } from "../../../../test/support/deals.ts";
 
-// A deal as Pipedrive v2 actually returns it: custom fields are 40-char hashes,
-// no total count anywhere, timestamps are ISO-8601 strings.
-type Deal = Record<string, unknown>;
+const OUT = join(import.meta.dir, "samples");
+
+type Record_ = Record<string, unknown>;
 
 const HASH_AMOUNT = "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3";
 const HASH_SOURCE = "1f2e3d4c5b6a798877665544332211aabbccddee";
 
-const deal = (i: number): Deal => ({
-  id: 1000 + i,
-  title: `Acme Oy — annual licence ${2020 + (i % 6)}`,
-  value: 12000 + i * 37,
-  currency: "EUR",
-  status: ["open", "won", "lost"][i % 3],
-  stage_id: 3 + (i % 4),
-  pipeline_id: 1,
-  person_id: 5000 + i,
-  org_id: 900 + (i % 40),
-  owner_id: 11,
-  add_time: "2025-11-03T09:14:22Z",
-  update_time: "2026-02-18T13:01:07Z",
-  custom_fields: {
-    [HASH_AMOUNT]: 4200,
-    [HASH_SOURCE]: 34,
-  },
+/**
+ * A deal as `pd` emits one: the record schema's fields, with the custom-field
+ * block Pipedrive actually sends and the nullable fields left null so the
+ * samples show ADR-0020 §6's omission rule doing its work.
+ */
+const sample = (i: number): Record_ =>
+  deal(1000 + i, {
+    status: ["open", "won", "lost"][i % 3] as string,
+    custom_fields: { [HASH_AMOUNT]: 4200, [HASH_SOURCE]: 34 },
+  });
+
+const samples = (n: number, from = 0): Record_[] =>
+  Array.from({ length: n }, (_, i) => sample(from + i));
+
+const page = (
+  records: Record_[],
+  warnings: Page<Record_>["warnings"] = [],
+): Page<Record_> => ({ records, warnings, duplicates: 0 });
+
+/** One run of the writer, captured as a string. Exported for the drift test. */
+export const render = (
+  requests: number,
+  run: (writer: NdjsonWriter) => void,
+): string => {
+  const out: string[] = [];
+  const writer = new NdjsonWriter({
+    recordType: "deal",
+    requests: () => requests,
+    sink: (line) => out.push(line),
+    stderr: () => {},
+  });
+  run(writer);
+  return out.join("");
+};
+
+/** Runs `pd deals list --frobnicate` and captures its stdout. */
+const usageError = async (): Promise<string> => {
+  const out: string[] = [];
+  await dealsList({
+    argv: ["--frobnicate"],
+    platform: "linux",
+    env: {},
+    home: "/home/nobody",
+    sink: (line) => out.push(line),
+    stderr: () => {},
+  });
+  return out.join("");
+};
+
+const REJECTED = {
+  kind: "record_rejected" as const,
+  resource: "deal",
+  id: 1002,
+  path: "value",
+  issue: "invalid_type",
+  message: "Invalid input: expected number, received string",
+};
+
+const CEILING = pdError({
+  code: "request_ceiling",
+  message: "Stopped after 50 requests; raise --max-requests and run again.",
+  details: { max_requests: 50 },
 });
 
-const deals = (n: number, from = 0) =>
-  Array.from({ length: n }, (_, i) => deal(from + i));
-
-const write = (name: string, body: string) =>
-  writeFileSync(join(OUT, name), body.endsWith("\n") ? body : body + "\n");
-
-const json = (v: unknown) => JSON.stringify(v, null, 2);
-const line = (v: unknown) => JSON.stringify(v);
-
-// ---------------------------------------------------------------------------
-// Case A — complete success, 4 records
-// ---------------------------------------------------------------------------
-
-const complete = deals(4);
-
-write(
-  "a-complete.array.json",
-  json({
-    type: "result",
-    command: "deals list",
-    data: complete,
-    complete: true,
-    emitted: complete.length,
-  }),
-);
-
-write(
-  "a-complete.ndjson",
-  [
-    ...complete.map((d) => line({ type: "record", data: d })),
-    line({ type: "summary", complete: true, emitted: complete.length }),
-  ].join("\n"),
-);
-
-// ---------------------------------------------------------------------------
-// Case B — empty result. An empty success, not not_found.
-// ---------------------------------------------------------------------------
-
-write(
-  "b-empty.array.json",
-  json({
-    type: "result",
-    command: "deals list",
-    data: [],
-    complete: true,
-    emitted: 0,
-  }),
-);
-
-write(
-  "b-empty.ndjson",
-  line({ type: "summary", complete: true, emitted: 0 }),
-);
-
-// ---------------------------------------------------------------------------
-// Case C — guard hit: --max-requests reached. Exit 3, request_ceiling.
-// Partial data IS present alongside the error.
-// ---------------------------------------------------------------------------
-
-const partial = deals(3);
-const ceilingError = {
-  code: "request_ceiling",
-  message: "Stopped after 50 requests; raise --max-requests to continue.",
-  complete: false,
-  emitted: partial.length,
-  exit_code: 3,
-  retry: "never",
-  details: {},
-};
-
-write(
-  "c-guard-request-ceiling.array.json",
-  json({
-    type: "result",
-    command: "deals list",
-    data: partial,
-    complete: false,
-    emitted: partial.length,
-    error: ceilingError,
-  }),
-);
-
-write(
-  "c-guard-request-ceiling.ndjson",
-  // One trailer, exclusive: an error line replaces the summary and carries the
-  // completeness marker itself. Nothing is duplicated across two lines.
-  [
-    ...partial.map((d) => line({ type: "record", data: d })),
-    line({ type: "error", ...ceilingError }),
-  ].join("\n"),
-);
-
-// ---------------------------------------------------------------------------
-// Case D — mid-stream failure. Bytes already on stdout, then page 7 dies.
-// This is the case that decides the format.
-// ---------------------------------------------------------------------------
-
-const beforeFailure = deals(5);
-const midStreamError = {
+const MID_STREAM = pdError({
   code: "rate_limited",
-  message: "Burst limit exceeded and retries were exhausted.",
+  message: "The 2-second burst window was exhausted three times and the retries are spent.",
+  retryAfterSeconds: 2,
+  details: { path: "/api/v2/deals", status: 429, burst_strikes: 3 },
+});
+
+/**
+ * The six cases, each a name and the run that produces it. The drift test
+ * imports this table rather than re-describing it.
+ */
+export const CASES: { name: string; ndjson: string }[] = [
+  {
+    // A — the happy path. The completeness marker is present anyway.
+    name: "a-complete.ndjson",
+    ndjson: render(1, (writer) => {
+      writer.page(page(samples(4)));
+      writer.finish(null);
+    }),
+  },
+  {
+    // B — an empty result set is an empty success, not not_found.
+    name: "b-empty.ndjson",
+    ndjson: render(1, (writer) => {
+      writer.finish(null);
+    }),
+  },
+  {
+    // C — a guard stop: --max-requests reached. Exit 3, and the records already
+    // written stay written beside the error trailer.
+    name: "c-guard-request-ceiling.ndjson",
+    ndjson: render(50, (writer) => {
+      writer.page(page(samples(3)));
+      writer.error(CEILING);
+    }),
+  },
+  {
+    // D — the case that decided the format: bytes are already on stdout when
+    // page seven dies. NDJSON has no document to truncate.
+    name: "d-midstream-failure.ndjson",
+    ndjson: render(9, (writer) => {
+      writer.page(page(samples(5)));
+      writer.error(MID_STREAM);
+    }),
+  },
+  {
+    // E — one record failed zod. One warning, skipped += 1, the run continues.
+    name: "e-validation-warning.ndjson",
+    ndjson: render(1, (writer) => {
+      writer.page(page(samples(2), [REJECTED]));
+      writer.page(page(samples(1, 3)));
+      writer.finish(null);
+    }),
+  },
+  {
+    // F — a usage error. No list was ever started, so there is no summary: the
+    // single error line is the whole output and carries the invariant fields.
+    //
+    // This one is produced by running the **real command**, not by handing the
+    // writer an invented error. A usage error short-circuits before any request,
+    // so no transport is needed — and the sample then pins the message `pd`
+    // actually emits rather than one nobody would ever see.
+    name: "f-usage-error.ndjson",
+    ndjson: await usageError(),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// The rejected candidate, written by hand because nothing produces it.
+// ---------------------------------------------------------------------------
+
+const envelope = (body: Record_): string => `${JSON.stringify(body, null, 2)}\n`;
+
+const trailerFields = (emitted: number, extra: Record_ = {}) => ({
   complete: false,
-  emitted: beforeFailure.length,
-  exit_code: 3,
-  retry: "after",
-  retry_after_seconds: 4,
-  details: { http_status: 429, path: "/api/v2/deals" },
-};
+  emitted,
+  skipped: 0,
+  duplicates: 0,
+  resolved: "off",
+  requests: 0,
+  ...extra,
+});
 
-// Envelope variant: nothing may be written until the outcome is known, so the
-// whole run buffers. Compare the time-to-first-byte numbers from bench.ts.
-write(
-  "d-midstream-failure.array.json",
-  json({
-    type: "result",
-    command: "deals list",
-    data: beforeFailure,
-    complete: false,
-    emitted: beforeFailure.length,
-    error: midStreamError,
-  }),
-);
+const errorObject = (
+  error: ReturnType<typeof pdError>,
+  emitted: number,
+  requests: number,
+): Record_ => ({
+  code: error.code,
+  message: error.message,
+  exit_code: error.exit_code,
+  retry: error.retry,
+  ...(error.retry_after_seconds === undefined
+    ? {}
+    : { retry_after_seconds: error.retry_after_seconds }),
+  ...trailerFields(emitted, { requests }),
+  details: error.details ?? {},
+});
 
-write(
-  "d-midstream-failure.ndjson",
-  [
-    ...beforeFailure.map((d) => line({ type: "record", data: d })),
-    line({ type: "error", ...midStreamError }),
-  ].join("\n"),
-);
+export const ARRAY_CASES: { name: string; body: string }[] = [
+  {
+    name: "a-complete.array.json",
+    body: envelope({
+      type: "result",
+      command: "deals list",
+      data: samples(4),
+      complete: true,
+      emitted: 4,
+      skipped: 0,
+      duplicates: 0,
+      resolved: "off",
+      requests: 1,
+    }),
+  },
+  {
+    name: "b-empty.array.json",
+    body: envelope({
+      type: "result",
+      command: "deals list",
+      data: [],
+      complete: true,
+      emitted: 0,
+      skipped: 0,
+      duplicates: 0,
+      resolved: "off",
+      requests: 1,
+    }),
+  },
+  {
+    name: "c-guard-request-ceiling.array.json",
+    body: envelope({
+      type: "result",
+      command: "deals list",
+      data: samples(3),
+      ...trailerFields(3, { requests: 50 }),
+      error: errorObject(CEILING, 3, 50),
+    }),
+  },
+  {
+    name: "d-midstream-failure.array.json",
+    body: envelope({
+      type: "result",
+      command: "deals list",
+      data: samples(5),
+      ...trailerFields(5, { requests: 9 }),
+      error: errorObject(MID_STREAM, 5, 9),
+    }),
+  },
+  {
+    name: "e-validation-warning.array.json",
+    body: envelope({
+      type: "result",
+      command: "deals list",
+      data: [...samples(2), ...samples(1, 3)],
+      complete: true,
+      emitted: 3,
+      skipped: 1,
+      duplicates: 0,
+      resolved: "off",
+      requests: 1,
+      warnings: [REJECTED],
+    }),
+  },
+  {
+    // The counter-example: what a naively *streamed* envelope leaves on stdout
+    // when the process dies. No parser accepts it, and it does not look broken
+    // to a reader who sees only its head.
+    name: "d-midstream-failure.truncated-array.json",
+    body:
+      JSON.stringify(
+        { type: "result", command: "deals list", data: samples(5) },
+        null,
+        2,
+      ).replace(/\n\s*\]\n\}$/, "\n") +
+      "  ... process died here, no closing bracket\n",
+  },
+];
 
-// What a naive consumer sees if the envelope is streamed rather than buffered:
-// a truncated document that no JSON parser accepts.
-write(
-  "d-midstream-failure.truncated-array.json",
-  json({ type: "result", command: "deals list", data: beforeFailure })
-    .replace(/\n\s*\]\n\}$/, "\n") + "  ... process died here, no closing bracket",
-);
-
-// ---------------------------------------------------------------------------
-// Case E — one record failed zod validation. The run continues.
-// ---------------------------------------------------------------------------
-
-const good = deals(2);
-const afterBad = deals(1, 3);
-const warning = {
-  type: "warning",
-  code: "invalid_record",
-  message: "Deal 1002 rejected by schema; skipped.",
-  details: { id: 1002, issue: "value: expected number, received string" },
-};
-
-write(
-  "e-validation-warning.array.json",
-  json({
-    type: "result",
-    command: "deals list",
-    data: [...good, ...afterBad],
-    complete: true,
-    emitted: 3,
-    warnings: [warning],
-  }),
-);
-
-write(
-  "e-validation-warning.ndjson",
-  [
-    ...good.map((d) => line({ type: "record", data: d })),
-    line(warning),
-    ...afterBad.map((d) => line({ type: "record", data: d })),
-    line({ type: "summary", complete: true, emitted: 3, warnings: 1 }),
-  ].join("\n"),
-);
-
-// ---------------------------------------------------------------------------
-// Case F — usage error. No list was ever started, so there is no summary line:
-// the single error line is the whole output, and carries the invariant fields.
-// ---------------------------------------------------------------------------
-
-write(
-  "f-usage-error.ndjson",
-  line({
-    type: "error",
-    code: "usage",
-    message: "Unknown flag --frobnicate.",
-    complete: false,
-    emitted: 0,
-    exit_code: 2,
-    retry: "never",
-    details: {},
-  }),
-);
-
-console.error(`wrote samples to ${OUT}`);
+if (import.meta.main) {
+  mkdirSync(OUT, { recursive: true });
+  for (const { name, ndjson } of CASES) writeFileSync(join(OUT, name), ndjson);
+  for (const { name, body } of ARRAY_CASES) writeFileSync(join(OUT, name), body);
+  console.error(`wrote ${CASES.length + ARRAY_CASES.length} samples to ${OUT}`);
+}
