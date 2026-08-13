@@ -1,16 +1,16 @@
 /**
- * `pd deals list` — the tracer bullet of ticket 05.
+ * `pd <resource> list` and `pd <resource> get <id>` — one command for all five
+ * live resources.
  *
- * Argument parsing, credential resolution, the cursor walk, two-stage
- * validation, deduplication, the writer, the error union and the exit codes, end
- * to end. Every one of those lives in a module of its own; this file is the
- * wiring, and it is deliberately thin so that ticket 07's eight other resources
- * are a table entry rather than a copy of it.
+ * This is ticket 05's `deals-list.ts` with the resource lifted into a parameter
+ * and the second verb added. Argument parsing, credential resolution, the walk
+ * or the by-id fetch, two-stage validation, the writer, the error union and the
+ * exit codes are shared by construction rather than by five files agreeing.
  *
  * ## Everything failing here still ends in a trailer
  *
- * ADR-0002's last-line invariant is total. A `usage` error on this command is
- * not `cli.ts`'s bare one-line `fail()` — it is an `error` trailer carrying
+ * ADR-0002's last-line invariant is total. A `usage` error on a data command is
+ * not a bare one-line refusal — it is an `error` trailer carrying
  * `complete: false` and four zero counters, because a consumer reading the last
  * line and two fields must not have to know which failures happened before the
  * stream started. The same holds for a missing credential.
@@ -34,15 +34,17 @@ import type { Clock } from "../lib/pipedrive/clock.ts";
 import { createGuardedFetch } from "../lib/pipedrive/guarded-fetch.ts";
 import type { Transport } from "../lib/pipedrive/guarded-fetch.ts";
 import { createPipedriveClient } from "../lib/pipedrive/client.ts";
-import {
-  DEAL_RECORD_TYPE,
-  walkDeals,
-} from "../lib/pipedrive/deals.ts";
+import type { Resource } from "../lib/pipedrive/resources.ts";
 import { NdjsonWriter, type Sink } from "../lib/output/ndjson-writer.ts";
 import { stream } from "../lib/output/stream.ts";
 
-export type DealsListInput = {
-  /** Everything after `pd deals list`. */
+/** ADR-0009 §1, minus `search`, which arrives with ticket 14. */
+export type Verb = "list" | "get";
+
+export type ResourceCommandInput = {
+  resource: Resource;
+  verb: Verb;
+  /** Everything after `pd <resource> <verb>`. */
   argv: readonly string[];
   platform: NodeJS.Platform;
   env: Record<string, string | undefined>;
@@ -91,57 +93,116 @@ const Arguments = z.object({
 type Arguments = z.infer<typeof Arguments>;
 
 /**
+ * A Pipedrive record id, validated offline and at the same boundary as the
+ * flags. The pattern is exact rather than `z.coerce`: `Number(" 42")` is 42 and
+ * `Number("42\n")` is 42, and an id an agent did not mean to send should be a
+ * usage error rather than a request.
+ */
+const Id = z
+  .string()
+  .regex(/^[1-9][0-9]*$/)
+  .transform(Number);
+
+/**
  * `parseArgs`'s own prose is Node's, and it advises a `--` positional syntax
- * `pd deals list` does not have. The message an agent reads should name the flag
+ * these commands do not have. The message an agent reads should name the flag
  * and the flags that exist, so the unknown-option case is reworded and every
  * other grammar failure passes through.
  */
-const usageMessage = (cause: unknown): string => {
+const usageMessage = (command: string, cause: unknown): string => {
   const node = cause instanceof Error ? cause : undefined;
   const code = (node as { code?: string } | undefined)?.code;
   if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
     const flag = /'([^']+)'/.exec(node?.message ?? "")?.[1] ?? "that flag";
-    return `pd deals list does not accept ${flag}. It takes --token-file and no other flag.`;
+    return `${command} does not accept ${flag}. It takes --token-file and no other flag.`;
   }
   return node?.message ?? String(cause);
 };
 
-const tokenise = Result.fromThrowable(
-  (argv: readonly string[]) =>
-    parseArgs({
-      args: [...argv],
-      strict: true,
-      allowPositionals: true,
-      options: { "token-file": { type: "string" } },
-    }),
-  (cause): PdError => pdError({ code: "usage", message: usageMessage(cause) }),
-);
+const tokenise = (command: string) =>
+  Result.fromThrowable(
+    (argv: readonly string[]) =>
+      parseArgs({
+        args: [...argv],
+        strict: true,
+        allowPositionals: true,
+        options: { "token-file": { type: "string" } },
+      }),
+    (cause): PdError =>
+      pdError({ code: "usage", message: usageMessage(command, cause) }),
+  );
 
-const parse = (argv: readonly string[]): Result<Arguments, PdError> =>
-  tokenise(argv).andThen(({ values, positionals }) => {
-    const extra = positionals[0];
-    if (extra !== undefined) {
-      return err(
+type Parsed = {
+  flags: Arguments;
+  /** Present on `get`, absent on `list`. */
+  id?: number;
+};
+
+/**
+ * The arity difference between the two verbs is the whole of what varies:
+ * `list` takes no positional, `get` takes exactly one and it is an id.
+ */
+const positionals = (
+  command: string,
+  verb: Verb,
+  found: readonly string[],
+): Result<number | undefined, PdError> => {
+  const extra = found[verb === "get" ? 1 : 0];
+  if (extra !== undefined) {
+    return err(
+      pdError({
+        code: "usage",
+        message:
+          verb === "get"
+            ? `${command} takes one id; got ${found.length} arguments.`
+            : `${command} takes no arguments; got ${extra}.`,
+      }),
+    );
+  }
+
+  if (verb === "list") return ok(undefined);
+
+  const id = found[0];
+  if (id === undefined) {
+    return err(
+      pdError({ code: "usage", message: `${command} needs an id.` }),
+    );
+  }
+  const parsed = Id.safeParse(id);
+  return parsed.success
+    ? ok(parsed.data)
+    : err(
         pdError({
           code: "usage",
-          message: `pd deals list takes no arguments; got ${extra}.`,
+          message: `${command} takes a positive integer id; got ${id}.`,
         }),
       );
-    }
-    const parsed = Arguments.safeParse(values);
-    return parsed.success
-      ? ok(parsed.data)
-      : err(
-          pdError({
-            code: "usage",
-            message: parsed.error.issues
-              .map((issue) => `--${issue.path.join(".")}: ${issue.message}`)
-              .join(" "),
-          }),
-        );
-  });
+};
 
-export const dealsList = async ({
+const parse = (
+  command: string,
+  verb: Verb,
+  argv: readonly string[],
+): Result<Parsed, PdError> =>
+  tokenise(command)(argv).andThen(({ values, positionals: found }) =>
+    positionals(command, verb, found).andThen((id) => {
+      const flags = Arguments.safeParse(values);
+      return flags.success
+        ? ok({ flags: flags.data, ...(id === undefined ? {} : { id }) })
+        : err(
+            pdError({
+              code: "usage",
+              message: flags.error.issues
+                .map((issue) => `--${issue.path.join(".")}: ${issue.message}`)
+                .join(" "),
+            }),
+          );
+    }),
+  );
+
+export const resourceCommand = async ({
+  resource,
+  verb,
   argv,
   platform,
   env,
@@ -150,14 +211,17 @@ export const dealsList = async ({
   clock,
   sink,
   stderr,
-}: DealsListInput): Promise<number> => {
+}: ResourceCommandInput): Promise<number> => {
+  const command = `pd ${resource.name} ${verb}`;
+
   const guarded = createGuardedFetch({
     ...(transport === undefined ? {} : { transport }),
     ...(clock === undefined ? {} : { clock }),
   });
 
   const writer = new NdjsonWriter({
-    recordType: DEAL_RECORD_TYPE,
+    recordType: resource.recordType,
+    rename: resource.rename,
     requests: guarded.dispatches,
     ...(sink === undefined ? {} : { sink }),
     ...(stderr === undefined ? {} : { stderr }),
@@ -167,16 +231,16 @@ export const dealsList = async ({
     return writer.error(TOKEN_REFUSAL);
   }
 
-  const parsed = parse(argv);
+  const parsed = parse(command, verb, argv);
   if (parsed.isErr()) return writer.error(parsed.error);
 
   const credential = resolveCredential({
     platform,
     env,
     home,
-    ...(parsed.value["token-file"] === undefined
+    ...(parsed.value.flags["token-file"] === undefined
       ? {}
-      : { tokenFile: parsed.value["token-file"] }),
+      : { tokenFile: parsed.value.flags["token-file"] }),
   });
   if (credential.isErr()) return writer.error(credential.error);
 
@@ -189,5 +253,9 @@ export const dealsList = async ({
     guarded,
   });
 
-  return stream(walkDeals(client), writer);
+  const id = parsed.value.id;
+  return stream(
+    id === undefined ? resource.list(client) : resource.get(client, id),
+    writer,
+  );
 };

@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { dealsList } from "../src/commands/deals-list.ts";
+import { route } from "../src/router.ts";
 import { createReplayTransport, type Fixture } from "./support/replay.ts";
 import { DEALS_PATH, deal, dealsPage, dealsQuery } from "./support/deals.ts";
 import { capture, type Line } from "./support/ndjson.ts";
@@ -34,8 +34,8 @@ const runWith = async (
   env: Record<string, string | undefined>,
 ): Promise<Run> => {
   const out = capture();
-  const exit = await dealsList({
-    argv,
+  const exit = await route({
+    argv: ["deals", "list", ...argv],
     platform: "linux",
     env,
     home: "/home/nobody",
@@ -385,8 +385,8 @@ describe("streaming", () => {
     let served = 0;
     let servedAtFirstWrite = -1;
 
-    await dealsList({
-      argv: [],
+    await route({
+      argv: ["deals", "list"],
       platform: "linux",
       env: { PD_API_TOKEN: "test-token" },
       home: "/home/nobody",
@@ -415,8 +415,8 @@ describe("the credential on the wire", () => {
     const replay = createReplayTransport([page([deal(1)], null)]);
     const seen: Request[] = [];
 
-    const exit = await dealsList({
-      argv: [],
+    const exit = await route({
+      argv: ["deals", "list"],
       platform: "linux",
       env: { PD_API_TOKEN: "test-token" },
       home: "/home/nobody",
@@ -439,8 +439,8 @@ describe("the credential on the wire", () => {
     let url = "";
     let method = "";
 
-    await dealsList({
-      argv: [],
+    await route({
+      argv: ["deals", "list"],
       platform: "linux",
       env: { PD_API_TOKEN: "test-token" },
       home: "/home/nobody",

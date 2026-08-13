@@ -30,7 +30,8 @@ export const zGetUsersResponse = z.object({
                 'campaigns',
                 'projects',
                 'account_settings',
-                'partnership'
+                'partnership',
+                'nova'
             ]),
             admin: z.boolean(),
             permission_set_id: z.string()

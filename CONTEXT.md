@@ -46,4 +46,8 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Fingerprint** — the first 16 hex characters of the SHA-256 of the resolved API token. One value with two jobs: it names the cache directory ([ADR-0005](docs/adr/0005-cache-design.md) §2) and it is what `pd auth status` prints, so a human can match a running configuration to a cache directory without `pd` printing anything reversible. It is a derived value and not a secret.
 
+**Reserved key** — a key the NDJSON line grammar owns on a `record` line: `type` and `record_type`. A record field of the same name would shadow the discriminator every consumer dispatches on, so it is renamed on output — an activity's `type` is emitted as `activity_type` — and a collision no rename covers is an `internal` error rather than an unclassifiable line. Settled in [ADR-0025](docs/adr/0025-the-shadowed-line-key-nested-absence-and-the-refusal-that-teaches.md) §1.
+
+**Nested block** — an object or array of objects inside a record: `products.prices`, a person's `emails`, `phones`, `im` and `postal_address`, an organization's `address`, an activity's `location`, `participants` and `attendees`. [ADR-0020](docs/adr/0020-value-formatting-and-absence.md) §6's omission rule reaches inside all of them, at every depth. A block is selectable whole by its bare top-level name and no dotted path reaches inside it ([ADR-0016](docs/adr/0016-field-projection.md) §2). Absence removes object **keys**, never array **elements**.
+
 **Kind** — the discriminator on a `warning` line, read after `type`. Eight exist, enumerated by name in the spec and registered in `src/lib/warnings.ts`. `kind` is interface in the same sense `code` is; adding one is additive and non-breaking.

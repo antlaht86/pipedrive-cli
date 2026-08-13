@@ -65,6 +65,11 @@ export type NdjsonWriterOptions = {
   /** ADR-0011 §9's dispatch counter, read once when the trailer is written. */
   requests: () => number;
   resolved?: Resolved;
+  /**
+   * Output names for record fields that would shadow a line key — the resource
+   * table supplies it, and it is empty for every resource but `activities`.
+   */
+  rename?: Readonly<Record<string, string>>;
   sink?: Sink;
   /**
    * ADR-0001 sends a human one-line summary of every error to stderr beside the
@@ -85,16 +90,102 @@ export type NdjsonWriterOptions = {
  * `--resolve`, and is emitted as `{}` when empty because it is a block, not a
  * value. `id` is never absent (ADR-0016 §1) and the schema never admits it as
  * `null`, so it needs no special case.
+ *
+ * ## The rule reaches nested blocks, and there are more than one
+ *
+ * ADR-0020 §7 spelled out that §6 "applies inside those objects too" for
+ * `products.prices`, and claimed that block was the only nested one. Ticket
+ * 07's four other resources say otherwise: a person carries `emails`, `phones`,
+ * `im` and `postal_address`, an organization carries `address`, an activity
+ * carries `location`, `participants` and `attendees`. §6 is a general
+ * serialisation rule, so it is applied generally rather than at one named path
+ * — a `label` nobody set is an absent key wherever it sits.
+ *
+ * Array **elements** are never dropped, only object keys: removing an element
+ * would renumber its siblings and shorten a list the caller counts.
  */
-const present = (record: Record<string, unknown>): Record<string, unknown> => {
+/**
+ * The two keys ADR-0002's line grammar owns on a `record` line. A record field
+ * of the same name would shadow the discriminator a consumer dispatches on —
+ * an activity's `type` is `"call"`, and `{"type":"call"}` is not a line any
+ * reader of the format can classify.
+ */
+const RESERVED = new Set(["type", "record_type"]);
+
+const shrink = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(shrink);
+  return value !== null && typeof value === "object"
+    ? withoutAbsent(value as Record<string, unknown>)
+    : value;
+};
+
+const withoutAbsent = (
+  record: Record<string, unknown>,
+): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
+    if (value === null || value === undefined) continue;
+    out[key] = shrink(value);
+  }
+  return out;
+};
+
+/**
+ * The two ways a record can lose a field on the way out, as a value rather than
+ * a throw: the caller writes the trailer before it raises, so the counters on
+ * it are the true ones (ADR-0025 §1).
+ */
+const shadowed = (
+  record: Record<string, unknown>,
+  rename: Readonly<Record<string, string>>,
+): PdError | undefined => {
+  for (const key of Object.keys(record)) {
+    const name = rename[key] ?? key;
+    if (RESERVED.has(name)) {
+      return pdError({
+        code: "internal",
+        message:
+          `A record field named '${name}' would shadow the line's own '${name}' ` +
+          "key. This is a bug in pd: the resource needs an output rename.",
+        details: { field: name },
+      });
+    }
+    // The rename must not land on a field the record already has. Renaming
+    // `type` to `activity_type` on a resource that grows its own
+    // `activity_type` would overwrite it, which is the same silent loss the
+    // reserved check exists to prevent, one step further along.
+    if (name !== key && name in record) {
+      return pdError({
+        code: "internal",
+        message:
+          `Renaming '${key}' to '${name}' would overwrite a field the record ` +
+          "already has. This is a bug in pd: the rename needs a free name.",
+        details: { field: key, renamed_to: name },
+      });
+    }
+  }
+  return undefined;
+};
+
+/**
+ * `rename` carries the output name of a field that would otherwise collide with
+ * `RESERVED` — `type` becomes `activity_type` on an activity. The rename is in
+ * place, so the field keeps its position in the record rather than moving to
+ * the end. `shadowed` above has already refused anything this would lose.
+ */
+const present = (
+  record: Record<string, unknown>,
+  rename: Readonly<Record<string, string>>,
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const name = rename[key] ?? key;
     if (key === "custom_fields") {
-      out[key] = value ?? {};
+      out[name] = value ?? {};
       continue;
     }
     if (value === null || value === undefined) continue;
-    out[key] = value;
+    out[name] = shrink(value);
   }
   return out;
 };
@@ -148,6 +239,7 @@ export class NdjsonWriter {
   readonly #recordType: string;
   readonly #requests: () => number;
   readonly #resolved: Resolved;
+  readonly #rename: Readonly<Record<string, string>>;
   readonly #causes = new Set<string>();
 
   #emitted = 0;
@@ -159,12 +251,14 @@ export class NdjsonWriter {
     recordType,
     requests,
     resolved = "off",
+    rename = {},
     sink = stdoutSink,
     stderr = stderrSink,
   }: NdjsonWriterOptions) {
     this.#recordType = recordType;
     this.#requests = requests;
     this.#resolved = resolved;
+    this.#rename = rename;
     this.#sink = sink;
     this.#stderr = stderr;
   }
@@ -206,15 +300,36 @@ export class NdjsonWriter {
     return page.records;
   }
 
-  /** Writes `record` lines and moves `emitted`. The two always happen together. */
+  /**
+   * Writes `record` lines and moves `emitted`. The two always happen together.
+   *
+   * A field that would shadow a line key ends the run here rather than shipping
+   * an unclassifiable line (ADR-0025 §1). The **trailer is written first**, so
+   * the counters on it are the true ones: the records already on stdout are
+   * real, and a bug is precisely when a counter must not lie. The throw that
+   * follows carries `trailer_already_written`, which is the same marker
+   * `#refuseAfterTrailer` uses and which tells `cli.ts` the whole trailer —
+   * stdout line and stderr line both — is already out.
+   */
   records(records: readonly Record<string, unknown>[]): void {
     this.#refuseAfterTrailer("page");
     for (const record of records) {
+      const collision = shadowed(record, this.#rename);
+      if (collision !== undefined) {
+        this.error(collision);
+        throw new PdFailure(
+          pdError({
+            code: "internal",
+            message: collision.message,
+            details: { ...collision.details, trailer_already_written: true },
+          }),
+        );
+      }
       this.#emitted += 1;
       this.#line({
         type: "record",
         record_type: this.#recordType,
-        ...present(record),
+        ...present(record, this.#rename),
       });
     }
   }
@@ -276,16 +391,17 @@ export class NdjsonWriter {
    */
   #refuseAfterTrailer(call: string): void {
     if (!this.#finished) return;
-    throw new PdFailure(
-      pdError({
-        code: "internal",
-        message:
-          `pd wrote a second trailer: ${call}() was called after the run had ` +
-          "already ended. This is a bug in pd.",
-        // Read by `cli.ts`, which must not answer this by writing the very
-        // second trailer the refusal exists to prevent.
-        details: { call, trailer_already_written: true },
-      }),
-    );
+    const error = pdError({
+      code: "internal",
+      message:
+        `pd wrote a second trailer: ${call}() was called after the run had ` +
+        "already ended. This is a bug in pd.",
+      // Read by `cli.ts`, which must not answer this by writing the very
+      // second trailer the refusal exists to prevent. The marker covers stderr
+      // as well as stdout, so the line below is the only one a reader sees.
+      details: { call, trailer_already_written: true },
+    });
+    this.#stderr(`pd: ${error.message}\n`);
+    throw new PdFailure(error);
   }
 }

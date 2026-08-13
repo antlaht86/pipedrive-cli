@@ -76,7 +76,7 @@ export type GetUsersResponses = {
                 /**
                  * The granular app access level
                  */
-                app: 'global' | 'sales' | 'campaigns' | 'projects' | 'account_settings' | 'partnership';
+                app: 'global' | 'sales' | 'campaigns' | 'projects' | 'account_settings' | 'partnership' | 'nova';
                 /**
                  * Whether the user has admin access or not
                  */

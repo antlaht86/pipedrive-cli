@@ -191,6 +191,41 @@ export const zGetFollowerChangelogsItem = z.object({
     time: z.string()
 });
 
+export const zGetDealsProductsItem = z.object({
+    id: z.int(),
+    sum: z.number(),
+    tax: z.number(),
+    deal_id: z.int(),
+    name: z.string(),
+    product_id: z.int(),
+    product_variation_id: z.int().nullable(),
+    order_nr: z.int().nullable(),
+    add_time: z.string(),
+    update_time: z.string(),
+    comments: z.string(),
+    currency: z.string(),
+    discount: z.number().default(0),
+    discount_type: z.enum(['percentage', 'amount']).default('percentage'),
+    quantity: z.number(),
+    item_price: z.number(),
+    tax_method: z.enum([
+        'exclusive',
+        'inclusive',
+        'none'
+    ]),
+    is_enabled: z.boolean().default(true),
+    billing_frequency: z.enum([
+        'one-time',
+        'annually',
+        'semi-annually',
+        'quarterly',
+        'monthly',
+        'weekly'
+    ]).default('one-time'),
+    billing_frequency_cycles: z.int().nullable().default(null),
+    billing_start_date: z.iso.date().nullable().default(null)
+});
+
 export const zGetDealSearchItem = z.object({
     items: z.array(z.object({
         result_score: z.number(),
@@ -423,6 +458,45 @@ export const zUpsertOrganizationItem = z.object({
     custom_fields: z.record(z.string(), z.unknown())
 });
 
+export const zGetProductsItem = z.object({
+    id: z.int(),
+    name: z.string(),
+    code: z.string(),
+    unit: z.string(),
+    tax: z.number().default(0),
+    is_deleted: z.boolean().default(false),
+    is_linkable: z.boolean().default(true),
+    visible_to: z.union([
+        z.literal(1),
+        z.literal(3),
+        z.literal(5),
+        z.literal(7)
+    ]),
+    owner_id: z.int(),
+    add_time: z.string(),
+    update_time: z.string(),
+    description: z.string(),
+    category: z.string().nullable(),
+    custom_fields: z.record(z.string(), z.unknown()),
+    billing_frequency: z.enum([
+        'one-time',
+        'annually',
+        'semi-annually',
+        'quarterly',
+        'monthly',
+        'weekly'
+    ]).default('one-time'),
+    billing_frequency_cycles: z.int().nullable().default(null),
+    prices: z.array(z.object({
+        product_id: z.int(),
+        price: z.number(),
+        currency: z.string(),
+        cost: z.number(),
+        direct_cost: z.number().nullable(),
+        notes: z.string()
+    }))
+});
+
 export const zGetProductSearchItem = z.object({
     items: z.array(z.object({
         result_score: z.number(),
@@ -437,6 +511,45 @@ export const zGetProductSearchItem = z.object({
             }),
             custom_fields: z.array(z.string())
         })
+    }))
+});
+
+export const zGetProductItem = z.object({
+    id: z.int(),
+    name: z.string(),
+    code: z.string(),
+    unit: z.string(),
+    tax: z.number().default(0),
+    is_deleted: z.boolean().default(false),
+    is_linkable: z.boolean().default(true),
+    visible_to: z.union([
+        z.literal(1),
+        z.literal(3),
+        z.literal(5),
+        z.literal(7)
+    ]),
+    owner_id: z.int(),
+    add_time: z.string(),
+    update_time: z.string(),
+    description: z.string(),
+    category: z.string().nullable(),
+    custom_fields: z.record(z.string(), z.unknown()),
+    billing_frequency: z.enum([
+        'one-time',
+        'annually',
+        'semi-annually',
+        'quarterly',
+        'monthly',
+        'weekly'
+    ]).default('one-time'),
+    billing_frequency_cycles: z.int().nullable().default(null),
+    prices: z.array(z.object({
+        product_id: z.int(),
+        price: z.number(),
+        currency: z.string(),
+        cost: z.number(),
+        direct_cost: z.number().nullable(),
+        notes: z.string()
     }))
 });
 
@@ -1233,43 +1346,7 @@ export const zGetDealsProductsQuery = z.object({
  */
 export const zGetDealsProductsResponse = z.object({
     success: z.boolean(),
-    data: z.array(z.object({
-        id: z.int(),
-        sum: z.number(),
-        tax: z.number(),
-        deal_id: z.int(),
-        name: z.string(),
-        product_id: z.int(),
-        product_variation_id: z.int().nullable(),
-        order_nr: z.int().nullable(),
-        add_time: z.string(),
-        update_time: z.string(),
-        comments: z.string(),
-        currency: z.string(),
-        discount: z.number().default(0),
-        discount_type: z.enum(['percentage', 'amount']).default('percentage'),
-        quantity: z.number(),
-        item_price: z.number(),
-        tax_method: z.enum([
-            'exclusive',
-            'inclusive',
-            'none'
-        ]),
-        is_enabled: z.boolean().default(true)
-    }).and(z.object({
-        billing_frequency: z.enum([
-            'one-time',
-            'annually',
-            'semi-annually',
-            'quarterly',
-            'monthly',
-            'weekly'
-        ]).default('one-time')
-    })).and(z.object({
-        billing_frequency_cycles: z.int().nullable().default(null)
-    })).and(z.object({
-        billing_start_date: z.iso.date().nullable().default(null)
-    }))),
+    data: z.array(zGetDealsProductsItem),
     additional_data: z.object({
         next_cursor: z.string().nullable()
     })
@@ -1332,43 +1409,7 @@ export const zGetDealProductsQuery = z.object({
  */
 export const zGetDealProductsResponse = z.object({
     success: z.boolean(),
-    data: z.array(z.object({
-        id: z.int(),
-        sum: z.number(),
-        tax: z.number(),
-        deal_id: z.int(),
-        name: z.string(),
-        product_id: z.int(),
-        product_variation_id: z.int().nullable(),
-        order_nr: z.int().nullable(),
-        add_time: z.string(),
-        update_time: z.string(),
-        comments: z.string(),
-        currency: z.string(),
-        discount: z.number().default(0),
-        discount_type: z.enum(['percentage', 'amount']).default('percentage'),
-        quantity: z.number(),
-        item_price: z.number(),
-        tax_method: z.enum([
-            'exclusive',
-            'inclusive',
-            'none'
-        ]),
-        is_enabled: z.boolean().default(true)
-    }).and(z.object({
-        billing_frequency: z.enum([
-            'one-time',
-            'annually',
-            'semi-annually',
-            'quarterly',
-            'monthly',
-            'weekly'
-        ]).default('one-time')
-    })).and(z.object({
-        billing_frequency_cycles: z.int().nullable().default(null)
-    })).and(z.object({
-        billing_start_date: z.iso.date().nullable().default(null)
-    }))),
+    data: z.array(zGetDealsProductsItem),
     additional_data: z.object({
         next_cursor: z.string().nullable()
     })
@@ -2349,47 +2390,7 @@ export const zGetProductsQuery = z.object({
  */
 export const zGetProductsResponse = z.object({
     success: z.boolean(),
-    data: z.array(z.object({
-        id: z.int(),
-        name: z.string(),
-        code: z.string(),
-        unit: z.string(),
-        tax: z.number().default(0),
-        is_deleted: z.boolean().default(false),
-        is_linkable: z.boolean().default(true),
-        visible_to: z.union([
-            z.literal(1),
-            z.literal(3),
-            z.literal(5),
-            z.literal(7)
-        ]),
-        owner_id: z.int(),
-        add_time: z.string(),
-        update_time: z.string(),
-        description: z.string(),
-        category: z.string().nullable(),
-        custom_fields: z.record(z.string(), z.unknown())
-    }).and(z.object({
-        billing_frequency: z.enum([
-            'one-time',
-            'annually',
-            'semi-annually',
-            'quarterly',
-            'monthly',
-            'weekly'
-        ]).default('one-time')
-    })).and(z.object({
-        billing_frequency_cycles: z.int().nullable().default(null)
-    })).and(z.object({
-        prices: z.array(z.object({
-            product_id: z.int(),
-            price: z.number(),
-            currency: z.string(),
-            cost: z.number(),
-            direct_cost: z.number().nullable(),
-            notes: z.string()
-        }))
-    }))),
+    data: z.array(zGetProductsItem),
     additional_data: z.object({
         next_cursor: z.string().nullable()
     })
@@ -2479,47 +2480,7 @@ export const zGetProductPath = z.object({
  */
 export const zGetProductResponse = z.object({
     success: z.boolean(),
-    data: z.object({
-        id: z.int(),
-        name: z.string(),
-        code: z.string(),
-        unit: z.string(),
-        tax: z.number().default(0),
-        is_deleted: z.boolean().default(false),
-        is_linkable: z.boolean().default(true),
-        visible_to: z.union([
-            z.literal(1),
-            z.literal(3),
-            z.literal(5),
-            z.literal(7)
-        ]),
-        owner_id: z.int(),
-        add_time: z.string(),
-        update_time: z.string(),
-        description: z.string(),
-        category: z.string().nullable(),
-        custom_fields: z.record(z.string(), z.unknown())
-    }).and(z.object({
-        billing_frequency: z.enum([
-            'one-time',
-            'annually',
-            'semi-annually',
-            'quarterly',
-            'monthly',
-            'weekly'
-        ]).default('one-time')
-    })).and(z.object({
-        billing_frequency_cycles: z.int().nullable().default(null)
-    })).and(z.object({
-        prices: z.array(z.object({
-            product_id: z.int(),
-            price: z.number(),
-            currency: z.string(),
-            cost: z.number(),
-            direct_cost: z.number().nullable(),
-            notes: z.string()
-        }))
-    }))
+    data: zGetProductItem
 });
 
 export const zGetProductVariationsPath = z.object({

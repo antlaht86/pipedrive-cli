@@ -126,7 +126,12 @@ const noSurvivors = (resource: string, count: number): PdError =>
     details: { resource, rejected: count },
   });
 
-const structural = (message: string, error: z.ZodError): PdError =>
+/**
+ * Exported for `single.ts`, which reads the by-id envelope: the two shapes
+ * differ, but a body `pd` cannot read is the same `invalid_response` with the
+ * same first-five issues either way, and one builder keeps it that way.
+ */
+export const structural = (message: string, error: z.ZodError): PdError =>
   pdError({
     code: "invalid_response",
     message,

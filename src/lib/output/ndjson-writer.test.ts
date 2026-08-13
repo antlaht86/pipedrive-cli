@@ -245,3 +245,103 @@ describe("the streaming loop", () => {
     expect(lines().at(-1)).toMatchObject({ type: "error", emitted: 1 });
   });
 });
+
+describe("a record field never shadows a line key", () => {
+  const shadow = (record: Record<string, unknown>): unknown => {
+    const out = capture();
+    const writer = new NdjsonWriter({
+      recordType: "activity",
+      requests: () => 1,
+      rename: { type: "activity_type" },
+      sink: out.sink,
+      stderr: out.stderr,
+    });
+    try {
+      writer.records([record]);
+      return undefined;
+    } catch (cause) {
+      return cause;
+    }
+  };
+
+  test("the configured rename moves the field out of the way", () => {
+    const out = capture();
+    const writer = new NdjsonWriter({
+      recordType: "activity",
+      requests: () => 1,
+      rename: { type: "activity_type" },
+      sink: out.sink,
+      stderr: out.stderr,
+    });
+
+    writer.records([{ id: 1, type: "call" }]);
+
+    expect(out.lines()[0]).toEqual({
+      type: "record",
+      record_type: "activity",
+      id: 1,
+      activity_type: "call",
+    });
+  });
+
+  test("a collision the table did not cover is internal, not a silent shadow", () => {
+    // The guard exists for the regeneration nobody reviews: a new field named
+    // `record_type` would otherwise overwrite the line's own and ship.
+    const cause = shadow({ id: 1, record_type: "sneaky" });
+
+    expect(isPdFailure(cause)).toBe(true);
+    expect((cause as { error: PdError }).error).toMatchObject({
+      code: "internal",
+      exit_code: 1,
+      details: { field: "record_type" },
+    });
+  });
+
+  test("the trailer it writes carries the records that really went out", () => {
+    // A bug is precisely when a counter must not lie: two records are already
+    // on stdout when the third collides, and `emitted: 0` would retract them.
+    const out = capture();
+    const writer = new NdjsonWriter({
+      recordType: "activity",
+      requests: () => 4,
+      rename: { type: "activity_type" },
+      sink: out.sink,
+      stderr: out.stderr,
+    });
+
+    const raised = ((): unknown => {
+      try {
+        writer.records([{ id: 1 }, { id: 2 }, { id: 3, record_type: "no" }]);
+        return undefined;
+      } catch (cause) {
+        return cause;
+      }
+    })();
+
+    expect(isPdFailure(raised)).toBe(true);
+    expect(out.last()).toMatchObject({
+      type: "error",
+      code: "internal",
+      complete: false,
+      emitted: 2,
+      requests: 4,
+    });
+    // One stderr line, from the writer. `cli.ts` reads the marker and adds none.
+    expect(out.errors).toHaveLength(1);
+    expect(
+      (raised as { error: PdError }).error.details?.["trailer_already_written"],
+    ).toBe(true);
+  });
+
+  test("a rename that would land on an existing field is internal too", () => {
+    // The same silent loss, one step further along: the resource grew its own
+    // `activity_type` and the rename would overwrite it.
+    const cause = shadow({ id: 1, type: "call", activity_type: "already here" });
+
+    expect(isPdFailure(cause)).toBe(true);
+    expect((cause as { error: PdError }).error).toMatchObject({
+      code: "internal",
+      details: { field: "type", renamed_to: "activity_type" },
+    });
+  });
+});

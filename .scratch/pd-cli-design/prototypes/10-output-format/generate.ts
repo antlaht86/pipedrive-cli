@@ -20,7 +20,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { dealsList } from "../../../../src/commands/deals-list.ts";
+import { route } from "../../../../src/router.ts";
 import { pdError } from "../../../../src/lib/errors.ts";
 import { NdjsonWriter } from "../../../../src/lib/output/ndjson-writer.ts";
 import type { Page } from "../../../../src/lib/pipedrive/walk.ts";
@@ -71,8 +71,8 @@ export const render = (
 /** Runs `pd deals list --frobnicate` and captures its stdout. */
 const usageError = async (): Promise<string> => {
   const out: string[] = [];
-  await dealsList({
-    argv: ["--frobnicate"],
+  await route({
+    argv: ["deals", "list", "--frobnicate"],
     platform: "linux",
     env: {},
     home: "/home/nobody",

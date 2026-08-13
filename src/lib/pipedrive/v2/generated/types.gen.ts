@@ -713,6 +713,114 @@ export type GetFollowerChangelogsItem = {
     time: string;
 };
 
+export type GetDealsProductsItem = {
+    /**
+     * The ID of the deal-product (the ID of the product attached to the deal)
+     */
+    id: number;
+    /**
+     * The sum of all the products attached to the deal
+     */
+    sum: number;
+    /**
+     * The product tax
+     */
+    tax: number;
+    /**
+     * The ID of the deal
+     */
+    deal_id: number;
+    /**
+     * The product name
+     */
+    name: string;
+    /**
+     * The ID of the product
+     */
+    product_id: number;
+    /**
+     * The ID of the product variation
+     */
+    product_variation_id: number | null;
+    /**
+     * The order number of the product within the deal
+     */
+    order_nr: number | null;
+    /**
+     * The date and time when the product was added to the deal
+     */
+    add_time: string;
+    /**
+     * The date and time when the deal product was last updated
+     */
+    update_time: string;
+    /**
+     * The comments of the product
+     */
+    comments: string;
+    /**
+     * The currency associated with the deal product
+     */
+    currency: string;
+    /**
+     * The value of the discount. The `discount_type` field can be used to specify whether the value is an amount or a percentage
+     */
+    discount: number;
+    /**
+     * The type of the discount's value
+     */
+    discount_type: 'percentage' | 'amount';
+    /**
+     * The quantity of the product
+     */
+    quantity: number;
+    /**
+     * The price value of the product
+     */
+    item_price: number;
+    /**
+     * The tax option to be applied to the products. When using `inclusive`, the tax percentage will already be included in the price. When using `exclusive`, the tax will not be included in the price. When using `none`, no tax will be added. Use the `tax` field for defining the tax percentage amount. By default, the user setting value for tax options will be used. Changing this in one product affects the rest of the products attached to the deal
+     */
+    tax_method: 'exclusive' | 'inclusive' | 'none';
+    /**
+     * Whether this product is enabled for the deal
+     */
+    is_enabled: boolean;
+    /**
+     * Only available in Growth and above plans
+     *
+     * How often a customer is billed for access to a service or product
+     *
+     * To set `billing_frequency` different than `one-time`, the deal must not have installments associated
+     *
+     * A deal can have up to 20 products attached with `billing_frequency` different than `one-time`
+     *
+     */
+    billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
+    /**
+     * Only available in Growth and above plans
+     *
+     * The number of times the billing frequency repeats for a product in a deal
+     *
+     * When `billing_frequency` is set to `one-time`, this field must be `null`
+     *
+     * When `billing_frequency` is set to `weekly`, this field cannot be `null`
+     *
+     * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
+     *
+     * Must be a positive integer less or equal to 208
+     *
+     */
+    billing_frequency_cycles: number | null;
+    /**
+     * Only available in Growth and above plans
+     *
+     * The billing start date. Must be between 10 years in the past and 10 years in the future
+     *
+     */
+    billing_start_date: string | null;
+};
+
 export type GetDealSearchItem = {
     /**
      * The array of deals
@@ -1477,6 +1585,118 @@ export type UpsertOrganizationItem = {
     };
 };
 
+export type GetProductsItem = {
+    /**
+     * The ID of the product
+     */
+    id: number;
+    /**
+     * The name of the product
+     */
+    name: string;
+    /**
+     * The product code
+     */
+    code: string;
+    /**
+     * The unit in which this product is sold
+     */
+    unit: string;
+    /**
+     * The tax percentage
+     */
+    tax: number;
+    /**
+     * Whether this product will be marked as deleted or not
+     */
+    is_deleted: boolean;
+    /**
+     * Whether this product can be added to a deal or not
+     */
+    is_linkable: boolean;
+    /**
+     * Visibility of the product
+     */
+    visible_to: 1 | 3 | 5 | 7;
+    /**
+     * The ID of the Pipedrive user who owns the product
+     */
+    owner_id: number;
+    /**
+     * The date and time when the product was added
+     */
+    add_time: string;
+    /**
+     * The date and time when the product was last updated
+     */
+    update_time: string;
+    /**
+     * The description of the product
+     */
+    description: string;
+    /**
+     * The category of the product
+     */
+    category: string | null;
+    /**
+     * An object where each key represents a custom field. All custom fields are referenced as randomly generated 40-character hashes. To clear a custom field value, set it to `null`. For multi-option fields (field type `set`), use `null` to clear the selection — sending an empty array `[]` is not supported and will result in a validation error.
+     */
+    custom_fields: {
+        [key: string]: unknown;
+    };
+    /**
+     * Only available in Growth and above plans
+     *
+     * How often a customer is billed for access to a service or product
+     *
+     */
+    billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
+    /**
+     * Only available in Growth and above plans
+     *
+     * The number of times the billing frequency repeats for a product in a deal
+     *
+     * When `billing_frequency` is set to `one-time`, this field must be `null`
+     *
+     * When `billing_frequency` is set to `weekly`, this field cannot be `null`
+     *
+     * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
+     *
+     * Must be a positive integer less or equal to 208
+     *
+     */
+    billing_frequency_cycles: number | null;
+    /**
+     * The prices of the product in different currencies
+     */
+    prices: Array<{
+        /**
+         * The ID of the product
+         */
+        product_id: number;
+        /**
+         * The price of the product
+         */
+        price: number;
+        /**
+         * The currency of the price
+         */
+        currency: string;
+        /**
+         * The cost of the product
+         */
+        cost: number;
+        /**
+         * The direct cost of the product
+         */
+        direct_cost: number | null;
+        /**
+         * The notes about the price
+         */
+        notes: string;
+    }>;
+};
+
 export type GetProductSearchItem = {
     /**
      * The array of found items
@@ -1518,6 +1738,118 @@ export type GetProductSearchItem = {
              */
             custom_fields: Array<string>;
         };
+    }>;
+};
+
+export type GetProductItem = {
+    /**
+     * The ID of the product
+     */
+    id: number;
+    /**
+     * The name of the product
+     */
+    name: string;
+    /**
+     * The product code
+     */
+    code: string;
+    /**
+     * The unit in which this product is sold
+     */
+    unit: string;
+    /**
+     * The tax percentage
+     */
+    tax: number;
+    /**
+     * Whether this product will be marked as deleted or not
+     */
+    is_deleted: boolean;
+    /**
+     * Whether this product can be added to a deal or not
+     */
+    is_linkable: boolean;
+    /**
+     * Visibility of the product
+     */
+    visible_to: 1 | 3 | 5 | 7;
+    /**
+     * The ID of the Pipedrive user who owns the product
+     */
+    owner_id: number;
+    /**
+     * The date and time when the product was added
+     */
+    add_time: string;
+    /**
+     * The date and time when the product was last updated
+     */
+    update_time: string;
+    /**
+     * The description of the product
+     */
+    description: string;
+    /**
+     * The category of the product
+     */
+    category: string | null;
+    /**
+     * An object where each key represents a custom field. All custom fields are referenced as randomly generated 40-character hashes. To clear a custom field value, set it to `null`. For multi-option fields (field type `set`), use `null` to clear the selection — sending an empty array `[]` is not supported and will result in a validation error.
+     */
+    custom_fields: {
+        [key: string]: unknown;
+    };
+    /**
+     * Only available in Growth and above plans
+     *
+     * How often a customer is billed for access to a service or product
+     *
+     */
+    billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
+    /**
+     * Only available in Growth and above plans
+     *
+     * The number of times the billing frequency repeats for a product in a deal
+     *
+     * When `billing_frequency` is set to `one-time`, this field must be `null`
+     *
+     * When `billing_frequency` is set to `weekly`, this field cannot be `null`
+     *
+     * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
+     *
+     * Must be a positive integer less or equal to 208
+     *
+     */
+    billing_frequency_cycles: number | null;
+    /**
+     * The prices of the product in different currencies
+     */
+    prices: Array<{
+        /**
+         * The ID of the product
+         */
+        product_id: number;
+        /**
+         * The price of the product
+         */
+        price: number;
+        /**
+         * The currency of the price
+         */
+        currency: string;
+        /**
+         * The cost of the product
+         */
+        cost: number;
+        /**
+         * The direct cost of the product
+         */
+        direct_cost: number | null;
+        /**
+         * The notes about the price
+         */
+        notes: string;
     }>;
 };
 
@@ -3330,116 +3662,7 @@ export type GetDealsProductsResponses = {
         /**
          * Array containing data for all products attached to deals
          */
-        data: Array<{
-            /**
-             * The ID of the deal-product (the ID of the product attached to the deal)
-             */
-            id: number;
-            /**
-             * The sum of all the products attached to the deal
-             */
-            sum: number;
-            /**
-             * The product tax
-             */
-            tax: number;
-            /**
-             * The ID of the deal
-             */
-            deal_id: number;
-            /**
-             * The product name
-             */
-            name: string;
-            /**
-             * The ID of the product
-             */
-            product_id: number;
-            /**
-             * The ID of the product variation
-             */
-            product_variation_id: number | null;
-            /**
-             * The order number of the product within the deal
-             */
-            order_nr: number | null;
-            /**
-             * The date and time when the product was added to the deal
-             */
-            add_time: string;
-            /**
-             * The date and time when the deal product was last updated
-             */
-            update_time: string;
-            /**
-             * The comments of the product
-             */
-            comments: string;
-            /**
-             * The currency associated with the deal product
-             */
-            currency: string;
-            /**
-             * The value of the discount. The `discount_type` field can be used to specify whether the value is an amount or a percentage
-             */
-            discount: number;
-            /**
-             * The type of the discount's value
-             */
-            discount_type: 'percentage' | 'amount';
-            /**
-             * The quantity of the product
-             */
-            quantity: number;
-            /**
-             * The price value of the product
-             */
-            item_price: number;
-            /**
-             * The tax option to be applied to the products. When using `inclusive`, the tax percentage will already be included in the price. When using `exclusive`, the tax will not be included in the price. When using `none`, no tax will be added. Use the `tax` field for defining the tax percentage amount. By default, the user setting value for tax options will be used. Changing this in one product affects the rest of the products attached to the deal
-             */
-            tax_method: 'exclusive' | 'inclusive' | 'none';
-            /**
-             * Whether this product is enabled for the deal
-             */
-            is_enabled: boolean;
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * How often a customer is billed for access to a service or product
-             *
-             * To set `billing_frequency` different than `one-time`, the deal must not have installments associated
-             *
-             * A deal can have up to 20 products attached with `billing_frequency` different than `one-time`
-             *
-             */
-            billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The number of times the billing frequency repeats for a product in a deal
-             *
-             * When `billing_frequency` is set to `one-time`, this field must be `null`
-             *
-             * When `billing_frequency` is set to `weekly`, this field cannot be `null`
-             *
-             * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
-             *
-             * Must be a positive integer less or equal to 208
-             *
-             */
-            billing_frequency_cycles: number | null;
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The billing start date. Must be between 10 years in the past and 10 years in the future
-             *
-             */
-            billing_start_date: string | null;
-        }>;
+        data: Array<GetDealsProductsItem>;
         /**
          * Pagination related data
          */
@@ -3568,116 +3791,7 @@ export type GetDealProductsResponses = {
         /**
          * Array containing data for all products attached to deals
          */
-        data: Array<{
-            /**
-             * The ID of the deal-product (the ID of the product attached to the deal)
-             */
-            id: number;
-            /**
-             * The sum of all the products attached to the deal
-             */
-            sum: number;
-            /**
-             * The product tax
-             */
-            tax: number;
-            /**
-             * The ID of the deal
-             */
-            deal_id: number;
-            /**
-             * The product name
-             */
-            name: string;
-            /**
-             * The ID of the product
-             */
-            product_id: number;
-            /**
-             * The ID of the product variation
-             */
-            product_variation_id: number | null;
-            /**
-             * The order number of the product within the deal
-             */
-            order_nr: number | null;
-            /**
-             * The date and time when the product was added to the deal
-             */
-            add_time: string;
-            /**
-             * The date and time when the deal product was last updated
-             */
-            update_time: string;
-            /**
-             * The comments of the product
-             */
-            comments: string;
-            /**
-             * The currency associated with the deal product
-             */
-            currency: string;
-            /**
-             * The value of the discount. The `discount_type` field can be used to specify whether the value is an amount or a percentage
-             */
-            discount: number;
-            /**
-             * The type of the discount's value
-             */
-            discount_type: 'percentage' | 'amount';
-            /**
-             * The quantity of the product
-             */
-            quantity: number;
-            /**
-             * The price value of the product
-             */
-            item_price: number;
-            /**
-             * The tax option to be applied to the products. When using `inclusive`, the tax percentage will already be included in the price. When using `exclusive`, the tax will not be included in the price. When using `none`, no tax will be added. Use the `tax` field for defining the tax percentage amount. By default, the user setting value for tax options will be used. Changing this in one product affects the rest of the products attached to the deal
-             */
-            tax_method: 'exclusive' | 'inclusive' | 'none';
-            /**
-             * Whether this product is enabled for the deal
-             */
-            is_enabled: boolean;
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * How often a customer is billed for access to a service or product
-             *
-             * To set `billing_frequency` different than `one-time`, the deal must not have installments associated
-             *
-             * A deal can have up to 20 products attached with `billing_frequency` different than `one-time`
-             *
-             */
-            billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The number of times the billing frequency repeats for a product in a deal
-             *
-             * When `billing_frequency` is set to `one-time`, this field must be `null`
-             *
-             * When `billing_frequency` is set to `weekly`, this field cannot be `null`
-             *
-             * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
-             *
-             * Must be a positive integer less or equal to 208
-             *
-             */
-            billing_frequency_cycles: number | null;
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The billing start date. Must be between 10 years in the past and 10 years in the future
-             *
-             */
-            billing_start_date: string | null;
-        }>;
+        data: Array<GetDealsProductsItem>;
         /**
          * Pagination related data
          */
@@ -5376,120 +5490,7 @@ export type GetProductsResponses = {
         /**
          * Array containing data for all products
          */
-        data: Array<{
-            /**
-             * The ID of the product
-             */
-            id: number;
-            /**
-             * The name of the product
-             */
-            name: string;
-            /**
-             * The product code
-             */
-            code: string;
-            /**
-             * The unit in which this product is sold
-             */
-            unit: string;
-            /**
-             * The tax percentage
-             */
-            tax: number;
-            /**
-             * Whether this product will be marked as deleted or not
-             */
-            is_deleted: boolean;
-            /**
-             * Whether this product can be added to a deal or not
-             */
-            is_linkable: boolean;
-            /**
-             * Visibility of the product
-             */
-            visible_to: 1 | 3 | 5 | 7;
-            /**
-             * The ID of the Pipedrive user who owns the product
-             */
-            owner_id: number;
-            /**
-             * The date and time when the product was added
-             */
-            add_time: string;
-            /**
-             * The date and time when the product was last updated
-             */
-            update_time: string;
-            /**
-             * The description of the product
-             */
-            description: string;
-            /**
-             * The category of the product
-             */
-            category: string | null;
-            /**
-             * An object where each key represents a custom field. All custom fields are referenced as randomly generated 40-character hashes. To clear a custom field value, set it to `null`. For multi-option fields (field type `set`), use `null` to clear the selection — sending an empty array `[]` is not supported and will result in a validation error.
-             */
-            custom_fields: {
-                [key: string]: unknown;
-            };
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * How often a customer is billed for access to a service or product
-             *
-             */
-            billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The number of times the billing frequency repeats for a product in a deal
-             *
-             * When `billing_frequency` is set to `one-time`, this field must be `null`
-             *
-             * When `billing_frequency` is set to `weekly`, this field cannot be `null`
-             *
-             * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
-             *
-             * Must be a positive integer less or equal to 208
-             *
-             */
-            billing_frequency_cycles: number | null;
-        } & {
-            /**
-             * The prices of the product in different currencies
-             */
-            prices: Array<{
-                /**
-                 * The ID of the product
-                 */
-                product_id: number;
-                /**
-                 * The price of the product
-                 */
-                price: number;
-                /**
-                 * The currency of the price
-                 */
-                currency: string;
-                /**
-                 * The cost of the product
-                 */
-                cost: number;
-                /**
-                 * The direct cost of the product
-                 */
-                direct_cost: number | null;
-                /**
-                 * The notes about the price
-                 */
-                notes: string;
-            }>;
-        }>;
+        data: Array<GetProductsItem>;
         /**
          * Pagination related data
          */
@@ -5688,120 +5689,7 @@ export type GetProductResponses = {
          * If the response is successful or not
          */
         success: boolean;
-        data: {
-            /**
-             * The ID of the product
-             */
-            id: number;
-            /**
-             * The name of the product
-             */
-            name: string;
-            /**
-             * The product code
-             */
-            code: string;
-            /**
-             * The unit in which this product is sold
-             */
-            unit: string;
-            /**
-             * The tax percentage
-             */
-            tax: number;
-            /**
-             * Whether this product will be marked as deleted or not
-             */
-            is_deleted: boolean;
-            /**
-             * Whether this product can be added to a deal or not
-             */
-            is_linkable: boolean;
-            /**
-             * Visibility of the product
-             */
-            visible_to: 1 | 3 | 5 | 7;
-            /**
-             * The ID of the Pipedrive user who owns the product
-             */
-            owner_id: number;
-            /**
-             * The date and time when the product was added
-             */
-            add_time: string;
-            /**
-             * The date and time when the product was last updated
-             */
-            update_time: string;
-            /**
-             * The description of the product
-             */
-            description: string;
-            /**
-             * The category of the product
-             */
-            category: string | null;
-            /**
-             * An object where each key represents a custom field. All custom fields are referenced as randomly generated 40-character hashes. To clear a custom field value, set it to `null`. For multi-option fields (field type `set`), use `null` to clear the selection — sending an empty array `[]` is not supported and will result in a validation error.
-             */
-            custom_fields: {
-                [key: string]: unknown;
-            };
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * How often a customer is billed for access to a service or product
-             *
-             */
-            billing_frequency: 'one-time' | 'annually' | 'semi-annually' | 'quarterly' | 'monthly' | 'weekly';
-        } & {
-            /**
-             * Only available in Growth and above plans
-             *
-             * The number of times the billing frequency repeats for a product in a deal
-             *
-             * When `billing_frequency` is set to `one-time`, this field must be `null`
-             *
-             * When `billing_frequency` is set to `weekly`, this field cannot be `null`
-             *
-             * For all the other values of `billing_frequency`, `null` represents a product billed indefinitely
-             *
-             * Must be a positive integer less or equal to 208
-             *
-             */
-            billing_frequency_cycles: number | null;
-        } & {
-            /**
-             * The prices of the product in different currencies
-             */
-            prices: Array<{
-                /**
-                 * The ID of the product
-                 */
-                product_id: number;
-                /**
-                 * The price of the product
-                 */
-                price: number;
-                /**
-                 * The currency of the price
-                 */
-                currency: string;
-                /**
-                 * The cost of the product
-                 */
-                cost: number;
-                /**
-                 * The direct cost of the product
-                 */
-                direct_cost: number | null;
-                /**
-                 * The notes about the price
-                 */
-                notes: string;
-            }>;
-        };
+        data: GetProductItem;
     };
 };
 

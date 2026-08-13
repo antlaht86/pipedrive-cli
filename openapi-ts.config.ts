@@ -84,6 +84,60 @@ const relaxNullability = (value: unknown): void => {
 };
 
 /**
+ * Collapses a record node's `allOf` chain into one `type: object`.
+ *
+ * Pipedrive composes some records out of `allOf` members — a product is
+ * `BaseProduct` (itself a nested `allOf` of three objects) intersected with
+ * `PricesArray`. The hoist below cannot take such a node as it stands, so
+ * `zGetProductsItem` did not exist at all and `pd products list` had no record
+ * schema to validate against.
+ *
+ * The merge is into one object rather than a preserved intersection on the
+ * reason ADR-0006 §2 already recorded: a `ZodIntersection` supports neither
+ * `.pick()` nor `.omit()`, so a record schema that is one would be unrelaxable
+ * after the fact and unusable by ADR-0016's projection later.
+ *
+ * Only the record node's own chain is flattened. A property whose *value* is an
+ * `allOf` — `visible_to` on a product — is left alone; the generator already
+ * handles that shape.
+ *
+ * A member that redefines a property its sibling already defined throws rather
+ * than letting the last one win, on the same reasoning as the collision guard
+ * below: a silent merge of two disagreeing shapes is the failure nobody sees.
+ */
+const flattenAllOf = (node: SpecNode): SpecNode | undefined => {
+  if (!Array.isArray(node.allOf)) return node.type === "object" ? node : undefined;
+
+  const properties: SpecNode = {};
+  const required: string[] = [];
+
+  for (const raw of node.allOf) {
+    const member = asNode(raw);
+    if (member === undefined) return undefined;
+    const flattened = flattenAllOf(member);
+    if (flattened === undefined) return undefined;
+
+    for (const [key, value] of Object.entries(asNode(flattened.properties) ?? {})) {
+      const existing = properties[key];
+      if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(value)) {
+        throw new Error(
+          `Two allOf members of a hoisted record define '${key}' with different shapes. ` +
+            "Resolve the disagreement in a patch before regenerating.",
+        );
+      }
+      properties[key] = value;
+    }
+    if (Array.isArray(flattened.required)) required.push(...(flattened.required as string[]));
+  }
+
+  return {
+    type: "object",
+    properties,
+    ...(required.length === 0 ? {} : { required: [...new Set(required)] }),
+  };
+};
+
+/**
  * Hoists the inline record schema of every GET response out of `paths` and into
  * `components/schemas`, leaving a `$ref` behind.
  *
@@ -137,8 +191,10 @@ const hoistResponseRecords = (document: SpecNode): void => {
       // response carries the record itself. Both are hoisted, so `get` and
       // `list` share one record schema per resource family.
       const isList = data.type === "array";
-      const record = asNode(isList ? data.items : data);
-      if (record === undefined || record.type !== "object" || "$ref" in record) continue;
+      const inline = asNode(isList ? data.items : data);
+      if (inline === undefined || "$ref" in inline) continue;
+      const record = flattenAllOf(inline);
+      if (record === undefined) continue;
 
       const existing = schemas[name];
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(record)) {

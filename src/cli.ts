@@ -1,18 +1,17 @@
 /**
  * `pd` entrypoint — the file `bun run build` compiles into `dist/pd`.
  *
- * `--version` (ADR-0021 §6) and `pd auth status` (ADR-0012 §5) are wired here.
- * The command table, the manifest and `--help` arrive with ticket 16; until then
- * any other invocation is a placeholder refusal rather than an invented
- * contract, and the argument parsing below is deliberately the smallest thing
- * that serves the one command rather than the beginning of that table.
+ * `--version` (ADR-0021 §6) and `pd auth status` (ADR-0012 §5) are wired here,
+ * because ADR-0009 §8 puts both outside the resource grammar. Everything else
+ * goes to `router.ts`, which owns that grammar and the refusal for what is not
+ * in it. The manifest and `--help` arrive with ticket 16.
  */
 
 import { homedir } from "node:os";
 
 import { pdError, type PdError } from "./lib/errors.ts";
 import { authStatus } from "./lib/auth/status.ts";
-import { dealsList } from "./commands/deals-list.ts";
+import { route } from "./router.ts";
 import { isPdFailure } from "./lib/pipedrive/failure.ts";
 import { errorLine, ZERO_COUNTERS } from "./lib/output/ndjson-writer.ts";
 
@@ -119,18 +118,15 @@ const main = async (argv: readonly string[]): Promise<number> => {
     return runAuthStatus(argv.slice(2));
   }
 
-  if (argv[0] === "deals" && argv[1] === "list") {
-    return dealsList({
-      argv: argv.slice(2),
-      platform: process.platform,
-      env: process.env,
-      home: homedir(),
-      transport: globalThis.fetch,
-    });
-  }
-
-  process.stderr.write("pd: not implemented yet\n");
-  return 2;
+  // Everything else is the resource grammar of ADR-0009 §1, including the
+  // refusal for what it does not recognise.
+  return route({
+    argv,
+    platform: process.platform,
+    env: process.env,
+    home: homedir(),
+    transport: globalThis.fetch,
+  });
 };
 
 /**
@@ -141,11 +137,13 @@ const main = async (argv: readonly string[]): Promise<number> => {
  * back to being the values the rest of `pd` deals in.
  *
  * A throw that reaches here means no trailer was written — with **one
- * exception, and it is the reason for the check below**. The writer's own
- * second-trailer refusal happens precisely because a trailer already went out,
- * so answering it with an `error` line would commit the violation the refusal
- * exists to catch. That case is told apart by `details.trailer_already_written`
- * (ADR-0024 §3) and gets the stderr line and the exit code only.
+ * exception, and it is the reason for the check below**. The writer raises
+ * `details.trailer_already_written` (ADR-0024 §3) when the trailer and its
+ * stderr line are both already out: its second-trailer refusal, because
+ * answering that with an `error` line would commit the violation the refusal
+ * exists to catch, and its shadowed-key refusal, which writes a truthful
+ * trailer of its own first (ADR-0025 §1). That case gets the exit code and
+ * nothing else.
  *
  * In every other case the `error` line is still owed, and `internal` is what an
  * escaped programmer error is called.
@@ -165,8 +163,8 @@ main(process.argv.slice(2)).then(
       process.stdout.write(
         `${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`,
       );
+      process.stderr.write(`pd: ${error.message}\n`);
     }
-    process.stderr.write(`pd: ${error.message}\n`);
     process.exitCode = error.exit_code;
   },
 );
