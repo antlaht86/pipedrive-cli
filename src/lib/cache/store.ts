@@ -42,7 +42,7 @@ import {
 
 export type CacheRead =
   /** A live entry, within its TTL, its records as they arrived from Pipedrive. */
-  | { outcome: "hit"; records: unknown[]; fetchedAt: number }
+  | { outcome: "hit"; records: unknown[] }
   /** Absent, expired, or stamped with a version this binary does not know. */
   | { outcome: "miss" }
   /** Present and broken. The caller emits the warning and refetches. */
@@ -179,11 +179,7 @@ export const createCacheStore = ({
       // about stale answers points in.
       if (age < 0 || age > TTL_SECONDS[name] * 1000) return { outcome: "miss" };
 
-      return {
-        outcome: "hit",
-        records: entry.data.records,
-        fetchedAt: entry.data.fetched_at,
-      };
+      return { outcome: "hit", records: entry.data.records };
     },
 
     write: (name, records) => {

@@ -148,15 +148,23 @@ describe("a broken entry is skipped, never fatal", () => {
     expect(store().read("users").outcome).toBe("miss");
   });
 
-  test("an unreadable file warns rather than throwing", () => {
+  test("a file that exists and cannot be read warns rather than missing", () => {
+    // ADR-0005 §5 lists "an I/O error, wrong permissions" under skipped: an
+    // entry that is permanently unreadable would otherwise waste a request on
+    // every run with no signal anywhere. Root reads a 0000 file regardless, so
+    // the discriminating assertion is skipped there rather than weakened.
     place("users.json", JSON.stringify({ version: 1, fetched_at: time, records: [] }));
     chmodSync(`${directory()}/users.json`, 0o000);
 
-    // A miss and a skip are both survivable; what matters is that neither
-    // throws. Root can read a 0000 file, so the outcome differs by who runs
-    // the suite and only the absence of a throw is asserted.
-    expect(["miss", "skipped"]).toContain(store().read("users").outcome);
+    const read = store().read("users");
     chmodSync(`${directory()}/users.json`, 0o600);
+
+    if (process.getuid?.() !== 0) {
+      expect(read.outcome).toBe("skipped");
+      expect(read.outcome === "skipped" && read.warning.kind).toBe(
+        "cache_entry_skipped",
+      );
+    }
   });
 
   test("an absent entry is a plain miss with no warning", () => {

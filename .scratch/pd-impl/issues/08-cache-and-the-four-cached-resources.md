@@ -46,3 +46,38 @@ Notes for the implementer:
 - [x] `get` on a cached resource filters the cached list at zero requests
 - [x] A `users` fetch failure is fatal to `pd users list`
 - [x] `pd cache info` reports path, entries and ages; `pd cache clear` accepts no argument, pattern or flag
+
+## What shipped, and what it changed
+
+The eight entries, the four cached resources, both `cache` commands and the
+narrow v1 `users` client are in. Five questions the ADRs left open needed a
+ruling and are ratified as
+[ADR-0027](../../../docs/adr/0027-the-stale-schema-refetch-the-generalised-refresh-and-the-local-cache-commands.md):
+
+1. **A warm entry no record of which survives validation is refetched, not
+   reported.** The schema version stamps the file format, not the generated zod
+   record schemas, so an entry written before a regeneration is version-current
+   and schema-obsolete. Reporting it would fail a run that the same command
+   against a cold cache completes. The same rule covers the one matched record
+   of a `get`.
+2. **The absent-id refresh reaches all four cached resources**, not `users`
+   alone as ADR-0007 §4 wrote it. A stage created this morning is as invisible
+   to a 24-hour entry as a new colleague is to a 1-hour one, and `not_found` for
+   something that exists is indistinguishable from the truth.
+3. **`pd cache info` and `pd cache clear` resolve no credential.** Their target
+   is the root subtree, a constant, and the human running either is often the
+   human whose credential is what is broken. `info` therefore reports across
+   every credential's directory, labelled by fingerprint.
+4. **`--no-cache` is on the cached resources only** until ticket 11 gives the
+   live ones a cache to skip.
+5. **`record_type` is `field` for all five entities**, keeping ADR-0009's one
+   singular/plural rule intact.
+
+The sentinel filename `blocked.json` is reserved in `src/lib/cache/entries.ts`,
+because `pd cache clear` must spare it (ADR-0010 §7) and ships one ticket before
+the file exists. Ticket 09 owns its contents, its expiry and its refusal.
+
+Two modules came out of the work rather than being planned: `commands/
+arguments.ts`, which both command modules parse through, and
+`commands/prologue.ts`, which holds the parse-gate-writer-credential opening the
+two had otherwise copied verbatim.

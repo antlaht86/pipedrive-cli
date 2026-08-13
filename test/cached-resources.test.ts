@@ -261,6 +261,25 @@ describe("pd fields list", () => {
     );
   });
 
+  test("the refusal comes before the credential, so no token is needed", async () => {
+    // The prologue resolves the entity offline and only then reads the
+    // credential chain. Reversed, this run would be `auth` on a machine that
+    // has no token — the wrong answer to a command that is misspelled.
+    const out = capture();
+    const exit = await route({
+      argv: ["fields", "list"],
+      platform: "linux",
+      env: { XDG_CACHE_HOME: `${home}/cache` },
+      home,
+      clock,
+      sink: out.sink,
+      stderr: out.stderr,
+    });
+
+    expect(exit).toBe(2);
+    expect(out.last()).toMatchObject({ code: "usage" });
+  });
+
   test("an entity pd does not have is a usage error naming the five", async () => {
     const { exit, last } = await runWith(undefined, [
       "fields",
