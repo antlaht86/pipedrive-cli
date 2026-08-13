@@ -14,11 +14,7 @@ import { authStatus } from "./lib/auth/status.ts";
 import { route } from "./router.ts";
 import { cacheCommand, isCacheVerb, CACHE_VERBS } from "./commands/cache.ts";
 import { isPdFailure } from "./lib/pipedrive/failure.ts";
-import {
-  bareErrorLine,
-  errorLine,
-  ZERO_COUNTERS,
-} from "./lib/output/ndjson-writer.ts";
+import { errorLine, failWith, ZERO_COUNTERS } from "./lib/output/ndjson-writer.ts";
 
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
@@ -34,16 +30,12 @@ const version = (): string =>
 
 /**
  * ADR-0001: the machine-readable error object goes to **stdout**, and stderr
- * carries a human-readable one-line summary of the same error. Ticket 05's
- * NDJSON writer takes this over and adds the trailer fields a record stream
- * needs; `pd auth status` is not a record stream, so there is nothing for a
- * trailer to say about it.
+ * carries a human-readable one-line summary of the same error. `NdjsonWriter`
+ * takes this over and adds the trailer fields a record stream needs; the three
+ * commands ADR-0009 §8 puts outside the grammar are not record streams, so
+ * there is nothing for a trailer to say about one.
  */
-const fail = (error: PdError): number => {
-  process.stdout.write(`${JSON.stringify(bareErrorLine(error))}\n`);
-  process.stderr.write(`pd: ${error.message}\n`);
-  return error.exit_code;
-};
+const fail = (error: PdError): number => failWith(error);
 
 /**
  * ADR-0012 §3 refuses `--token <value>` in any form: argv is readable by every

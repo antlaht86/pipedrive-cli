@@ -228,6 +228,34 @@ export const ZERO_COUNTERS: TrailerCounters = {
 };
 
 /**
+ * The error object without the trailer fields, for the three commands ADR-0009
+ * §8 puts outside the NDJSON grammar — `pd auth status`, `pd cache info` and
+ * `pd cache clear`. None of them is a record stream, so there is nothing for
+ * `complete`, `emitted` or `requests` to say about one.
+ */
+const bareErrorLine = (error: PdError): Record<string, unknown> => ({
+  type: "error",
+  ...error,
+});
+
+/**
+ * Writes that error on both channels and hands back the run's exit code —
+ * ADR-0001 puts the machine-readable object on stdout and a one-line human
+ * summary of the same error on stderr, and the pair cannot come apart because
+ * one function writes both. It is `NdjsonWriter.error` for a command that has
+ * no stream and therefore no counters.
+ */
+export const failWith = (
+  error: PdError,
+  sink: Sink = stdoutSink,
+  stderr: Sink = stderrSink,
+): number => {
+  sink(`${JSON.stringify(bareErrorLine(error))}\n`);
+  stderr(`pd: ${error.message}\n`);
+  return error.exit_code;
+};
+
+/**
  * The `error` trailer object, built in one place because the samples are
  * compared byte for byte and key order is therefore part of the contract:
  * ADR-0001's four mandatory fields, then `retry_after_seconds` where the variant
@@ -236,17 +264,6 @@ export const ZERO_COUNTERS: TrailerCounters = {
  * `details` is always present, `{}` when the error carried none. A field that
  * comes and goes is a field a consumer has to test for.
  */
-/**
- * The same error object without the trailer fields, for the three commands
- * ADR-0009 §8 puts outside the NDJSON grammar — `pd auth status`, `pd cache
- * info` and `pd cache clear`. None of them is a record stream, so there is
- * nothing for `complete`, `emitted` or `requests` to say about one.
- */
-export const bareErrorLine = (error: PdError): Record<string, unknown> => ({
-  type: "error",
-  ...error,
-});
-
 export const errorLine = (
   error: PdError,
   counters: TrailerCounters,

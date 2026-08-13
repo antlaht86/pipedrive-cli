@@ -15,6 +15,8 @@
  * the TTL table, and a second copy of it is the one that would be wrong.
  */
 
+import { z } from "zod";
+
 export const CACHE_ENTRY_NAMES = [
   "users",
   "dealFields",
@@ -57,6 +59,24 @@ export const TTL_SECONDS: Record<CacheEntryName, number> = {
  * read path treats "no record survived validation" as a miss as well.
  */
 export const CACHE_SCHEMA_VERSION = 1;
+
+/**
+ * The file format itself, so the two readers of an entry — the store that
+ * serves it and `pd cache info` that reports its age — agree on what one is
+ * rather than each inspecting the JSON its own way.
+ *
+ * `records` is `unknown[]` because the record schema has not run yet and must
+ * not appear to have run: ADR-0005 §5 requires cached data to be validated on
+ * **read**, against the same schema a fresh response meets.
+ */
+export const StoredEntry = z.object({
+  version: z.int(),
+  /** Milliseconds since the epoch, from the injected clock. */
+  fetched_at: z.int(),
+  records: z.array(z.unknown()),
+});
+
+export type StoredEntry = z.infer<typeof StoredEntry>;
 
 export const entryFileName = (name: CacheEntryName): string => `${name}.json`;
 

@@ -34,17 +34,18 @@ import { readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node
 import { fromThrowable } from "neverthrow";
 
 import { pdError, type PdError } from "../lib/errors.ts";
-import { cacheRootDir, type PathContext } from "../lib/auth/paths.ts";
+import { cacheRootDir, joinerFor, type PathContext } from "../lib/auth/paths.ts";
 import {
   CACHE_ENTRY_NAMES,
   CACHE_SCHEMA_VERSION,
   SENTINEL_FILE,
+  StoredEntry,
   TTL_SECONDS,
   entryFileName,
   type CacheEntryName,
 } from "../lib/cache/entries.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
-import { bareErrorLine, type Sink } from "../lib/output/ndjson-writer.ts";
+import { failWith, type Sink } from "../lib/output/ndjson-writer.ts";
 
 export type CacheVerb = "info" | "clear";
 
@@ -108,10 +109,11 @@ const parseJson = fromThrowable((text: string): unknown => JSON.parse(text));
 const ageOf = (path: string, now: number): number | undefined => {
   const body = readText(path).andThen(parseJson);
   if (body.isErr()) return undefined;
-  const entry = body.value as { version?: unknown; fetched_at?: unknown };
-  return entry.version === CACHE_SCHEMA_VERSION &&
-    typeof entry.fetched_at === "number"
-    ? seconds(now - entry.fetched_at)
+  // The same schema the store reads an entry with, so this command cannot
+  // report an age for a file `pd` itself would refuse.
+  const entry = StoredEntry.safeParse(body.value);
+  return entry.success && entry.data.version === CACHE_SCHEMA_VERSION
+    ? seconds(now - entry.data.fetched_at)
     : undefined;
 };
 
@@ -213,19 +215,11 @@ export const cacheCommand = ({
   const command = `pd cache ${verb}`;
 
   const extra = argv[0];
-  if (extra !== undefined) {
-    const failure = refusal(command, extra);
-    out(`${JSON.stringify(bareErrorLine(failure))}\n`);
-    error(`pd: ${failure.message}\n`);
-    return failure.exit_code;
-  }
+  if (extra !== undefined) return failWith(refusal(command, extra), out, error);
 
   const context: PathContext = { platform, env, home };
   const root = cacheRootDir(context);
-  // The same explicit join `paths.ts` uses, and for the same reason: `path.join`
-  // on a POSIX host would build a Windows path with `/` separators.
-  const separator = platform === "win32" ? "\\" : "/";
-  const join = (...parts: string[]): string => parts.join(separator);
+  const join = joinerFor(platform);
 
   const report =
     verb === "info" ? info(root, join, clock.now()) : clear(root, join);

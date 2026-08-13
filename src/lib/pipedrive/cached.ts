@@ -182,6 +182,27 @@ const listQuery = (
 });
 
 /**
+ * A whole v2 list behind one generated operation. Six of the eight entries are
+ * exactly this and differ only in their operation, their record schema and
+ * their key, so they are one factory rather than six copies of a cursor loop
+ * with one of them subtly wrong.
+ */
+const v2Source = <T extends Record<string, unknown>>(
+  entry: CacheEntryName,
+  record: z.ZodType<T, unknown>,
+  operation: Parameters<PipedriveClient["v2"]>[0],
+  key: (raw: unknown) => string | number | undefined,
+): CachedSource =>
+  defineSource({
+    entry,
+    record,
+    key,
+    fetch: collectPages(
+      (cursor) => (client) => client.v2(operation, { query: listQuery(cursor) }),
+    ),
+  });
+
+/**
  * The five `*Fields` responses carry no response `title`, so the hoist in
  * `openapi-ts.config.ts` left them inline and there is no `zGetDealFieldsItem`
  * to import. The element schema is taken from the generated array instead of
@@ -190,61 +211,50 @@ const listQuery = (
  * drifts silently on the next regeneration.
  */
 const FIELD_SOURCES: Record<Entity, CachedSource> = {
-  deal: defineSource({
-    entry: "dealFields",
-    record: zGetDealFieldsResponse.shape.data.element,
-    key: codeKey,
-    fetch: collectPages(
-      (cursor) => (client) =>
-        client.v2(getDealFields, { query: listQuery(cursor) }),
-    ),
-  }),
-  person: defineSource({
-    entry: "personFields",
-    record: zGetPersonFieldsResponse.shape.data.element,
-    key: codeKey,
-    fetch: collectPages(
-      (cursor) => (client) =>
-        client.v2(getPersonFields, { query: listQuery(cursor) }),
-    ),
-  }),
-  organization: defineSource({
-    entry: "organizationFields",
-    record: zGetOrganizationFieldsResponse.shape.data.element,
-    key: codeKey,
-    fetch: collectPages(
-      (cursor) => (client) =>
-        client.v2(getOrganizationFields, { query: listQuery(cursor) }),
-    ),
-  }),
-  product: defineSource({
-    entry: "productFields",
-    record: zGetProductFieldsResponse.shape.data.element,
-    key: codeKey,
-    fetch: collectPages(
-      (cursor) => (client) =>
-        client.v2(getProductFields, { query: listQuery(cursor) }),
-    ),
-  }),
-  activity: defineSource({
-    entry: "activityFields",
-    record: zGetActivityFieldsResponse.shape.data.element,
-    key: codeKey,
-    fetch: collectPages(
-      (cursor) => (client) =>
-        client.v2(getActivityFields, { query: listQuery(cursor) }),
-    ),
-  }),
+  deal: v2Source(
+    "dealFields",
+    zGetDealFieldsResponse.shape.data.element,
+    getDealFields,
+    codeKey,
+  ),
+  person: v2Source(
+    "personFields",
+    zGetPersonFieldsResponse.shape.data.element,
+    getPersonFields,
+    codeKey,
+  ),
+  organization: v2Source(
+    "organizationFields",
+    zGetOrganizationFieldsResponse.shape.data.element,
+    getOrganizationFields,
+    codeKey,
+  ),
+  product: v2Source(
+    "productFields",
+    zGetProductFieldsResponse.shape.data.element,
+    getProductFields,
+    codeKey,
+  ),
+  activity: v2Source(
+    "activityFields",
+    zGetActivityFieldsResponse.shape.data.element,
+    getActivityFields,
+    codeKey,
+  ),
 };
 
-const single = (source: CachedSource) => (): CachedSource => source;
+/** A resource with one source: the entity a `fields` command passes is ignored. */
+const only =
+  (source: CachedSource) =>
+  (): CachedSource =>
+    source;
 
 const CACHED: readonly CachedResource[] = [
   {
     name: "users",
     recordType: "user",
     needsEntity: false,
-    source: single(
+    source: only(
       defineSource({
         entry: "users",
         record: UserRecord,
@@ -257,33 +267,13 @@ const CACHED: readonly CachedResource[] = [
     name: "pipelines",
     recordType: "pipeline",
     needsEntity: false,
-    source: single(
-      defineSource({
-        entry: "pipelines",
-        record: zGetPipelinesItem,
-        key: numberKey,
-        fetch: collectPages(
-          (cursor) => (client) =>
-            client.v2(getPipelines, { query: listQuery(cursor) }),
-        ),
-      }),
-    ),
+    source: only(v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey)),
   },
   {
     name: "stages",
     recordType: "stage",
     needsEntity: false,
-    source: single(
-      defineSource({
-        entry: "stages",
-        record: zGetStagesItem,
-        key: numberKey,
-        fetch: collectPages(
-          (cursor) => (client) =>
-            client.v2(getStages, { query: listQuery(cursor) }),
-        ),
-      }),
-    ),
+    source: only(v2Source("stages", zGetStagesItem, getStages, numberKey)),
   },
   {
     name: "fields",

@@ -3,11 +3,11 @@
  * resources of ADR-0005 §1, ADR-0007 and ADR-0009 §3.
  *
  * `resource.ts` is the same command for the five live resources, and everything
- * the two share is shared: the argument parser, the credential chain, the
- * writer, the error union and the exit codes. What differs is the middle, and
- * only the middle — where a live resource walks a cursor and yields pages, a
- * cached resource loads **one array of raw records**, from disk when the entry
- * is live and from Pipedrive when it is not.
+ * the two share is shared through `prologue.ts`: the argument parser, the gate,
+ * the writer, the credential chain, the error union and the exit codes. What
+ * differs is the middle, and only the middle — where a live resource walks a
+ * cursor and yields pages, a cached resource loads **one array of raw records**,
+ * from disk when the entry is live and from Pipedrive when it is not.
  *
  * ## The disk cannot change what `pd` accepts
  *
@@ -34,12 +34,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { z } from "zod";
 
 import { pdError, type PdError } from "../lib/errors.ts";
-import { resolveCredential } from "../lib/auth/credentials.ts";
 import { createCacheStore, type CacheStore } from "../lib/cache/store.ts";
-import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
-import { createGuardedFetch } from "../lib/pipedrive/guarded-fetch.ts";
-import type { Transport } from "../lib/pipedrive/guarded-fetch.ts";
-import { createPipedriveClient } from "../lib/pipedrive/client.ts";
 import {
   entityRefusal,
   isEntity,
@@ -49,28 +44,13 @@ import {
 } from "../lib/pipedrive/cached.ts";
 import { rejectedRecord } from "../lib/pipedrive/single.ts";
 import { noSurvivors, rejection, type Bound, type Page } from "../lib/pipedrive/walk.ts";
-import { NdjsonWriter, type Sink } from "../lib/output/ndjson-writer.ts";
 import { stream } from "../lib/output/stream.ts";
-import {
-  TOKEN_REFUSAL,
-  parseArguments,
-  refusesToken,
-  type Flag,
-} from "./arguments.ts";
-import type { Verb } from "./resource.ts";
+import type { Flag } from "./arguments.ts";
+import { begin, type CommandInput, type Verb } from "./prologue.ts";
 
-export type CachedCommandInput = {
+export type CachedCommandInput = CommandInput & {
   resource: CachedResource;
   verb: Verb;
-  /** Everything after `pd <resource> <verb>`. */
-  argv: readonly string[];
-  platform: NodeJS.Platform;
-  env: Record<string, string | undefined>;
-  home: string;
-  transport?: Transport;
-  clock?: Clock;
-  sink?: Sink;
-  stderr?: Sink;
 };
 
 /**
@@ -86,6 +66,15 @@ const flagsFor = (verb: Verb, needsEntity: boolean): readonly Flag[] => [
   "no-cache",
   ...(needsEntity ? (["entity"] as const) : []),
 ];
+
+/**
+ * The `--entity` value as the table understands it. An unknown spelling becomes
+ * `undefined`, which is the same answer a missing flag gives — and the same
+ * refusal, because `pd fields list --entity lead` and `pd fields list` are one
+ * mistake with one correction.
+ */
+const entityOf = (given: string | undefined): Entity | undefined =>
+  given !== undefined && isEntity(given) ? given : undefined;
 
 /** The whole list, and where it came from. */
 type Loaded = { records: readonly unknown[]; fromCache: boolean };
@@ -167,24 +156,14 @@ const notFound = (resource: CachedResource, id: string | number): PdError =>
 export const cachedCommand = async ({
   resource,
   verb,
-  argv,
-  platform,
-  env,
-  home,
-  transport,
-  clock = systemClock,
-  sink,
-  stderr,
+  ...input
 }: CachedCommandInput): Promise<number> => {
   const command = `pd ${resource.name} ${verb}`;
 
-  // Parsing is pure and comes first, because the two things built below take
-  // their configuration from it: the gate needs `--max-requests` before its
-  // first request, and the writer needs to know whether the run is bounded
-  // before its first record. A parse failure is still reported through the
-  // writer, so the trailer invariant holds either way.
-  const refused = refusesToken(argv);
-  const parsed = parseArguments({
+  // The entity is checked inside the prologue's own offline step, so a missing
+  // `--entity` is a usage error on a machine with no credential at all.
+  const started = begin({
+    ...input,
     command,
     flags: flagsFor(verb, resource.needsEntity),
     positional:
@@ -193,64 +172,25 @@ export const cachedCommand = async ({
           ? "code-id"
           : "integer-id"
         : "none",
-    argv,
-  });
-  const flags = parsed.isOk() ? parsed.value.flags : undefined;
-
-  const guarded = createGuardedFetch({
-    ...(transport === undefined ? {} : { transport }),
-    clock,
-    ...(flags?.["max-requests"] === undefined
-      ? {}
-      : { maxRequests: flags["max-requests"] }),
-  });
-
-  const writer = new NdjsonWriter({
     recordType: resource.recordType,
-    requests: guarded.dispatches,
-    // ADR-0003: the stderr size warning is for an **unbounded** run. A caller
-    // who passed `--limit` has already said how much output it wants.
-    bounded: flags?.limit !== undefined,
-    ...(sink === undefined ? {} : { sink }),
-    ...(stderr === undefined ? {} : { stderr }),
+    resolve: (flags) => {
+      const found = resource.source(entityOf(flags.entity));
+      return found === undefined
+        ? err(entityRefusal(command, flags.entity))
+        : ok(found);
+    },
   });
+  if (started.isErr()) return started.error;
 
-  // Before the parse failure, and deliberately: `--token abc` tokenises as an
-  // unknown flag, and answering it with the generic refusal would drop the one
-  // sentence that says where a token may come from instead.
-  if (refused) return writer.error(TOKEN_REFUSAL);
-  if (parsed.isErr()) return writer.error(parsed.error);
-
-  const given = parsed.value.flags.entity;
-  const entity: Entity | undefined =
-    given !== undefined && isEntity(given) ? given : undefined;
-  const source = resource.source(entity);
-  if (source === undefined) return writer.error(entityRefusal(command, given));
-
-  const credential = resolveCredential({
-    platform,
-    env,
-    home,
-    ...(parsed.value.flags["token-file"] === undefined
-      ? {}
-      : { tokenFile: parsed.value.flags["token-file"] }),
-  });
-  if (credential.isErr()) return writer.error(credential.error);
-
-  // ADR-0012 §3 and ADR-0021 §8: a credentials file the rest of the machine can
-  // read is a `warning`, not a refusal. It rides the stream like any other.
-  for (const warning of credential.value.warnings) writer.warn(warning);
-
-  const client = createPipedriveClient({
-    token: credential.value.token,
-    guarded,
-  });
+  const { parsed, resolved: source, writer, client, credential, clock } =
+    started.value;
+  const flags = parsed.flags;
 
   const store: CacheStore = createCacheStore({
-    platform,
-    env,
-    home,
-    fingerprint: credential.value.fingerprint,
+    platform: input.platform,
+    env: input.env,
+    home: input.home,
+    fingerprint: credential.fingerprint,
     clock,
   });
 
@@ -268,7 +208,7 @@ export const cachedCommand = async ({
   };
 
   const load = async (): Promise<Result<Loaded, PdError>> => {
-    if (parsed.value.flags["no-cache"] === true) return fetchFresh();
+    if (flags["no-cache"] === true) return fetchFresh();
 
     const read = store.read(source.entry);
     if (read.outcome === "skipped") writer.warn(read.warning);
@@ -280,7 +220,7 @@ export const cachedCommand = async ({
   const loaded = await load();
   if (loaded.isErr()) return writer.error(loaded.error);
 
-  const id = parsed.value.id;
+  const id = parsed.id;
 
   if (id === undefined) {
     const { records, fromCache } = loaded.value;
@@ -302,7 +242,7 @@ export const cachedCommand = async ({
       return writer.error(noSurvivors(resource.recordType, checked.rejected));
     }
 
-    return stream(onePage(bounded(checked.page, flags?.limit)), writer);
+    return stream(onePage(bounded(checked.page, flags.limit)), writer);
   }
 
   // ADR-0007 §4, generalised by ADR-0009 §3: `get` filters the list. The probe

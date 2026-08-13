@@ -28,29 +28,17 @@
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
 
 import type { PdWarning } from "../warnings.ts";
 import type { Clock } from "../pipedrive/clock.ts";
-import { cacheDirFor, type CacheDirContext } from "../auth/paths.ts";
+import { cacheDirFor, joinerFor, type CacheDirContext } from "../auth/paths.ts";
 import {
   CACHE_SCHEMA_VERSION,
+  StoredEntry,
   TTL_SECONDS,
   entryFileName,
   type CacheEntryName,
 } from "./entries.ts";
-
-/**
- * The file format. `version` is read before anything else, and `records` is
- * `unknown[]` because the record schema has not run yet and must not appear to
- * have run.
- */
-const StoredEntry = z.object({
-  version: z.int(),
-  /** Milliseconds since the epoch, from the injected clock. */
-  fetched_at: z.int(),
-  records: z.array(z.unknown()),
-});
 
 export type CacheRead =
   /** A live entry, within its TTL, its records as they arrived from Pipedrive. */
@@ -76,7 +64,11 @@ export type CacheStoreContext = CacheDirContext & { clock: Clock };
  * outcome is the same refetch either way. `reason` rides in the warning for a
  * human, and per ADR-0006 §6 `kind` is the only field a consumer branches on.
  */
-const skipped = (name: CacheEntryName, path: string, reason: string): PdWarning => ({
+const skipped = (
+  name: CacheEntryName,
+  path: string,
+  reason: string,
+): PdWarning => ({
   kind: "cache_entry_skipped",
   entry: name,
   path,
@@ -86,7 +78,37 @@ const skipped = (name: CacheEntryName, path: string, reason: string): PdWarning 
     "refetched it. This is not an error and the run continued.",
 });
 
-const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
+/**
+ * The write side of the same `kind` (ADR-0005 §8), and it needs its own
+ * sentence: nothing was refetched. The fetch succeeded and its records are
+ * already on their way to the caller — only the attempt to remember them
+ * failed, so the next run pays for the same fetch again.
+ */
+const unwritable = (
+  name: CacheEntryName,
+  path: string,
+  reason: string,
+): PdWarning => ({
+  kind: "cache_entry_skipped",
+  entry: name,
+  path,
+  reason,
+  message:
+    `The ${name} entry could not be cached at ${path} (${reason}); this run ` +
+    "is unaffected and the next one will fetch it again.",
+});
+
+/**
+ * The read, with the one distinction ADR-0005 draws between its two silences.
+ * An absent file is the ordinary cold-cache case and says nothing worth saying
+ * (§6); a file that exists and cannot be read is §5's "an I/O error, wrong
+ * permissions" and must warn, because a permanently unreadable entry otherwise
+ * wastes a request on every single run with no signal anywhere.
+ */
+const readText = fromThrowable(
+  (path: string) => readFileSync(path, "utf8"),
+  (cause) => (cause as { code?: string } | null)?.code,
+);
 const parseJson = fromThrowable((text: string): unknown => JSON.parse(text));
 
 const write = fromThrowable(
@@ -117,8 +139,8 @@ export const createCacheStore = ({
   ...context
 }: CacheStoreContext): CacheStore => {
   const directory = cacheDirFor(context);
-  const separator = context.platform === "win32" ? "\\" : "/";
-  const join = (file: string): string => [directory, file].join(separator);
+  const joiner = joinerFor(context.platform);
+  const join = (file: string): string => joiner(directory, file);
 
   return {
     path: directory,
@@ -126,8 +148,14 @@ export const createCacheStore = ({
     read: (name) => {
       const path = join(entryFileName(name));
       const text = readText(path);
-      // Absent is the ordinary cold-cache case and says nothing worth saying.
-      if (text.isErr()) return { outcome: "miss" };
+      if (text.isErr()) {
+        return text.error === "ENOENT"
+          ? { outcome: "miss" }
+          : {
+              outcome: "skipped",
+              warning: skipped(name, path, "it could not be read"),
+            };
+      }
 
       const body = parseJson(text.value);
       if (body.isErr()) {
@@ -169,7 +197,7 @@ export const createCacheStore = ({
 
       const made = makeDirectory(directory);
       if (made.isErr()) {
-        return skipped(name, path, "its directory could not be created");
+        return unwritable(name, path, "its directory could not be created");
       }
 
       const written = write(path, temporary, body);
@@ -177,7 +205,7 @@ export const createCacheStore = ({
         // A rename that failed leaves the temp file behind; a read-only
         // filesystem leaves nothing. Both are best-effort cleanups.
         remove(temporary);
-        return skipped(name, path, "it could not be written");
+        return unwritable(name, path, "it could not be written");
       }
       return undefined;
     },

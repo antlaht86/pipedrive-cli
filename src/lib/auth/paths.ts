@@ -47,6 +47,18 @@ const separator = (platform: Platform): string =>
   platform === "win32" ? "\\" : "/";
 
 /**
+ * The join every module below a directory from this file must use — the cache
+ * store reaching an entry file, `pd cache info` reaching a credential's
+ * directory. `node:path` is deliberately not used: `path.join` on a POSIX host
+ * would build a Windows path with `/` separators, and the mapping would then be
+ * right in production and wrong in every test that asserts it.
+ */
+export const joinerFor =
+  (platform: Platform) =>
+  (...parts: string[]): string =>
+    parts.join(separator(platform));
+
+/**
  * The root the per-user directory hangs off: the named environment variable if
  * it is set, and otherwise the platform's default relative to `home`.
  */
