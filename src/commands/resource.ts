@@ -20,9 +20,8 @@
  * system clock and `process.stdout.write` explicitly.
  */
 
-import { ok } from "neverthrow";
-
 import type { Resource } from "../lib/pipedrive/resources.ts";
+import { createProjection, projectPages } from "../lib/output/projection.ts";
 import { stream } from "../lib/output/stream.ts";
 import type { Flag } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
@@ -56,8 +55,8 @@ export type ResourceCommandInput = CommandInput & {
  * compile error rather than a value that reaches the walk unchecked.
  */
 const FLAGS: Record<Verb, readonly Flag[]> = {
-  list: ["token-file", "limit", "max-requests"],
-  get: ["token-file", "max-requests"],
+  list: ["token-file", "limit", "max-requests", "fields"],
+  get: ["token-file", "max-requests", "fields"],
 };
 
 export const resourceCommand = async ({
@@ -72,20 +71,24 @@ export const resourceCommand = async ({
     positional: verb === "get" ? "integer-id" : "none",
     recordType: resource.recordType,
     rename: resource.rename,
-    // A live resource needs nothing decided before it starts.
-    resolve: () => ok(undefined),
+    // Selector names come from the local zod schema, so a typo is refused
+    // before credential resolution or dispatch.
+    resolve: (flags) => createProjection(flags.fields, resource.fields, resource.rename),
   });
   if (started.isErr()) return started.error;
 
-  const { parsed, writer, client } = started.value;
+  const { parsed, resolved: projection, writer, client } = started.value;
 
   // `integer-id` above is what makes this a number; the shared parser also
   // serves `pd fields get <field_code>`, whose id is a string.
   const id = parsed.id;
   return stream(
-    typeof id === "number"
-      ? resource.get(client, id)
-      : resource.list(client, parsed.flags.limit),
+    projectPages(
+      typeof id === "number"
+        ? resource.get(client, id, projection)
+        : resource.list(client, parsed.flags.limit, projection),
+      projection,
+    ),
     writer,
   );
 };

@@ -4,7 +4,7 @@
 
 **Blocked by:** 06, 07
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0016 (field projection), ADR-0020 (absence).
 
@@ -26,15 +26,19 @@ Notes for the implementer:
 - The single-JSON-object commands (`manifest`, `auth status`, `cache info`, `docs`) **reject** `--fields` as a usage error rather than ignoring it.
 - **Known probe:** whether `custom_fields=` with an empty value means "none" upstream. If it does, dropping every custom field from a large walk is the single largest response-size win available. `pd` does not gamble on it — omit the parameter — but the probe is one keystroke and worth running.
 
-- [ ] `--fields` projects, is repeatable, accumulates, and deduplicates selectors
-- [ ] `id`, `type` and `record_type` survive projection unconditionally
-- [ ] `custom_fields.<hash>` is a legal selector and no deeper dotting is
-- [ ] An unknown top-level selector exits 2 **offline** with zero dispatches and lists the valid names
-- [ ] Naming a resolution artifact is a usage error whose message names the raw field
-- [ ] The legal selector set is identical with and without `--resolve`
-- [ ] A record whose every selected field is absent still emits with `id`
-- [ ] A valid hash matching zero records produces one `unmatched_field_selector` warning
-- [ ] Key order in machine mode follows `pd`'s schema order regardless of selector order
-- [ ] Push-down fires only under all four conditions, and the same projection with and without it is **byte-identical** (replay test, fixture pair)
-- [ ] `include_fields` is never sent
-- [ ] `--fields` on a single-JSON-object command is a usage error
+- [x] `--fields` projects, is repeatable, accumulates, and deduplicates selectors
+- [x] `id`, `type` and `record_type` survive projection unconditionally
+- [x] `custom_fields.<hash>` is a legal selector and no deeper dotting is
+- [x] An unknown top-level selector exits 2 **offline** with zero dispatches and lists the valid names
+- [x] Naming a resolution artifact is a usage error whose message names the raw field
+- [x] The legal selector set is identical with and without `--resolve`
+- [x] A record whose every selected field is absent still emits with `id`
+- [x] A valid hash matching zero records produces one `unmatched_field_selector` warning
+- [x] Key order in machine mode follows `pd`'s schema order regardless of selector order
+- [x] Push-down fires only under all four conditions, and the same projection with and without it is **byte-identical** (replay test, fixture pair)
+- [x] `include_fields` is never sent
+- [x] `--fields` on a single-JSON-object command is a usage error
+
+## What shipped
+
+`src/lib/output/projection.ts` validates selectors from each command's local zod schema, projects only after record validation, and emits one run-level warning per unmatched custom-field hash. Live resources pass the subtractive `custom_fields` query only on supported endpoints and only for 1–15 selected hashes; local trimming remains the contract. Cached resources use the same projection path. Replay coverage includes the fixture pair proving pushed-down and locally trimmed product records are byte-identical.

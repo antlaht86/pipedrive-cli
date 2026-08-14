@@ -44,6 +44,7 @@ import {
 } from "../lib/pipedrive/cached.ts";
 import { rejectedRecord } from "../lib/pipedrive/single.ts";
 import { noSurvivors, rejection, type Bound, type Page } from "../lib/pipedrive/walk.ts";
+import { createProjection, projectPages } from "../lib/output/projection.ts";
 import { stream } from "../lib/output/stream.ts";
 import type { Flag } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
@@ -64,6 +65,7 @@ const flagsFor = (verb: Verb, needsEntity: boolean): readonly Flag[] => [
   ...(verb === "list" ? (["limit"] as const) : []),
   "max-requests",
   "no-cache",
+  "fields",
   ...(needsEntity ? (["entity"] as const) : []),
 ];
 
@@ -174,16 +176,24 @@ export const cachedCommand = async ({
         : "none",
     recordType: resource.recordType,
     resolve: (flags) => {
-      const found = resource.source(entityOf(flags.entity));
-      return found === undefined
-        ? err(entityRefusal(command, flags.entity))
-        : ok(found);
+      const source = resource.source(entityOf(flags.entity));
+      if (source === undefined) return err(entityRefusal(command, flags.entity));
+      return createProjection(flags.fields, source.fields).map((projection) => ({
+        source,
+        projection,
+      }));
     },
   });
   if (started.isErr()) return started.error;
 
-  const { parsed, resolved: source, writer, client, credential, clock } =
-    started.value;
+  const {
+    parsed,
+    resolved: { source, projection },
+    writer,
+    client,
+    credential,
+    clock,
+  } = started.value;
   const flags = parsed.flags;
 
   const store: CacheStore = createCacheStore({
@@ -242,7 +252,10 @@ export const cachedCommand = async ({
       return writer.error(noSurvivors(resource.recordType, checked.rejected));
     }
 
-    return stream(onePage(bounded(checked.page, flags.limit)), writer);
+    return stream(
+      projectPages(onePage(bounded(checked.page, flags.limit)), projection),
+      writer,
+    );
   }
 
   // ADR-0007 §4, generalised by ADR-0009 §3: `get` filters the list. The probe
@@ -281,7 +294,10 @@ export const cachedCommand = async ({
   }
 
   return stream(
-    onePage({ records: [record.value], warnings: [], duplicates: 0 }),
+    projectPages(
+      onePage({ records: [record.value], warnings: [], duplicates: 0 }),
+      projection,
+    ),
     writer,
   );
 };

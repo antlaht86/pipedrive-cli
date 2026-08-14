@@ -64,6 +64,8 @@ export const Arguments = z.object({
   "no-cache": z.boolean().optional(),
   /** ADR-0009 §4: required on `fields`, and its value set is checked there. */
   entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
+  /** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
+  fields: z.array(z.string()).optional(),
 });
 
 export type Arguments = z.infer<typeof Arguments>;
@@ -80,6 +82,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
   "max-requests": "string",
   "no-cache": "boolean",
   entity: "string",
+  fields: "string",
 };
 
 /** `--a, --b and --c` — the Oxford-less list the refusal below reads best with. */
@@ -118,7 +121,10 @@ const tokenise = (command: string, flags: readonly Flag[]) =>
         strict: true,
         allowPositionals: true,
         options: Object.fromEntries(
-          flags.map((flag) => [flag, { type: FLAG_TYPE[flag] }]),
+          flags.map((flag) => [
+            flag,
+            { type: FLAG_TYPE[flag], ...(flag === "fields" ? { multiple: true } : {}) },
+          ]),
         ),
       }),
     (cause): PdError =>

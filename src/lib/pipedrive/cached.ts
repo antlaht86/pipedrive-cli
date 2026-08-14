@@ -70,6 +70,8 @@ export type CachedSource = {
   readonly entry: CacheEntryName;
   /** The identity of an **unvalidated** record; `undefined` when unrecoverable. */
   readonly key: (raw: unknown) => string | number | undefined;
+  /** Top-level names in the local record schema, in output order. */
+  readonly fields: readonly string[];
   /** ADR-0006 §2's second stage, one record at a time. */
   readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
   /** Every record, all pages, exactly as Pipedrive returned them. */
@@ -96,6 +98,7 @@ export type CachedResource = {
 type SourceDefinition<T extends Record<string, unknown>> = {
   entry: CacheEntryName;
   record: z.ZodType<T, unknown>;
+  fields: readonly string[];
   key: (raw: unknown) => string | number | undefined;
   fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
 };
@@ -108,10 +111,12 @@ type SourceDefinition<T extends Record<string, unknown>> = {
 const defineSource = <T extends Record<string, unknown>>({
   entry,
   record,
+  fields,
   key,
   fetch,
 }: SourceDefinition<T>): CachedSource => ({
   entry,
+  fields,
   key,
   fetch,
   parse: (raw) => {
@@ -192,10 +197,12 @@ const v2Source = <T extends Record<string, unknown>>(
   record: z.ZodType<T, unknown>,
   operation: Parameters<PipedriveClient["v2"]>[0],
   key: (raw: unknown) => string | number | undefined,
+  fields: readonly string[],
 ): CachedSource =>
   defineSource({
     entry,
     record,
+    fields,
     key,
     fetch: collectPages(
       (cursor) => (client) => client.v2(operation, { query: listQuery(cursor) }),
@@ -216,30 +223,35 @@ const FIELD_SOURCES: Record<Entity, CachedSource> = {
     zGetDealFieldsResponse.shape.data.element,
     getDealFields,
     codeKey,
+    Object.keys(zGetDealFieldsResponse.shape.data.element.shape),
   ),
   person: v2Source(
     "personFields",
     zGetPersonFieldsResponse.shape.data.element,
     getPersonFields,
     codeKey,
+    Object.keys(zGetPersonFieldsResponse.shape.data.element.shape),
   ),
   organization: v2Source(
     "organizationFields",
     zGetOrganizationFieldsResponse.shape.data.element,
     getOrganizationFields,
     codeKey,
+    Object.keys(zGetOrganizationFieldsResponse.shape.data.element.shape),
   ),
   product: v2Source(
     "productFields",
     zGetProductFieldsResponse.shape.data.element,
     getProductFields,
     codeKey,
+    Object.keys(zGetProductFieldsResponse.shape.data.element.shape),
   ),
   activity: v2Source(
     "activityFields",
     zGetActivityFieldsResponse.shape.data.element,
     getActivityFields,
     codeKey,
+    Object.keys(zGetActivityFieldsResponse.shape.data.element.shape),
   ),
 };
 
@@ -258,6 +270,7 @@ const CACHED: readonly CachedResource[] = [
       defineSource({
         entry: "users",
         record: UserRecord,
+        fields: Object.keys(UserRecord.shape),
         key: numberKey,
         fetch: fetchUsers,
       }),
@@ -267,13 +280,25 @@ const CACHED: readonly CachedResource[] = [
     name: "pipelines",
     recordType: "pipeline",
     needsEntity: false,
-    source: only(v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey)),
+    source: only(v2Source(
+      "pipelines",
+      zGetPipelinesItem,
+      getPipelines,
+      numberKey,
+      Object.keys(zGetPipelinesItem.shape),
+    )),
   },
   {
     name: "stages",
     recordType: "stage",
     needsEntity: false,
-    source: only(v2Source("stages", zGetStagesItem, getStages, numberKey)),
+    source: only(v2Source(
+      "stages",
+      zGetStagesItem,
+      getStages,
+      numberKey,
+      Object.keys(zGetStagesItem.shape),
+    )),
   },
   {
     name: "fields",

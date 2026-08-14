@@ -275,7 +275,7 @@ describe("the get verb", () => {
 
     expect(exit).toBe(2);
     expect(last["message"]).toBe(
-      "pd products get does not accept --frobnicate. It takes --token-file and --max-requests and no other flag.",
+      "pd products get does not accept --frobnicate. It takes --token-file, --max-requests and --fields and no other flag.",
     );
   });
 });

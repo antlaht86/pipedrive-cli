@@ -34,7 +34,7 @@
 
 import { pdError, type PdError } from "../errors.ts";
 import { PdFailure } from "../pipedrive/failure.ts";
-import { causeOf } from "../warnings.ts";
+import { causeOf, isRecordRejected } from "../warnings.ts";
 import type { PdWarning } from "../warnings.ts";
 import type { Bound, Page } from "../pipedrive/walk.ts";
 
@@ -339,7 +339,9 @@ export class NdjsonWriter {
     this.#refuseAfterTrailer("page");
 
     for (const warning of page.warnings) {
-      this.#skipped += 1;
+      // Only a rejected record moves `skipped`; run-level warnings such as an
+      // unmatched projection selector describe no removed record.
+      if (isRecordRejected(warning)) this.#skipped += 1;
       const cause = causeOf(warning);
       if (this.#causes.has(cause)) continue;
       if (this.#causes.size >= MAX_WARNING_CAUSES) continue;
