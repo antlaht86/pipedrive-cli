@@ -105,7 +105,6 @@ export const resourceCommand = async ({
         client,
         store,
         noCache: parsed.flags["no-cache"] === true,
-        resolveBudget: parsed.flags["resolve-budget"] ?? 50,
         writer,
       }))(projected)
     : projected;

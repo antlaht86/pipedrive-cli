@@ -218,7 +218,6 @@ export const cachedCommand = async ({
           client,
           store,
           noCache: flags["no-cache"] === true,
-          resolveBudget: flags["resolve-budget"] ?? 50,
           writer,
         }))(pages)
       : pages;

@@ -12,6 +12,7 @@ import {
 import type { PipedriveClient } from "../pipedrive/client.ts";
 import type { Pages } from "../pipedrive/resources.ts";
 import type { Page } from "../pipedrive/walk.ts";
+import { relationOfFieldType } from "../pipedrive/relations.ts";
 import type { NdjsonWriter } from "./ndjson-writer.ts";
 import {
   createRelationResolution,
@@ -66,7 +67,6 @@ type ResolutionContext = {
   client: PipedriveClient;
   store: CacheStore;
   noCache: boolean;
-  resolveBudget: number;
   writer: NdjsonWriter;
 };
 
@@ -155,26 +155,19 @@ const customLabel = (
   value: unknown,
   lookups: LookupMaps,
 ): string | string[] | undefined => {
+  const id = z.int().safeParse(value);
+  if (schema.field_type === "user") {
+    return id.success ? lookups.users?.get(id.data) : undefined;
+  }
+  const relation = relationOfFieldType(schema.field_type);
+  if (relation !== undefined) {
+    return id.success ? lookups[relation].get(id.data) : undefined;
+  }
+
   switch (schema.field_type) {
     case "enum":
     case "set":
       return optionLabel(schema, value);
-    case "user":
-    case "person":
-    case "people":
-    case "organization":
-    case "org": {
-      const id = z.int().safeParse(value);
-      let lookup: ReadonlyMap<number, string> | undefined;
-      if (schema.field_type === "user") {
-        lookup = lookups.users;
-      } else if (schema.field_type === "person" || schema.field_type === "people") {
-        lookup = lookups.persons;
-      } else {
-        lookup = lookups.organizations;
-      }
-      return id.success ? lookup?.get(id.data) : undefined;
-    }
     case "monetary":
       return moneyLabel(value);
     case "address":
@@ -190,7 +183,6 @@ export const createResolution = async ({
   client,
   store,
   noCache,
-  resolveBudget,
   writer,
 }: ResolutionContext): Promise<(pages: Pages) => Pages> => {
   let unavailableWarned = false;
@@ -267,7 +259,6 @@ export const createResolution = async ({
   const resolveRelations = createRelationResolution({
     client,
     writer,
-    budget: resolveBudget,
     lookups,
     fields: () => fields,
     unavailable,

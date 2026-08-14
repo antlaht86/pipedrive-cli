@@ -35,7 +35,11 @@ const metadata = (): Fixture[] => [
   cachedPage("stages", [stage(4)]),
 ];
 
-const run = async (fixtures: readonly Fixture[], argv: readonly string[] = []) => {
+const run = async (
+  fixtures: readonly Fixture[],
+  argv: readonly string[] = [],
+  clock?: FakeClock,
+) => {
   const out = capture();
   const exit = await route({
     argv: ["deals", "list", "--resolve", ...argv],
@@ -43,6 +47,7 @@ const run = async (fixtures: readonly Fixture[], argv: readonly string[] = []) =
     env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
     home,
     transport: createReplayTransport(fixtures),
+    ...(clock === undefined ? {} : { clock }),
     sink: out.sink,
     stderr: out.stderr,
   });
@@ -91,8 +96,10 @@ describe("--resolve variable-cost enrichment", () => {
     expect(last).toMatchObject({ resolved: "full", requests: 7 });
   });
 
-  test("emits the first resolved page before requesting the next walk page", async () => {
+  test("emits the first resolved page in roughly 250 ms before requesting the next page", async () => {
     const events: string[] = [];
+    const startedAt = performance.now();
+    let firstRecordAt: number | undefined;
     const replay = createReplayTransport([
       { path: DEALS_PATH, query: dealsQuery(), body: dealsPage([deal(1, { person_id: 8_201 })], "c2") },
       personBatch([8_201]),
@@ -105,13 +112,15 @@ describe("--resolve variable-cost enrichment", () => {
       platform: "linux",
       env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
       home,
-      transport: (request) => {
+      transport: async (request) => {
         events.push(request.url.includes("cursor=c2") ? "request:c2" : "request:first");
+        await Bun.sleep(100);
         return replay(request);
       },
       sink: (line) => {
         if (line.includes('"type":"record"') && line.includes('"id":1')) {
           events.push("record:1");
+          firstRecordAt = performance.now();
         }
         out.sink(line);
       },
@@ -120,6 +129,7 @@ describe("--resolve variable-cost enrichment", () => {
 
     expect(exit).toBe(0);
     expect(events.indexOf("record:1")).toBeLessThan(events.indexOf("request:c2"));
+    expect((firstRecordAt ?? Number.POSITIVE_INFINITY) - startedAt).toBeLessThan(350);
   });
 
   test("--fields reduces relation requests by projecting before prefetch", async () => {
@@ -154,6 +164,39 @@ describe("--resolve variable-cost enrichment", () => {
     expect(records(lines)[0]?.person_name).toBeUndefined();
     expect(warnings(lines).filter((line) => line.kind === "resolution_budget_exhausted")).toHaveLength(1);
     expect(last).toMatchObject({ type: "summary", resolved: "partial", requests: 1 });
+  });
+
+  test("counts retry attempts against --resolve-budget", async () => {
+    const id = 8_301;
+    const failed = { ...personBatch([id]), status: 500 };
+    const { exit, lines, last } = await run([
+      { path: DEALS_PATH, query: dealsQuery(), body: dealsPage([deal(1, { person_id: id })], null) },
+      failed,
+      failed,
+      personBatch([id]),
+    ], ["--fields", "person_id", "--resolve-budget", "2"], new FakeClock());
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]?.person_name).toBeUndefined();
+    expect(warnings(lines).filter((line) => line.kind === "resolution_budget_exhausted")).toHaveLength(1);
+    expect(last).toMatchObject({ resolved: "partial", requests: 3 });
+  });
+
+  test("relation retries preserve the last --max-requests slot for the walk", async () => {
+    const id = 8_401;
+    const failed = { ...personBatch([id]), status: 500 };
+    const { exit, lines, last } = await run([
+      { path: DEALS_PATH, query: dealsQuery(), body: dealsPage([deal(1, { person_id: id })], "c2") },
+      failed,
+      failed,
+      personBatch([id]),
+      { path: DEALS_PATH, query: dealsQuery("c2"), body: dealsPage([deal(2, { person_id: id + 1 })], null) },
+    ], ["--fields", "person_id", "--max-requests", "4"], new FakeClock());
+
+    expect(exit).toBe(0);
+    expect(records(lines)).toHaveLength(2);
+    expect(warnings(lines).filter((line) => line.kind === "resolution_budget_exhausted")).toHaveLength(1);
+    expect(last).toMatchObject({ resolved: "partial", requests: 4 });
   });
 
   test("uses a default relation ceiling of 50 requests", async () => {

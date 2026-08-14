@@ -8,6 +8,23 @@ import { getOrganizations, getPersons } from "./v2/generated/sdk.gen.ts";
 
 export type Relation = "persons" | "organizations";
 
+/** One mapping shared by relation collection and custom-field labelling. */
+export const relationOfFieldType = (fieldType: string): Relation | undefined => {
+  switch (fieldType) {
+    case "person":
+    case "people":
+      return "persons";
+    case "organization":
+    case "org":
+      return "organizations";
+    default:
+      return undefined;
+  }
+};
+
+export const rawFieldOf = (relation: Relation): "person_id" | "org_id" =>
+  relation === "persons" ? "person_id" : "org_id";
+
 const NamedRelation = z.object({ id: z.int(), name: z.string() });
 const RelationEnvelope = z.object({
   success: z.boolean(),
@@ -21,8 +38,8 @@ export const fetchRelationNames = async (
   ids: readonly number[],
 ): Promise<Result<ReadonlyMap<number, string>, PdError>> => {
   const response = await (relation === "persons"
-    ? client.v2(getPersons, { query: { ids: ids.join(",") } })
-    : client.v2(getOrganizations, { query: { ids: ids.join(",") } }));
+    ? client.relation(getPersons, { query: { ids: ids.join(",") } })
+    : client.relation(getOrganizations, { query: { ids: ids.join(",") } }));
   if (response.isErr()) return err(response.error);
 
   const parsed = RelationEnvelope.safeParse(response.value);

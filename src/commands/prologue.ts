@@ -50,6 +50,7 @@ import {
   createSentinel,
   type Sentinel,
 } from "../lib/cache/sentinel.ts";
+import { DEFAULT_RESOLVE_BUDGET } from "../lib/pipedrive/budgets.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
 import { createGuardedFetch } from "../lib/pipedrive/guarded-fetch.ts";
 import type { GuardedFetch, Transport } from "../lib/pipedrive/guarded-fetch.ts";
@@ -143,6 +144,7 @@ export const begin = <T>({
     ...(flags?.["max-requests"] === undefined
       ? {}
       : { maxRequests: flags["max-requests"] }),
+    resolveBudget: flags?.["resolve-budget"] ?? DEFAULT_RESOLVE_BUDGET,
     onBlocked: () => pending.sentinel?.record(),
   });
 

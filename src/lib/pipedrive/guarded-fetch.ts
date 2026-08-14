@@ -41,6 +41,7 @@ import { z } from "zod";
 
 import { pdError } from "../errors.ts";
 import type { PdErrorInput } from "../errors.ts";
+import { DEFAULT_RESOLVE_BUDGET } from "./budgets.ts";
 import type { Clock } from "./clock.ts";
 import { systemClock } from "./clock.ts";
 import { PdFailure, isPdFailure } from "./failure.ts";
@@ -269,6 +270,8 @@ export type GuardedFetchOptions = {
    * `undefined` is the default: absent the flag, a run is unbounded in requests.
    */
   maxRequests?: number;
+  /** ADR-0008 §9: every relation attempt, including retries, spends this ceiling. */
+  resolveBudget?: number;
   /**
    * Called once, at the instant a Cloudflare block is recognised — ADR-0010 §6.
    * The prologue hangs the sentinel write on it.
@@ -290,14 +293,14 @@ export type GuardedFetch = {
    * their per-call and per-client `fetch` override.
    */
   fetch: typeof fetch;
+  /** Relation-only path, sharing every gate while adding the soft resolve ceiling. */
+  relationFetch: typeof fetch;
   /**
    * ADR-0011 §9: every attempt is a network request and is counted as one.
    * ADR-0019 §2: every *"and no request was made"* assertion in the map is this
    * one question put to this one object.
    */
   dispatches: () => number;
-  /** ADR-0010 §4: enrichment may dispatch only while one request remains afterward. */
-  canDispatchEnrichment: () => boolean;
   /** For ADR-0015's stderr diagnostics, which report what paced a slow run. */
   limitOf: (family: GateFamily) => number;
   concurrency: number;
@@ -317,12 +320,14 @@ export const createGuardedFetch = ({
   transport = throwingTransport,
   clock = systemClock,
   maxRequests,
+  resolveBudget = DEFAULT_RESOLVE_BUDGET,
   onBlocked,
 }: GuardedFetchOptions = {}): GuardedFetch => {
   const gate = new BurstGate(clock);
   const limiter = pLimit(CONCURRENCY);
 
   let dispatches = 0;
+  let relationDispatches = 0;
   let burstStrikes = 0;
   let retriesUsed = 0;
 
@@ -362,7 +367,18 @@ export const createGuardedFetch = ({
    * because a reservation is always followed by a dispatch: nothing between here
    * and `transport` can decline. One counter cannot disagree with itself.
    */
-  const reserve = (path: string): void => {
+  const reserve = (path: string, relation: boolean): void => {
+    if (
+      relation &&
+      (relationDispatches >= resolveBudget ||
+        (maxRequests !== undefined && dispatches + 1 >= maxRequests))
+    ) {
+      throw fail({
+        code: "request_ceiling",
+        message: "Relation resolution yielded to its request ceiling.",
+        details: { enrichment: true, path },
+      });
+    }
     if (maxRequests !== undefined && dispatches >= maxRequests) {
       throw fail({
         code: "request_ceiling",
@@ -370,15 +386,20 @@ export const createGuardedFetch = ({
         details: { max_requests: maxRequests, path },
       });
     }
+    if (relation) relationDispatches += 1;
     dispatches += 1;
   };
 
-  const dispatch = async (request: Request, path: string): Promise<Response> => {
+  const dispatch = async (
+    request: Request,
+    path: string,
+    relation: boolean,
+  ): Promise<Response> => {
     const family = familyOf(path);
     let retriesForThisRequest = 0;
 
     for (;;) {
-      reserve(path);
+      reserve(path, relation);
       await gate.admit(family);
 
       const attempt = await ResultAsync.fromPromise(
@@ -483,7 +504,11 @@ export const createGuardedFetch = ({
     }
   };
 
-  const guarded = (input: FetchInput, init?: FetchInit): Promise<Response> => {
+  const guarded = (
+    relation: boolean,
+    input: FetchInput,
+    init?: FetchInit,
+  ): Promise<Response> => {
     const request = toRequest(input, init);
     const method = request.method.toUpperCase();
     const path = redactUrl(request.url);
@@ -503,18 +528,22 @@ export const createGuardedFetch = ({
       );
     }
 
-    return limiter(() => dispatch(request, path));
+    return limiter(() => dispatch(request, path, relation));
   };
+
+  const primaryFetch = (input: FetchInput, init?: FetchInit): Promise<Response> =>
+    guarded(false, input, init);
+  const relationFetch = (input: FetchInput, init?: FetchInit): Promise<Response> =>
+    guarded(true, input, init);
 
   return {
     // `preconnect` is part of the runtime's `fetch` shape, so the guarded
     // function has to carry it to be assignable. It is a no-op on purpose: it
     // is a performance hint with no response and no accounting, and opening a
     // socket outside the gate is exactly what this module exists to prevent.
-    fetch: Object.assign(guarded, { preconnect: (): void => {} }),
+    fetch: Object.assign(primaryFetch, { preconnect: (): void => {} }),
+    relationFetch: Object.assign(relationFetch, { preconnect: (): void => {} }),
     dispatches: () => dispatches,
-    canDispatchEnrichment: () =>
-      maxRequests === undefined || dispatches + 1 < maxRequests,
     limitOf: (family) => gate.limitOf(family),
     concurrency: CONCURRENCY,
   };

@@ -170,6 +170,11 @@ export type PipedriveClient = {
     call: SdkCall<TOptions>,
     options: TOptions,
   ) => ResultAsync<unknown, PdError>;
+  /** Variable-cost relation call, accounted separately while sharing the gate. */
+  relation: <TOptions>(
+    call: SdkCall<TOptions>,
+    options: TOptions,
+  ) => ResultAsync<unknown, PdError>;
   /**
    * The same, for the one v1 operation `pd` calls — `GET /users` (ADR-0007 §1).
    * It differs from `v2` in its `baseUrl` and in nothing else: both clients are
@@ -182,8 +187,6 @@ export type PipedriveClient = {
   ) => ResultAsync<unknown, PdError>;
   /** ADR-0011 §9's counter, for the trailer's `requests` field. */
   requests: () => number;
-  /** Whether one enrichment request leaves --max-requests headroom for the query. */
-  canDispatchEnrichment: () => boolean;
 };
 
 export type PipedriveClientOptions = {
@@ -199,6 +202,16 @@ export const createPipedriveClient = ({
     createConfig({
       baseUrl: PIPEDRIVE_V2_BASE_URL,
       fetch: guarded.fetch,
+      auth: apiKeyOnly(token),
+      parseAs: "text",
+      throwOnError: false,
+    }),
+  );
+
+  const relationClient: Client = createClient(
+    createConfig({
+      baseUrl: PIPEDRIVE_V2_BASE_URL,
+      fetch: guarded.relationFetch,
       auth: apiKeyOnly(token),
       parseAs: "text",
       throwOnError: false,
@@ -232,8 +245,8 @@ export const createPipedriveClient = ({
 
   return {
     v2: (call, options) => run(call({ ...options, client: v2Client })),
+    relation: (call, options) => run(call({ ...options, client: relationClient })),
     v1: (call, options) => run(call({ ...options, client: v1Client })),
     requests: guarded.dispatches,
-    canDispatchEnrichment: guarded.canDispatchEnrichment,
   };
 };
