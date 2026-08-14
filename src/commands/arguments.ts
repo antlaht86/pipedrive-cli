@@ -62,6 +62,8 @@ export const Arguments = z.object({
   "max-requests": positiveInteger("max-requests").optional(),
   /** ADR-0005 §8: skips the cached **read** and still writes the fresh answer. */
   "no-cache": z.boolean().optional(),
+  /** ADR-0008: one additive switch for every id-to-name resolution. */
+  resolve: z.boolean().optional(),
   /** ADR-0009 §4: required on `fields`, and its value set is checked there. */
   entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
   /** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
@@ -81,6 +83,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
   limit: "string",
   "max-requests": "string",
   "no-cache": "boolean",
+  resolve: "boolean",
   entity: "string",
   fields: "string",
 };

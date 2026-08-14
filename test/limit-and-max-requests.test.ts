@@ -271,7 +271,7 @@ describe("--limit does not exist on a non-list command", () => {
     const { last } = await runWith(undefined, ["deals", "get", "42", "--limit", "5"]);
 
     expect(last["message"]).toBe(
-      "pd deals get does not accept --limit. It takes --token-file, --max-requests and --fields and no other flag.",
+      "pd deals get does not accept --limit. It takes --token-file, --max-requests, --no-cache, --resolve and --fields and no other flag.",
     );
   });
 });

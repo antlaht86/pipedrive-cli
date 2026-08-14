@@ -571,11 +571,18 @@ describe("--no-cache skips the read and still writes", () => {
     expect(warm.last).toMatchObject({ emitted: 2, requests: 0 });
   });
 
-  test("it does not exist on the live resources", async () => {
-    const { exit, last } = await runWith(undefined, ["deals", "list", "--no-cache"]);
+  test("it exists on live resources now that resolution has cached metadata", async () => {
+    const { exit, last } = await runWith(
+      [{
+        path: "/api/v2/deals",
+        query: { limit: 500 },
+        body: { success: true, data: [], additional_data: { next_cursor: null } },
+      }],
+      ["deals", "list", "--no-cache"],
+    );
 
-    expect(exit).toBe(2);
-    expect(String(last["message"])).toContain("does not accept --no-cache");
+    expect(exit).toBe(0);
+    expect(last).toMatchObject({ type: "summary", requests: 1 });
   });
 });
 

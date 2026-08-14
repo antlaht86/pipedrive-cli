@@ -286,7 +286,7 @@ export class NdjsonWriter {
   readonly #stderr: Sink;
   readonly #recordType: string;
   readonly #requests: () => number;
-  readonly #resolved: Resolved;
+  #resolved: Resolved;
   readonly #rename: Readonly<Record<string, string>>;
   readonly #bounded: boolean;
   readonly #causes = new Set<string>();
@@ -404,6 +404,11 @@ export class NdjsonWriter {
   warn(warning: PdWarning): void {
     this.#refuseAfterTrailer("warn");
     this.#line({ type: "warning", ...warning });
+  }
+
+  /** ADR-0008: an ancillary resolver failed after the writer was constructed. */
+  resolutionPartial(): void {
+    if (this.#resolved === "full") this.#resolved = "partial";
   }
 
   /**

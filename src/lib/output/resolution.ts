@@ -1,0 +1,335 @@
+import { ok } from "neverthrow";
+
+import type { CacheStore } from "../cache/store.ts";
+import type { PdWarning } from "../warnings.ts";
+import {
+  fieldSource,
+  fixedSource,
+  type CachedSource,
+  type Entity,
+} from "../pipedrive/cached.ts";
+import type { PipedriveClient } from "../pipedrive/client.ts";
+import type { Pages } from "../pipedrive/resources.ts";
+import type { Page } from "../pipedrive/walk.ts";
+import type { NdjsonWriter } from "./ndjson-writer.ts";
+import type { Projection } from "./projection.ts";
+
+const HASH = /^[0-9a-f]{40}$/i;
+
+const USER_FIELDS = ["owner_id", "creator_user_id", "user_id"] as const;
+const STANDARD_PAIRS = [
+  ["owner_id", "owner_name", "users"],
+  ["creator_user_id", "creator_user_name", "users"],
+  ["user_id", "user_name", "users"],
+  ["pipeline_id", "pipeline_name", "pipelines"],
+  ["stage_id", "stage_name", "stages"],
+] as const;
+
+type LookupName = "users" | "pipelines" | "stages";
+type LookupMaps = Partial<Record<LookupName, ReadonlyMap<number, string>>>;
+type FieldSchema = {
+  field_code: string;
+  field_name: string;
+  field_type: string;
+  options?: unknown;
+};
+
+type ResolutionResource = {
+  readonly name: string;
+  readonly fields: readonly string[];
+  readonly entity?: Entity;
+};
+
+type ResolutionContext = {
+  resource: ResolutionResource;
+  projection: Projection | undefined;
+  client: PipedriveClient;
+  store: CacheStore;
+  noCache: boolean;
+  writer: NdjsonWriter;
+};
+
+type Loaded = { records: Record<string, unknown>[]; source: CachedSource };
+
+const parseAll = (
+  source: CachedSource,
+  raw: readonly unknown[],
+): Record<string, unknown>[] | undefined => {
+  const records: Record<string, unknown>[] = [];
+  for (const value of raw) {
+    const parsed = source.parse(value);
+    if (parsed.isErr()) return undefined;
+    records.push(parsed.value);
+  }
+  return records;
+};
+
+const idNameMap = (records: readonly Record<string, unknown>[]): Map<number, string> => {
+  const map = new Map<number, string>();
+  for (const record of records) {
+    if (typeof record.id === "number" && typeof record.name === "string") {
+      map.set(record.id, record.name);
+    }
+  }
+  return map;
+};
+
+const fieldMap = (records: readonly Record<string, unknown>[]): Map<string, FieldSchema> => {
+  const map = new Map<string, FieldSchema>();
+  for (const record of records) {
+    if (
+      typeof record.field_code === "string" &&
+      typeof record.field_name === "string" &&
+      typeof record.field_type === "string" &&
+      HASH.test(record.field_code)
+    ) {
+      map.set(record.field_code, {
+        field_code: record.field_code,
+        field_name: record.field_name,
+        field_type: record.field_type,
+        ...(record.options === undefined ? {} : { options: record.options }),
+      });
+    }
+  }
+  return map;
+};
+
+const scalar = (value: unknown): string | undefined =>
+  typeof value === "string" || typeof value === "number" ? String(value) : undefined;
+
+const optionIds = (value: unknown): { ids: string[]; array: boolean } | undefined => {
+  if (Array.isArray(value)) {
+    const ids = value.map(scalar);
+    return ids.every((id) => id !== undefined)
+      ? { ids: ids as string[], array: true }
+      : undefined;
+  }
+  const one = scalar(value);
+  if (one === undefined) return undefined;
+  if (typeof value === "string" && value.includes(",")) {
+    return { ids: value.split(",").map((id) => id.trim()), array: true };
+  }
+  return { ids: [one], array: false };
+};
+
+const optionLabel = (schema: FieldSchema, value: unknown): string | string[] | undefined => {
+  if (!Array.isArray(schema.options)) return undefined;
+  const labels = new Map<string, string>();
+  for (const option of schema.options) {
+    if (option === null || typeof option !== "object") continue;
+    const record = option as Record<string, unknown>;
+    const id = scalar(record.id);
+    if (id !== undefined && typeof record.label === "string") labels.set(id, record.label);
+  }
+  const values = optionIds(value);
+  if (values === undefined) return undefined;
+  const resolved = values.ids.map((id) => labels.get(id));
+  if (resolved.some((label) => label === undefined)) return undefined;
+  return values.array ? (resolved as string[]) : resolved[0];
+};
+
+const moneyLabel = (value: unknown): string | undefined => {
+  if (value === null || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.currency !== "string") return undefined;
+  const amount = raw.value;
+  if (typeof amount === "string" && amount !== "") return `${amount} ${raw.currency}`;
+  return typeof amount === "number" && Number.isFinite(amount)
+    ? `${amount.toFixed(2)} ${raw.currency}`
+    : undefined;
+};
+
+const addressLabel = (value: unknown): string | undefined => {
+  const values = Array.isArray(value)
+    ? value
+    : value !== null && typeof value === "object"
+      ? Object.values(value as Record<string, unknown>)
+      : [];
+  const parts = values.filter(
+    (part): part is string | number =>
+      (typeof part === "string" && part !== "") || typeof part === "number",
+  );
+  return parts.length === 0 ? undefined : parts.join(", ");
+};
+
+const customLabel = (
+  schema: FieldSchema,
+  value: unknown,
+  lookups: LookupMaps,
+): string | string[] | undefined => {
+  switch (schema.field_type) {
+    case "enum":
+    case "set":
+      return optionLabel(schema, value);
+    case "user": {
+      const id = typeof value === "number" ? value : undefined;
+      return id === undefined ? undefined : lookups.users?.get(id);
+    }
+    case "monetary":
+      return moneyLabel(value);
+    case "address":
+      return addressLabel(value);
+    default:
+      return undefined;
+  }
+};
+
+export const createFixedResolution = async ({
+  resource,
+  projection,
+  client,
+  store,
+  noCache,
+  writer,
+}: ResolutionContext): Promise<(pages: Pages) => Pages> => {
+  let unavailableWarned = false;
+  let unknownWarned = false;
+  let refreshAttempted = false;
+
+  const unavailable = (entry: string): void => {
+    writer.resolutionPartial();
+    if (unavailableWarned) return;
+    unavailableWarned = true;
+    writer.warn({
+      kind: "owner_resolution_unavailable",
+      resource: entry,
+      message: "Could not fetch resolution metadata; affected ids are unresolved.",
+    });
+  };
+
+  const fresh = async (source: CachedSource): Promise<Loaded | undefined> => {
+    const fetched = await source.fetch(client);
+    if (fetched.isErr()) {
+      unavailable(source.entry);
+      return undefined;
+    }
+    const warning = store.write(source.entry, fetched.value);
+    if (warning !== undefined) writer.warn(warning);
+    const records = parseAll(source, fetched.value);
+    if (records === undefined) {
+      unavailable(source.entry);
+      return undefined;
+    }
+    return { records, source };
+  };
+
+  const load = async (source: CachedSource): Promise<Loaded | undefined> => {
+    if (!noCache) {
+      const read = store.read(source.entry);
+      if (read.outcome === "skipped") writer.warn(read.warning);
+      if (read.outcome === "hit") {
+        const records = parseAll(source, read.records);
+        if (records !== undefined) return { records, source };
+      }
+    }
+    return fresh(source);
+  };
+
+  const selected = (field: string): boolean =>
+    resource.fields.includes(field) && (projection?.includes(field) ?? true);
+  const needsCustom = selected("custom_fields");
+  const needsUsers = needsCustom || USER_FIELDS.some(selected);
+  const needsPipelines = selected("pipeline_id");
+  const needsStages = selected("stage_id");
+
+  let schema = needsCustom && resource.entity !== undefined
+    ? await load(fieldSource(resource.entity))
+    : undefined;
+  const lookups: LookupMaps = {};
+  if (needsUsers) {
+    const loaded = await load(fixedSource("users"));
+    if (loaded !== undefined) lookups.users = idNameMap(loaded.records);
+  }
+  if (needsPipelines) {
+    const loaded = await load(fixedSource("pipelines"));
+    if (loaded !== undefined) lookups.pipelines = idNameMap(loaded.records);
+  }
+  if (needsStages) {
+    const loaded = await load(fixedSource("stages"));
+    if (loaded !== undefined) lookups.stages = idNameMap(loaded.records);
+  }
+
+  let fields = schema === undefined ? new Map<string, FieldSchema>() : fieldMap(schema.records);
+
+  const refreshUnknown = async (): Promise<void> => {
+    if (refreshAttempted || schema === undefined) return;
+    refreshAttempted = true;
+    if (resource.entity === undefined) return;
+    schema = await fresh(fieldSource(resource.entity));
+    fields = schema === undefined ? new Map() : fieldMap(schema.records);
+  };
+
+  const resolveRecord = (record: Record<string, unknown>): Record<string, unknown> => {
+    const custom = record.custom_fields;
+    const resolved: Record<string, { name: string; label?: string | string[] }> = {};
+    if (custom !== null && typeof custom === "object" && !Array.isArray(custom)) {
+      for (const [hash, value] of Object.entries(custom as Record<string, unknown>)) {
+        const definition = fields.get(hash);
+        if (definition === undefined) continue;
+        const label = customLabel(definition, value, lookups);
+        resolved[hash] = {
+          name: definition.field_name,
+          ...(label === undefined ? {} : { label }),
+        };
+      }
+    }
+
+    // Artifacts are inserted immediately after their raw field. The raw keys
+    // retain their schema order while the additive sibling is literally beside
+    // the id or block it explains.
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      out[key] = value;
+      const pair = STANDARD_PAIRS.find(([raw]) => raw === key);
+      if (pair !== undefined && typeof value === "number") {
+        const name = lookups[pair[2]]?.get(value);
+        if (name !== undefined) out[pair[1]] = name;
+      }
+      if (key === "custom_fields" && Object.keys(resolved).length > 0) {
+        out.custom_fields_resolved = resolved;
+      }
+    }
+    return out;
+  };
+
+  return async function* resolvePages(pages: Pages): Pages {
+    for await (const page of pages) {
+      if (page.isErr()) {
+        yield page;
+        return;
+      }
+
+      const unknown = new Set<string>();
+      if (schema !== undefined) {
+        for (const record of page.value.records) {
+          const custom = record.custom_fields;
+          if (custom === null || typeof custom !== "object" || Array.isArray(custom)) continue;
+          for (const hash of Object.keys(custom)) {
+            if (HASH.test(hash) && !fields.has(hash)) unknown.add(hash);
+          }
+        }
+      }
+      if (unknown.size > 0 && !refreshAttempted) await refreshUnknown();
+
+      const surviving = [...unknown].filter((hash) => !fields.has(hash));
+      const warnings: PdWarning[] = [...page.value.warnings];
+      if (surviving.length > 0) {
+        writer.resolutionPartial();
+        if (!unknownWarned) {
+          unknownWarned = true;
+          warnings.push({
+            kind: "unknown_custom_field",
+            resource: resource.name,
+            message: `${surviving.length} field key${surviving.length === 1 ? " is" : "s are"} not in the schema; emitted raw.`,
+          });
+        }
+      }
+
+      yield ok({
+        ...page.value,
+        warnings,
+        records: page.value.records.map(resolveRecord),
+      } as Page<Record<string, unknown>>);
+    }
+  };
+};

@@ -29,6 +29,7 @@ import type { Result } from "neverthrow";
 
 import type { PdError } from "../errors.ts";
 import type { Projection } from "../output/projection.ts";
+import type { Entity } from "./cached.ts";
 import type { PipedriveClient } from "./client.ts";
 import type { ObjectSchema } from "./schema.ts";
 import { LIST_PAGE_SIZE, walk, type Page } from "./walk.ts";
@@ -63,6 +64,8 @@ export type Resource = {
   readonly name: string;
   /** ADR-0009: singular, the `record_type` on every emitted line. */
   readonly recordType: string;
+  /** The matching cached field-schema source used by ADR-0008 resolution. */
+  readonly entity: Entity;
   /**
    * Output names for record fields that would shadow a line key. Empty on
    * every resource but `activities`, whose own `type` field would otherwise
@@ -83,6 +86,7 @@ type Fetch = (
 type Definition<T> = {
   name: string;
   recordType: string;
+  entity: Entity;
   rename?: Readonly<Record<string, string>>;
   record: ObjectSchema<T>;
   /** Whether each endpoint offers ADR-0016's subtractive custom_fields parameter. */
@@ -102,6 +106,7 @@ type Definition<T> = {
 const define = <T extends { id: number }>({
   name,
   recordType,
+  entity,
   rename = {},
   record,
   pushdown,
@@ -110,6 +115,7 @@ const define = <T extends { id: number }>({
 }: Definition<T>): Resource => ({
   name,
   recordType,
+  entity,
   rename,
   fields: Object.keys(record.shape),
   list: (client, limit, projection) =>
@@ -153,6 +159,7 @@ const RESOURCES: readonly Resource[] = [
   define({
     name: "deals",
     recordType: "deal",
+    entity: "deal",
     record: zGetDealsItem,
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
@@ -163,6 +170,7 @@ const RESOURCES: readonly Resource[] = [
   define({
     name: "persons",
     recordType: "person",
+    entity: "person",
     record: zGetPersonsItem,
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
@@ -173,6 +181,7 @@ const RESOURCES: readonly Resource[] = [
   define({
     name: "organizations",
     recordType: "organization",
+    entity: "organization",
     record: zGetOrganizationsItem,
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
@@ -183,6 +192,7 @@ const RESOURCES: readonly Resource[] = [
   define({
     name: "activities",
     recordType: "activity",
+    entity: "activity",
     // An activity's own `type` is `"call"`, `"meeting"`, `"email"`. Left alone
     // it would overwrite ADR-0002's line discriminator and emit
     // `{"type":"call", …}`, which no reader of the format can classify. The
@@ -199,6 +209,7 @@ const RESOURCES: readonly Resource[] = [
   define({
     name: "products",
     recordType: "product",
+    entity: "product",
     record: zGetProductsItem,
     pushdown: { list: true, get: false },
     page: (cursor, customFields) => (client) =>

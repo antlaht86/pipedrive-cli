@@ -256,6 +256,25 @@ const FIELD_SOURCES: Record<Entity, CachedSource> = {
   ),
 };
 
+/** Sources shared by their own commands and ADR-0008's fixed-cost resolver. */
+const FIXED_SOURCES = {
+  users: defineSource({
+    entry: "users",
+    record: UserRecord,
+    key: numberKey,
+    fetch: fetchUsers,
+  }),
+  pipelines: v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey),
+  stages: v2Source("stages", zGetStagesItem, getStages, numberKey),
+} as const;
+
+export type FixedSourceName = keyof typeof FIXED_SOURCES;
+
+export const fixedSource = (name: FixedSourceName): CachedSource =>
+  FIXED_SOURCES[name];
+
+export const fieldSource = (entity: Entity): CachedSource => FIELD_SOURCES[entity];
+
 /** A resource with one source: the entity a `fields` command passes is ignored. */
 const only =
   (source: CachedSource) =>
@@ -267,36 +286,19 @@ const CACHED: readonly CachedResource[] = [
     name: "users",
     recordType: "user",
     needsEntity: false,
-    source: only(
-      defineSource({
-        entry: "users",
-        record: UserRecord,
-        key: numberKey,
-        fetch: fetchUsers,
-      }),
-    ),
+    source: only(FIXED_SOURCES.users),
   },
   {
     name: "pipelines",
     recordType: "pipeline",
     needsEntity: false,
-    source: only(v2Source(
-      "pipelines",
-      zGetPipelinesItem,
-      getPipelines,
-      numberKey,
-    )),
+    source: only(FIXED_SOURCES.pipelines),
   },
   {
     name: "stages",
     recordType: "stage",
     needsEntity: false,
-    source: only(v2Source(
-      "stages",
-      zGetStagesItem,
-      getStages,
-      numberKey,
-    )),
+    source: only(FIXED_SOURCES.stages),
   },
   {
     name: "fields",

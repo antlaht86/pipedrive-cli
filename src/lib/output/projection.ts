@@ -98,6 +98,8 @@ export type Projection = {
   /** A comma-separated value suitable for Pipedrive's subtractive query parameter. */
   readonly pushdown: string | undefined;
   readonly apply: (record: Record<string, unknown>) => Record<string, unknown>;
+  /** Whether the projected record retains this raw top-level field. */
+  readonly includes: (field: string) => boolean;
   readonly unmatched: () => readonly CustomFieldHash[];
 };
 
@@ -172,6 +174,7 @@ export const createProjection = (
       }
       return projected;
     },
+    includes: (field) => rawSelected.has(field),
     unmatched: () => sortedHashes.filter((hash) => !matched.has(hash)),
   });
 };

@@ -152,6 +152,7 @@ export const begin = <T>({
     // ADR-0003: the stderr size warning is for an **unbounded** run. A caller
     // who passed `--limit` has already said how much output it wants.
     bounded: flags?.limit !== undefined,
+    resolved: flags?.resolve === true ? "full" : "off",
     ...(rename === undefined ? {} : { rename }),
     ...(sink === undefined ? {} : { sink }),
     ...(stderr === undefined ? {} : { stderr }),

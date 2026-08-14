@@ -45,7 +45,9 @@ import {
 import { rejectedRecord } from "../lib/pipedrive/single.ts";
 import { noSurvivors, rejection, type Bound, type Page } from "../lib/pipedrive/walk.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
+import { createFixedResolution } from "../lib/output/resolution.ts";
 import { stream } from "../lib/output/stream.ts";
+import type { Pages } from "../lib/pipedrive/resources.ts";
 import type { Flag } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
 
@@ -65,6 +67,7 @@ const flagsFor = (verb: Verb, needsEntity: boolean): readonly Flag[] => [
   ...(verb === "list" ? (["limit"] as const) : []),
   "max-requests",
   "no-cache",
+  "resolve",
   "fields",
   ...(needsEntity ? (["entity"] as const) : []),
 ];
@@ -206,6 +209,18 @@ export const cachedCommand = async ({
     clock,
   });
 
+  const withResolution = async (pages: Pages): Promise<Pages> =>
+    flags.resolve === true
+      ? (await createFixedResolution({
+          resource: { name: resource.name, fields: source.fields },
+          projection,
+          client,
+          store,
+          noCache: flags["no-cache"] === true,
+          writer,
+        }))(pages)
+      : pages;
+
   /**
    * ADR-0005 §8: the fresh answer replaces the cached entry even when the read
    * was skipped by `--no-cache`, so one run restores the normal path. A fetch
@@ -255,7 +270,9 @@ export const cachedCommand = async ({
     }
 
     return stream(
-      projectPages(onePage(bounded(checked.page, flags.limit)), projection),
+      await withResolution(
+        projectPages(onePage(bounded(checked.page, flags.limit)), projection),
+      ),
       writer,
     );
   }
@@ -296,9 +313,11 @@ export const cachedCommand = async ({
   }
 
   return stream(
-    projectPages(
-      onePage({ records: [record.value], warnings: [], duplicates: 0 }),
-      projection,
+    await withResolution(
+      projectPages(
+        onePage({ records: [record.value], warnings: [], duplicates: 0 }),
+        projection,
+      ),
     ),
     writer,
   );
