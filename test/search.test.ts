@@ -131,6 +131,24 @@ const fixture = (
 	},
 });
 
+const itemsFixture = (
+	items: unknown[],
+	query: Record<string, string | number> = {
+		item_types: "deal,person,organization,product",
+		limit: 100,
+		term: "Acme",
+	},
+	nextCursor: string | null = null,
+): Fixture => ({
+	path: "/api/v2/itemSearch",
+	query,
+	body: {
+		success: true,
+		data: { items, related_items: [] },
+		additional_data: { next_cursor: nextCursor },
+	},
+});
+
 const run = async (
 	argv: readonly string[],
 	fixtures?: readonly Fixture[],
@@ -139,7 +157,8 @@ const run = async (
 ) => {
 	const out = capture();
 	let dispatches = 0;
-	const replay = fixtures === undefined ? undefined : createReplayTransport(fixtures);
+	const replay =
+		fixtures === undefined ? undefined : createReplayTransport(fixtures);
 	const exit = await route({
 		argv,
 		platform: "linux",
@@ -177,7 +196,9 @@ describe("the search verb", () => {
 				record_type: entry.recordType,
 				...entry.expected,
 			});
-			expect(hit["record_type"]).not.toBe(entry.recordType.replace("_search_hit", ""));
+			expect(hit["record_type"]).not.toBe(
+				entry.recordType.replace("_search_hit", ""),
+			);
 			expect(hit).not.toHaveProperty("item");
 			expect(hit).not.toHaveProperty("owner");
 			expect(hit).not.toHaveProperty("custom_fields");
@@ -272,11 +293,93 @@ describe("the search verb", () => {
 		});
 	}
 
+	test("items search streams all four hit types, deduplicates by type and excludes leads", async () => {
+		const mixed = CASES.map((entry, index) => ({
+			result_score: 1 - index / 10,
+			item: {
+				...entry.item,
+				id: index < 2 ? 42 : index + 42,
+			},
+		}));
+		const duplicateDeal = mixed[0];
+		const lead = {
+			result_score: 0.1,
+			item: {
+				...(CASES[0] as SearchCase).item,
+				id: 99,
+				type: "lead",
+			},
+		};
+		const result = await run(
+			["items", "search", "Acme"],
+			[itemsFixture([...mixed, duplicateDeal, lead])],
+		);
+
+		expect(result.exit).toBe(0);
+		expect(
+			records(result.lines).map((line) => [line["record_type"], line["id"]]),
+		).toEqual([
+			["deal_search_hit", 42],
+			["person_search_hit", 42],
+			["organization_search_hit", 44],
+			["product_search_hit", 45],
+		]);
+		expect(result.lines.at(-1)).toMatchObject({
+			type: "summary",
+			duplicates: 1,
+			skipped: 1,
+			requests: 1,
+		});
+	});
+
+	test("items search pins its types on every 100-item page", async () => {
+		const deal = CASES[0] as SearchCase;
+		const person = CASES[1] as SearchCase;
+		const result = await run(
+			["items", "search", "Acme", "--types", "deal,person"],
+			[
+				itemsFixture(
+					[{ result_score: 0.9, item: deal.item }],
+					{ item_types: "deal,person", limit: 100, term: "Acme" },
+					"next",
+				),
+				itemsFixture([{ result_score: 0.8, item: person.item }], {
+					cursor: "next",
+					item_types: "deal,person",
+					limit: 100,
+					term: "Acme",
+				}),
+			],
+		);
+
+		expect(result.exit).toBe(0);
+		expect(result.dispatches).toBe(2);
+	});
+
+	test("items refuses types outside its fixed set offline", async () => {
+		for (const types of ["lead", "deal,project", "deal,"]) {
+			const result = await run(["items", "search", "Acme", "--types", types]);
+			expect(result.exit).toBe(2);
+			expect(result.dispatches).toBe(0);
+			expect(result.lines.at(-1)?.["code"]).toBe("usage");
+		}
+	});
+
+	test("items has neither list nor get", async () => {
+		for (const argv of [
+			["items", "list"],
+			["items", "get", "42"],
+		]) {
+			const result = await run(argv);
+			expect(result.exit).toBe(2);
+			expect(result.dispatches).toBe(0);
+		}
+	});
+
 	test("search is not exposed for out-of-scope resources or endpoints", async () => {
 		for (const argv of [
 			["activities", "search", "Acme"],
 			["leads", "search", "Acme"],
-			["items", "search", "Acme"],
 			["deals", "search", "Acme", "--search-for-related-items"],
 		]) {
 			const result = await run(argv);
@@ -347,7 +450,10 @@ describe("the search verb", () => {
 			expect(result.exit).toBe(0);
 			expect(result.dispatches).toBe(1);
 			expect(records(result.lines)[0]).not.toHaveProperty("owner_name");
-			expect(result.lines.at(-1)).toMatchObject({ resolved: "partial", requests: 1 });
+			expect(result.lines.at(-1)).toMatchObject({
+				resolved: "partial",
+				requests: 1,
+			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
@@ -361,7 +467,12 @@ describe("the search verb", () => {
 			XDG_CONFIG_HOME: join(root, "config"),
 		};
 		try {
-			const primed = await run(["users", "list"], [usersFixture([user(11)])], env, root);
+			const primed = await run(
+				["users", "list"],
+				[usersFixture([user(11)])],
+				env,
+				root,
+			);
 			expect(primed.exit).toBe(0);
 
 			const entry = CASES[0] as SearchCase;

@@ -8,12 +8,14 @@ import type { Pages } from "./resources.ts";
 import { LIST_PAGE_SIZE, walk } from "./walk.ts";
 import {
 	searchDeals,
+	searchItem,
 	searchOrganization,
 	searchPersons,
 	searchProducts,
 } from "./v2/generated/sdk.gen.ts";
 import type {
 	SearchDealsData,
+	SearchItemData,
 	SearchOrganizationData,
 	SearchPersonsData,
 	SearchProductsData,
@@ -28,7 +30,7 @@ const DealHit = z
 		item: z
 			.object({
 				id: z.int(),
-				type: z.string(),
+				type: z.literal("deal"),
 				title: z.string(),
 				value: z.int(),
 				currency: z.string(),
@@ -76,7 +78,7 @@ const PersonHit = z
 		item: z
 			.object({
 				id: z.int(),
-				type: z.string(),
+				type: z.literal("person"),
 				name: z.string(),
 				phones: z.array(z.string()),
 				emails: z.array(z.string()),
@@ -109,7 +111,7 @@ const OrganizationHit = z
 		item: z
 			.object({
 				id: z.int(),
-				type: z.string(),
+				type: z.literal("organization"),
 				name: z.string(),
 				address: z.string(),
 				visible_to: z.int(),
@@ -137,7 +139,7 @@ const ProductHit = z
 		item: z
 			.object({
 				id: z.int(),
-				type: z.string(),
+				type: z.literal("product"),
 				name: z.string(),
 				code: z.int(),
 				visible_to: z.int(),
@@ -157,6 +159,19 @@ const ProductHit = z
 		result_score,
 	}));
 
+const ItemHit = z.union([
+	DealHit.transform((hit) => ({ ...hit, record_type: "deal_search_hit" })),
+	PersonHit.transform((hit) => ({ ...hit, record_type: "person_search_hit" })),
+	OrganizationHit.transform((hit) => ({
+		...hit,
+		record_type: "organization_search_hit",
+	})),
+	ProductHit.transform((hit) => ({
+		...hit,
+		record_type: "product_search_hit",
+	})),
+]);
+
 const SearchEnvelopeItems = z.looseObject({
 	data: z.object({ items: z.array(z.unknown()) }),
 });
@@ -171,6 +186,7 @@ const flattenEnvelope = (body: unknown): unknown => {
 export type SearchOptions = {
 	readonly exact: boolean;
 	readonly searchIn?: string;
+	readonly itemTypes?: string;
 	readonly personId?: number;
 	readonly organizationId?: number;
 	readonly status?: "open" | "won" | "lost";
@@ -181,13 +197,16 @@ type SearchCall = (
 	term: string,
 	cursor: string | undefined,
 	options: SearchOptions,
+	pageSize: number,
 ) => ReturnType<PipedriveClient["v2"]>;
 
 export type Search = {
 	readonly recordType: string;
 	readonly fields: readonly string[];
 	readonly searchIn: readonly string[];
+	readonly itemTypes?: readonly string[];
 	readonly flags: readonly Flag[];
+	readonly mixedRecordTypes?: boolean;
 	readonly run: (
 		client: PipedriveClient,
 		term: string,
@@ -200,9 +219,10 @@ const query = (
 	term: string,
 	cursor: string | undefined,
 	options: SearchOptions,
+	pageSize = LIST_PAGE_SIZE,
 ) => ({
 	term,
-	limit: LIST_PAGE_SIZE,
+	limit: pageSize,
 	...(cursor === undefined ? {} : { cursor }),
 	...(options.exact ? { exact_match: true } : {}),
 });
@@ -214,10 +234,16 @@ const defineSearch = <T extends Record<string, unknown> & { id: number }>({
 	flags,
 	record,
 	call,
+	pageSize = LIST_PAGE_SIZE,
+	keyOf = (hit: T) => `${recordType}:${hit.id}`,
+	...definition
 }: Omit<Search, "run"> & {
 	record: z.ZodType<T, unknown>;
 	call: SearchCall;
+	pageSize?: number;
+	keyOf?: (hit: T) => string | number;
 }): Search => ({
+	...definition,
 	recordType,
 	fields,
 	searchIn,
@@ -226,9 +252,9 @@ const defineSearch = <T extends Record<string, unknown> & { id: number }>({
 		walk({
 			resource: recordType,
 			record,
-			keyOf: (hit) => `${recordType}:${hit.id}`,
+			keyOf,
 			fetchPage: (cursor) =>
-				call(client, term, cursor, options).map(flattenEnvelope),
+				call(client, term, cursor, options, pageSize).map(flattenEnvelope),
 			...(limit === undefined ? {} : { limit }),
 		}),
 });
@@ -244,6 +270,8 @@ const BASE_FLAGS = [
 	"exact",
 	"search-in",
 ] as const satisfies readonly Flag[];
+
+const ITEM_TYPES = ["deal", "person", "organization", "product"] as const;
 
 const SEARCHES = new Map<string, Search>([
 	[
@@ -372,6 +400,61 @@ const SEARCHES = new Map<string, Search>([
 				}),
 		}),
 	],
+	[
+		"items",
+		defineSearch({
+			recordType: "item_search_hit",
+			mixedRecordTypes: true,
+			fields: [
+				"id",
+				"title",
+				"value",
+				"currency",
+				"status",
+				"name",
+				"phones",
+				"emails",
+				"address",
+				"code",
+				"visible_to",
+				"owner_id",
+				"stage_id",
+				"stage_name",
+				"person_id",
+				"person_name",
+				"org_id",
+				"org_name",
+				"matched_custom_field_values",
+				"matched_notes",
+				"is_archived",
+				"result_score",
+			],
+			searchIn: [
+				"address",
+				"code",
+				"custom_fields",
+				"email",
+				"name",
+				"notes",
+				"phone",
+				"title",
+			],
+			itemTypes: ITEM_TYPES,
+			flags: [...BASE_FLAGS, "types"],
+			record: ItemHit,
+			pageSize: 100,
+			keyOf: (hit) => `${hit.record_type}:${hit.id}`,
+			call: (client, term, cursor, options, pageSize) =>
+				client.v2(searchItem, {
+					query: {
+						...query(term, cursor, options, pageSize),
+						item_types:
+							options.itemTypes as SearchItemData["query"]["item_types"],
+						fields: options.searchIn as SearchItemData["query"]["fields"],
+					},
+				}),
+		}),
+	],
 ]);
 
 const csv = (value: string): string[] => value.split(",");
@@ -385,12 +468,14 @@ export const parseSearchOptions = (
 		return err(
 			pdError({
 				code: "usage",
-				message: "A search term needs at least two characters, or one with --exact.",
+				message:
+					"A search term needs at least two characters, or one with --exact.",
 			}),
 		);
 	}
 
-	const selected = flags["search-in"] === undefined ? undefined : csv(flags["search-in"]);
+	const selected =
+		flags["search-in"] === undefined ? undefined : csv(flags["search-in"]);
 	const invalid = selected?.find(
 		(field) => field === "" || !search.searchIn.includes(field),
 	);
@@ -401,6 +486,22 @@ export const parseSearchOptions = (
 				message:
 					`--search-in cannot search '${invalid}'. It takes one or more of: ` +
 					`${search.searchIn.join(", ")}.`,
+			}),
+		);
+	}
+
+	const selectedTypes =
+		flags.types === undefined ? search.itemTypes : csv(flags.types);
+	const invalidType = selectedTypes?.find(
+		(type) => type === "" || search.itemTypes?.includes(type) !== true,
+	);
+	if (invalidType !== undefined) {
+		return err(
+			pdError({
+				code: "usage",
+				message:
+					`--types cannot include '${invalidType}'. It takes one or more of: ` +
+					`${search.itemTypes?.join(", ") ?? ""}.`,
 			}),
 		);
 	}
@@ -417,6 +518,9 @@ export const parseSearchOptions = (
 	return ok({
 		exact: flags.exact === true,
 		...(selected === undefined ? {} : { searchIn: selected.join(",") }),
+		...(selectedTypes === undefined
+			? {}
+			: { itemTypes: selectedTypes.join(",") }),
 		...(flags["person-id"] === undefined
 			? {}
 			: { personId: flags["person-id"] }),

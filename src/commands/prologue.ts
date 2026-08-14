@@ -96,6 +96,8 @@ export type PrologueInput<T> = CommandInput & {
 	positional: Positional;
 	/** ADR-0009: singular, the `record_type` on every emitted line. */
 	recordType: string;
+	/** ADR-0017: the item-search stream has a record type per hit. */
+	mixedRecordTypes?: boolean;
 	/** Output names for record fields that would shadow a line key. */
 	rename?: Readonly<Record<string, string>>;
 	/**
@@ -122,6 +124,7 @@ export const begin = <T>({
 	flags: allowed,
 	positional,
 	recordType,
+	mixedRecordTypes,
 	rename,
 	resolve,
 	argv,
@@ -157,6 +160,7 @@ export const begin = <T>({
 	const writer = new NdjsonWriter({
 		recordType,
 		requests: guarded.dispatches,
+		...(mixedRecordTypes === undefined ? {} : { mixedRecordTypes }),
 		// ADR-0003: the stderr size warning is for an **unbounded** run. A caller
 		// who passed `--limit` has already said how much output it wants.
 		bounded: flags?.limit !== undefined,

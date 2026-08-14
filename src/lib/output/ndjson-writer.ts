@@ -75,6 +75,8 @@ const SIZE_WARNING_EVERY = 10_000;
 export type NdjsonWriterOptions = {
   /** ADR-0009: singular — `"deal"` for `pd deals list`. */
   recordType: string;
+  /** ADR-0017: mixed item-search records carry their own validated type. */
+  mixedRecordTypes?: boolean;
   /** ADR-0011 §9's dispatch counter, read once when the trailer is written. */
   requests: () => number;
   resolved?: Resolved;
@@ -285,6 +287,7 @@ export class NdjsonWriter {
   readonly #sink: Sink;
   readonly #stderr: Sink;
   readonly #recordType: string;
+  readonly #mixedRecordTypes: boolean;
   readonly #requests: () => number;
   #resolved: Resolved;
   readonly #rename: Readonly<Record<string, string>>;
@@ -298,6 +301,7 @@ export class NdjsonWriter {
 
   constructor({
     recordType,
+    mixedRecordTypes = false,
     requests,
     resolved = "off",
     rename = {},
@@ -306,6 +310,7 @@ export class NdjsonWriter {
     stderr = stderrSink,
   }: NdjsonWriterOptions) {
     this.#recordType = recordType;
+    this.#mixedRecordTypes = mixedRecordTypes;
     this.#requests = requests;
     this.#resolved = resolved;
     this.#rename = rename;
@@ -367,7 +372,23 @@ export class NdjsonWriter {
   records(records: readonly Record<string, unknown>[]): void {
     this.#refuseAfterTrailer("page");
     for (const record of records) {
-      const collision = shadowed(record, this.#rename);
+      let recordType = this.#recordType;
+      let body = record;
+      let collision: PdError | undefined;
+      if (this.#mixedRecordTypes) {
+        const { record_type: ownType, ...rest } = record;
+        body = rest;
+        if (typeof ownType === "string" && ownType !== "") {
+          recordType = ownType;
+        } else {
+          collision = pdError({
+            code: "internal",
+            message:
+              "A mixed record has no record_type. This is a bug in pd's search schema.",
+          });
+        }
+      }
+      collision ??= shadowed(body, this.#rename);
       if (collision !== undefined) {
         this.error(collision);
         throw new PdFailure(
@@ -381,8 +402,8 @@ export class NdjsonWriter {
       this.#emitted += 1;
       this.#line({
         type: "record",
-        record_type: this.#recordType,
-        ...present(record, this.#rename),
+        record_type: recordType,
+        ...present(body, this.#rename),
       });
       this.#warnOnSize();
     }

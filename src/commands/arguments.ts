@@ -185,7 +185,12 @@ export const Arguments = z.object({
 	/** ADR-0017: exact search permits a one-character term. */
 	exact: z.boolean().optional(),
 	/** ADR-0017: names where to search, never what to emit. */
-	"search-in": z.string().min(1, { error: "--search-in needs a value." }).optional(),
+	"search-in": z
+		.string()
+		.min(1, { error: "--search-in needs a value." })
+		.optional(),
+	/** ADR-0017: `items search` narrows its fixed four-type scope. */
+	types: z.string().min(1, { error: "--types needs a value." }).optional(),
 	/** Search endpoints spell this out, unlike list's `org_id`. */
 	"organization-id": positiveId("organization-id").optional(),
 	/** ADR-0009 §4: required on `fields`, and its value set is checked there. */
@@ -239,6 +244,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
 	resolve: "boolean",
 	exact: "boolean",
 	"search-in": "string",
+	types: "string",
 	"organization-id": "string",
 	entity: "string",
 	fields: "string",
@@ -364,7 +370,10 @@ const positionals = (
 	if (positional === "search-term") {
 		return id === ""
 			? err(
-					pdError({ code: "usage", message: `${command} needs a search term.` }),
+					pdError({
+						code: "usage",
+						message: `${command} needs a search term.`,
+					}),
 				)
 			: ok({ term: id });
 	}

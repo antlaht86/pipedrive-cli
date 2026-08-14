@@ -122,8 +122,7 @@ export const createProjection = (
     return err(
       pdError({
         code: "usage",
-        message:
-          parsed.error.issues[0]?.message ?? "Invalid --fields value.",
+				message: parsed.error.issues[0]?.message ?? "Invalid --fields value.",
       }),
     );
   }
@@ -158,6 +157,12 @@ export const createProjection = (
     apply: (record) => {
       const projected: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(record)) {
+				// Mixed item-search hits carry this validated discriminator to the
+				// writer. It is line metadata, not a user-selectable record field.
+				if (key === "record_type") {
+					projected[key] = value;
+					continue;
+				}
         if (!rawSelected.has(key)) continue;
         if (key !== "custom_fields" || wholeCustomFields) {
           projected[key] = value;

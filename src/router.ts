@@ -33,6 +33,7 @@
 
 import { pdError, type PdError } from "./lib/errors.ts";
 import { resourceNamed } from "./lib/pipedrive/resources.ts";
+import { searchNamed } from "./lib/pipedrive/searches.ts";
 import { cachedResourceNamed } from "./lib/pipedrive/cached.ts";
 import { resourceCommand, type Verb } from "./commands/resource.ts";
 import { cachedCommand } from "./commands/cached.ts";
@@ -94,10 +95,7 @@ const READ_ONLY =
  * missing — so saying `pd` has no command `persons` would invite the very
  * `pd people` probe ADR-0009 §5 refuses to answer.
  */
-const unrecognised = (
-  argv: readonly string[],
-  known: boolean,
-): PdError => {
+const unrecognised = (argv: readonly string[], known: boolean): PdError => {
   const attempted = probe(argv);
   const missingVerb = known && argv[1] === undefined;
   return pdError({
@@ -134,6 +132,7 @@ export const route = async ({
 }: RouteInput): Promise<number> => {
   const noun = argv[0];
   const resource = noun === undefined ? undefined : resourceNamed(noun);
+	const search = noun === undefined ? undefined : searchNamed(noun);
   // The two tables are disjoint and are consulted in turn rather than merged: a
   // live resource walks a cursor, a cached one loads a whole list from disk,
   // and the commands behind them take different flags (ADR-0005 §1).
@@ -153,19 +152,25 @@ export const route = async ({
 
   if (!isVerb(verb)) {
     return refuse(
-      unrecognised(argv, resource !== undefined || cached !== undefined),
+			unrecognised(
+				argv,
+				resource !== undefined || cached !== undefined || search !== undefined,
+			),
       sink,
       stderr,
     );
   }
 
-  if (resource !== undefined) {
-    if (verb === "search" && resource.search === undefined) {
-      return refuse(unrecognised(argv, true), sink, stderr);
+	if (verb === "search") {
+		if (search === undefined || noun === undefined) {
+			return refuse(unrecognised(argv, resource !== undefined), sink, stderr);
     }
+		return resourceCommand({ search, name: noun, verb, ...common });
+	}
+	if (resource !== undefined) {
     return resourceCommand({ resource, verb, ...common });
   }
-  if (cached !== undefined && verb !== "search") {
+	if (cached !== undefined) {
     return cachedCommand({ resource: cached, verb, ...common });
   }
 

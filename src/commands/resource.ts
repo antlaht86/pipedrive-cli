@@ -23,9 +23,13 @@
 import { ok } from "neverthrow";
 
 import { createCacheStore } from "../lib/cache/store.ts";
+import { pdError } from "../lib/errors.ts";
 import { parseListFilters } from "../lib/pipedrive/list-filters.ts";
 import type { Pages, Resource } from "../lib/pipedrive/resources.ts";
-import { parseSearchOptions } from "../lib/pipedrive/searches.ts";
+import {
+	parseSearchOptions,
+	type Search,
+} from "../lib/pipedrive/searches.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
 import {
 	createCachedOwnerResolution,
@@ -37,10 +41,11 @@ import { begin, type CommandInput, type Verb } from "./prologue.ts";
 
 export type { Verb };
 
-export type ResourceCommandInput = CommandInput & {
-	resource: Resource;
-	verb: Verb;
-};
+export type ResourceCommandInput = CommandInput &
+	(
+		| { resource: Resource; verb: Exclude<Verb, "search"> }
+		| { search: Search; name: string; verb: "search" }
+	);
 
 /**
  * ADR-0003: `--limit` **does not exist on non-list commands**, so passing it to
@@ -82,14 +87,17 @@ const GET_FLAGS: readonly Flag[] = [
 	"fields",
 ];
 
-export const resourceCommand = async ({
-	resource,
-	verb,
-	...input
-}: ResourceCommandInput): Promise<number> => {
-	const search = verb === "search" ? resource.search : undefined;
+export const resourceCommand = async (
+	input: ResourceCommandInput,
+): Promise<number> => {
+	const { verb } = input;
+	const search = verb === "search" ? input.search : undefined;
+	const resource = verb === "search" ? undefined : input.resource;
+	const name = verb === "search" ? input.name : input.resource.name;
 	let flags: readonly Flag[] = GET_FLAGS;
-	if (verb === "list") flags = [...LIST_FLAGS, ...resource.filterFlags];
+	if (verb === "list") {
+		flags = [...LIST_FLAGS, ...input.resource.filterFlags];
+	}
 	if (search !== undefined) flags = search.flags;
 	let positional: Positional = "none";
 	if (verb === "get") positional = "integer-id";
@@ -97,19 +105,20 @@ export const resourceCommand = async ({
 
 	const started = begin({
 		...input,
-		command: `pd ${resource.name} ${verb}`,
+		command: `pd ${name} ${verb}`,
 		flags,
 		positional,
-		recordType: search?.recordType ?? resource.recordType,
-		rename: verb === "search" ? {} : resource.rename,
+		recordType: search?.recordType ?? resource?.recordType ?? name,
+		mixedRecordTypes: search?.mixedRecordTypes,
+		rename: verb === "search" ? {} : resource?.rename,
 		// Selector names come from the local zod schema, so a typo is refused
 		// before credential resolution or dispatch.
 		resolve: (flags, parsed) => {
-			const schemaFields = search?.fields ?? resource.fields;
-			const rename = search === undefined ? resource.rename : {};
+			const schemaFields = search?.fields ?? resource?.fields ?? [];
+			const rename = search === undefined ? (resource?.rename ?? {}) : {};
 			return createProjection(flags.fields, schemaFields, rename).andThen(
 				(projection) => {
-					if (verb === "list") {
+					if (verb === "list" && resource !== undefined) {
 						return parseListFilters(resource, flags).map((filters) => ({
 							projection,
 							filters,
@@ -160,17 +169,29 @@ export const resourceCommand = async ({
 			parsed.flags.limit,
 			searchOptions,
 		);
-	} else if (typeof id === "number") {
-		source = resource.get(client, id, projection);
+	} else if (verb === "get" && typeof id === "number") {
+		source = input.resource.get(client, id, projection);
+	} else if (verb === "list") {
+		source = input.resource.list(
+			client,
+			parsed.flags.limit,
+			projection,
+			filters,
+		);
 	} else {
-		source = resource.list(client, parsed.flags.limit, projection, filters);
+		return writer.error(
+			pdError({
+				code: "internal",
+				message: "A search command did not produce search options.",
+			}),
+		);
 	}
 	const projected = projectPages(source, projection);
 	if (parsed.flags.resolve !== true) return stream(projected, writer);
 
 	if (verb === "search") {
 		const pages = createCachedOwnerResolution({
-			resource: search?.recordType ?? resource.name,
+			resource: search?.recordType ?? name,
 			projection,
 			store,
 			noCache: parsed.flags["no-cache"] === true,
@@ -180,7 +201,7 @@ export const resourceCommand = async ({
 	}
 
 	const resolve = await createResolution({
-		resource,
+		resource: input.resource,
 		projection,
 		client,
 		store,
