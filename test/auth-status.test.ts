@@ -118,6 +118,21 @@ describe("the refusals", () => {
     }
   });
 
+  test("auth flags are validated by the command-table parser", () => {
+    const { env } = isolated();
+    const missingPath = run(["auth", "status", "--token-file="], env);
+    const unknown = run(["auth", "status", "--unknown"], env);
+
+    expect(missingPath.exitCode).toBe(2);
+    expect(parse(missingPath.stdout)["message"]).toBe(
+      "--token-file needs a path.",
+    );
+    expect(unknown.exitCode).toBe(2);
+    expect(parse(unknown.stdout)["message"]).toContain(
+      "It takes --token-file and no other flag.",
+    );
+  });
+
   test("a --token-file that holds no token is usage, exit 2", () => {
     const { env } = isolated();
     const result = run(

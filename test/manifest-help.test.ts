@@ -13,7 +13,9 @@ import { searchNamed } from "../src/lib/pipedrive/searches.ts";
 
 const command = (name: string) => {
 	for (const resource of COMMAND_TABLE.resources) {
-		const found = resource.commands.find((candidate) => candidate.name === name);
+		const found = resource.commands.find(
+			(candidate) => candidate.name === name,
+		);
 		if (found !== undefined) return found;
 	}
 	throw new Error(`missing command ${name}`);
@@ -47,7 +49,11 @@ describe("the command table generates the manifest contract", () => {
 				retry: retryFor(code),
 			})),
 		});
-		expect(manifest.vocabularies.error_codes.some(({ code }) => code === "unknown_command" as never)).toBe(false);
+		expect(
+			manifest.vocabularies.error_codes.some(
+				({ code }) => code === ("unknown_command" as never),
+			),
+		).toBe(false);
 		expect(manifest.global_flags.map(({ name }) => name)).toEqual([
 			"--pretty",
 			"--no-cache",
@@ -61,9 +67,13 @@ describe("the command table generates the manifest contract", () => {
 		]);
 		expect(manifest.global_flags[0]).toMatchObject({
 			machine_readable: false,
-			instruction: expect.stringContaining("Never invoke --pretty from an agent"),
+			instruction: expect.stringContaining(
+				"Never invoke --pretty from an agent",
+			),
 		});
-		expect(manifest.command_flags.find(({ name }) => name === "--filter-id <n>")).toMatchObject({ enumerable: false });
+		expect(
+			manifest.command_flags.find(({ name }) => name === "--filter-id <n>"),
+		).toMatchObject({ enumerable: false });
 		expect(manifest.non_ndjson_stdout).toEqual([
 			"--help",
 			"pd manifest",
@@ -79,22 +89,49 @@ describe("the command table generates the manifest contract", () => {
 			"pd auth status",
 			"pd docs",
 		]);
+		expect(command("pd deals list").flag_values).toMatchObject({
+			"--sort-by <field>": ["id", "update_time", "add_time"],
+			"--status <name>": ["open", "won", "lost", "deleted"],
+		});
+		expect(command("pd items search").flag_values).toMatchObject({
+			"--types <a,b>": ["deal", "person", "organization", "product"],
+		});
 		expect(JSON.stringify(manifest)).not.toContain("request_cost");
 		expect(JSON.stringify(manifest)).not.toMatch(/[0-9a-f]{40}/i);
 	});
 
 	test("selectable fields are taken from the same runtime schemas", () => {
-		for (const name of ["deals", "persons", "organizations", "activities", "products"]) {
+		for (const name of [
+			"deals",
+			"persons",
+			"organizations",
+			"activities",
+			"products",
+		]) {
 			const resource = resourceNamed(name);
-			expect(command(`pd ${name} list`).selectable_fields).toEqual(resource?.fields.map((field) => resource.rename[field] ?? field));
-			expect(command(`pd ${name} get`).selectable_fields).toEqual(resource?.fields.map((field) => resource.rename[field] ?? field));
+			expect(command(`pd ${name} list`).selectable_fields).toEqual(
+				resource?.fields.map((field) => resource.rename[field] ?? field),
+			);
+			expect(command(`pd ${name} get`).selectable_fields).toEqual(
+				resource?.fields.map((field) => resource.rename[field] ?? field),
+			);
 		}
 		for (const name of ["users", "pipelines", "stages"]) {
 			const source = cachedResourceNamed(name)?.source();
-			expect(command(`pd ${name} list`).selectable_fields).toEqual(source?.fields);
+			expect(command(`pd ${name} list`).selectable_fields).toEqual(
+				source?.fields,
+			);
 		}
-		for (const name of ["deals", "persons", "organizations", "products", "items"]) {
-			expect(command(`pd ${name} search`).selectable_fields).toEqual(searchNamed(name)?.fields);
+		for (const name of [
+			"deals",
+			"persons",
+			"organizations",
+			"products",
+			"items",
+		]) {
+			expect(command(`pd ${name} search`).selectable_fields).toEqual(
+				searchNamed(name)?.fields,
+			);
 		}
 		const fields = command("pd fields list");
 		for (const entity of ENTITIES) {
@@ -107,22 +144,38 @@ describe("the command table generates the manifest contract", () => {
 	test("changing one table entry changes both manifest and help", () => {
 		const changed = {
 			...COMMAND_TABLE,
+			globalFlags: COMMAND_TABLE.globalFlags.map((flag, index) =>
+				index === 0 ? { ...flag, instruction: "Changed global flag" } : flag,
+			),
 			resources: COMMAND_TABLE.resources.map((resource, index) =>
 				index === 0 ? { ...resource, description: "Changed once" } : resource,
 			),
 		};
 
-		expect(JSON.stringify(createManifest("1.0.0", changed))).toContain("Changed once");
+		const changedManifest = JSON.stringify(createManifest("1.0.0", changed));
+		expect(changedManifest).toContain("Changed once");
+		expect(changedManifest).toContain("Changed global flag");
 		expect(renderHelp([], changed)).toContain("Changed once");
+		expect(renderHelp([], changed)).toContain("Changed global flag");
 	});
 });
 
 test("root and command help are generated from the table", () => {
 	const root = renderHelp([]);
-	expect(root.startsWith("pd is read-only. It issues GET requests only. It cannot create, update or delete anything in Pipedrive.\n")).toBe(true);
+	expect(
+		root.startsWith(
+			"pd is read-only. It issues GET requests only. It cannot create, update or delete anything in Pipedrive.\n",
+		),
+	).toBe(true);
 	expect(root).toContain("\nRESOURCES\n");
 	expect(root).toContain("\nOTHER\n");
-	expect(renderHelp(["deals", "list"])).toContain("USAGE\n  pd deals list [flags]");
+	const dealsHelp = renderHelp(["deals", "list"]);
+	expect(dealsHelp).toContain("USAGE\n  pd deals list [flags]");
+	expect(dealsHelp).toContain("--pretty");
+	expect(dealsHelp).toContain("--verbose");
+	expect(dealsHelp).toContain(
+		"--sort-by <field> (id, update_time, add_time)",
+	);
 	expect(renderHelp(["fields", "list"])).toContain(
 		"SELECTABLE FIELDS BY --ENTITY\n  deal: field_name, field_code",
 	);
