@@ -25,13 +25,17 @@
  * so this stays true rather than remaining an intention.
  */
 
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-
-import { fromThrowable } from "neverthrow";
-
 import type { PdWarning } from "../warnings.ts";
 import type { Clock } from "../pipedrive/clock.ts";
 import { cacheDirFor, joinerFor, type CacheDirContext } from "../auth/paths.ts";
+import {
+  makeDirectory,
+  parseJson,
+  readText,
+  removeFile,
+  temporaryName,
+  writeAtomically,
+} from "./files.ts";
 import {
   CACHE_SCHEMA_VERSION,
   StoredEntry,
@@ -98,42 +102,6 @@ const unwritable = (
     "is unaffected and the next one will fetch it again.",
 });
 
-/**
- * The read, with the one distinction ADR-0005 draws between its two silences.
- * An absent file is the ordinary cold-cache case and says nothing worth saying
- * (§6); a file that exists and cannot be read is §5's "an I/O error, wrong
- * permissions" and must warn, because a permanently unreadable entry otherwise
- * wastes a request on every single run with no signal anywhere.
- */
-const readText = fromThrowable(
-  (path: string) => readFileSync(path, "utf8"),
-  (cause) => (cause as { code?: string } | null)?.code,
-);
-const parseJson = fromThrowable((text: string): unknown => JSON.parse(text));
-
-const write = fromThrowable(
-  (path: string, temporary: string, body: string): void => {
-    // ADR-0005 §6: temp file plus `rename`, so a half-written entry is never
-    // observable, and `0600`, because field schemas and the user list are
-    // company data. No locking: two concurrent processes write identical
-    // content, the last write wins, and both readers see an intact file.
-    writeFileSync(temporary, body, { mode: 0o600 });
-    renameSync(temporary, path);
-  },
-);
-
-const remove = fromThrowable((path: string): void => {
-  unlinkSync(path);
-});
-
-const makeDirectory = fromThrowable((path: string): void => {
-  mkdirSync(path, { recursive: true, mode: 0o700 });
-});
-
-/** A distinct name per process, so two concurrent writers never share a temp file. */
-const temporaryName = (name: CacheEntryName): string =>
-  `.${name}.${process.pid}.tmp`;
-
 export const createCacheStore = ({
   clock,
   ...context
@@ -149,6 +117,11 @@ export const createCacheStore = ({
       const path = join(entryFileName(name));
       const text = readText(path);
       if (text.isErr()) {
+        // ADR-0005 draws one distinction between its two silences. An absent
+        // file is the ordinary cold-cache case and says nothing worth saying
+        // (§6); a file that exists and cannot be read is §5's "an I/O error,
+        // wrong permissions" and must warn, because a permanently unreadable
+        // entry otherwise wastes a request on every run with no signal anywhere.
         return text.error === "ENOENT"
           ? { outcome: "miss" }
           : {
@@ -196,11 +169,11 @@ export const createCacheStore = ({
         return unwritable(name, path, "its directory could not be created");
       }
 
-      const written = write(path, temporary, body);
+      const written = writeAtomically(path, temporary, body);
       if (written.isErr()) {
         // A rename that failed leaves the temp file behind; a read-only
         // filesystem leaves nothing. Both are best-effort cleanups.
-        remove(temporary);
+        removeFile(temporary);
         return unwritable(name, path, "it could not be written");
       }
       return undefined;

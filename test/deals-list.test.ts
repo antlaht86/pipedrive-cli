@@ -8,7 +8,9 @@
  * fails the run rather than reaching Pipedrive (ADR-0019 §3).
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 import { route } from "../src/router.ts";
 import { createReplayTransport, type Fixture } from "./support/replay.ts";
@@ -21,6 +23,20 @@ type Run = {
   stderr: string[];
   last: Line;
 };
+
+/**
+ * Fresh per test, so the sentinel the Cloudflare case writes ends with that
+ * test rather than refusing every run after it.
+ */
+let cacheHome = "";
+
+beforeEach(() => {
+  cacheHome = mkdtempSync(`${tmpdir()}/pd-deals-`);
+});
+
+afterEach(() => {
+  rmSync(cacheHome, { recursive: true, force: true });
+});
 
 /**
  * One run of `pd deals list` against a fixture set, with stdout and stderr
@@ -37,7 +53,11 @@ const runWith = async (
   const exit = await route({
     argv: ["deals", "list", ...argv],
     platform: "linux",
-    env,
+    // The cache home is a directory this file owns and deletes, because the
+    // Cloudflare case below writes the `blocked` sentinel (ADR-0010 §6). Left
+    // pointing at the caller's home it would block the next test rather than
+    // the next invocation.
+    env: { ...env, XDG_CACHE_HOME: cacheHome },
     home: "/home/nobody",
     ...(fixtures === undefined
       ? {}

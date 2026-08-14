@@ -22,14 +22,16 @@
  * retry" is exercising an entirely ordinary recovery reflex, and if that deleted
  * the `blocked` sentinel it would walk straight back into a company-wide block.
  * `clear`'s target is the subtree **minus** that file, and `info` reports the
- * sentinel's presence and age because a human debugging a refusal that made no
- * requests has no other way to see it.
+ * sentinel's age and the life it has left because a human debugging a refusal
+ * that made no requests has no other way to see it. Neither command is stopped
+ * by a live sentinel: they make no request, and the one command that explains
+ * the block must not be the one the block takes away.
  *
  * Read-only is a property of what `pd` does to the Pipedrive API. Deleting local
  * files is not a violation of it (ADR-0005 §7).
  */
 
-import { readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
+import { readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
 
 import { fromThrowable } from "neverthrow";
 
@@ -44,6 +46,7 @@ import {
   entryFileName,
   type CacheEntryName,
 } from "../lib/cache/entries.ts";
+import { readSentinel } from "../lib/cache/sentinel.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
 import { failWith, type Sink } from "../lib/output/ndjson-writer.ts";
 
@@ -70,7 +73,6 @@ const listDirectory = fromThrowable((path: string) =>
   readdirSync(path, { withFileTypes: true }),
 );
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
-const modifiedAt = fromThrowable((path: string) => statSync(path).mtimeMs);
 const removeFile = fromThrowable((path: string): void => {
   unlinkSync(path);
 });
@@ -98,7 +100,50 @@ type EntryReport = {
   readable?: false;
 };
 
+/**
+ * The sentinel as a human debugging a request-free refusal needs it: how long
+ * ago the block was met, and how much of the fifteen minutes is left. ADR-0010
+ * §7 requires the report because there is no other way to see the file.
+ */
+type BlockedReport = {
+  credential: string;
+  /** Absent when the sentinel could not be read — see `readable`. */
+  age_seconds?: number;
+  /** `0` for a sentinel that is present but no longer stops anything. */
+  expires_in_seconds?: number;
+  /** Present and `false` only for a sentinel `pd` would treat as absent. */
+  readable?: false;
+};
+
 const parseJson = fromThrowable((text: string): unknown => JSON.parse(text));
+
+/**
+ * `readable: false` for a sentinel `pd` itself would ignore — unreadable, not
+ * JSON, the wrong shape, or a version this binary does not recognise. All four
+ * fail open at the guard, so reporting an age for one would describe a block
+ * that is not in force.
+ *
+ * The reading comes from `sentinel.ts` rather than from a second parse here, so
+ * this command and the guard cannot reach different conclusions about the same
+ * bytes. What this command does **not** inherit is the expiry: `readSentinel`
+ * only reads, and deleting a spent sentinel belongs to the guard (ADR-0028 §2).
+ * A dead one is reported with no life left, which is the honest answer for a
+ * machine that has not run a data command since the block ended.
+ */
+const blockedReport = (
+  credential: string,
+  path: string,
+  now: number,
+): BlockedReport => {
+  const reading = readSentinel(path, now);
+  if (reading === undefined) return { credential, readable: false };
+
+  return {
+    credential,
+    age_seconds: seconds(reading.ageMs),
+    expires_in_seconds: seconds(reading.remainingMs),
+  };
+};
 
 /**
  * `undefined` for every entry `pd` itself would not use — unreadable, not JSON,
@@ -123,7 +168,7 @@ const info = (
   now: number,
 ): Record<string, unknown> => {
   const entries: EntryReport[] = [];
-  const blocked: { credential: string; age_seconds: number }[] = [];
+  const blocked: BlockedReport[] = [];
 
   for (const directory of listDirectory(root).unwrapOr([])) {
     if (!directory.isDirectory()) continue;
@@ -134,8 +179,7 @@ const info = (
       if (!file.isFile()) continue;
 
       if (file.name === SENTINEL_FILE) {
-        const modified = modifiedAt(join(path, file.name)).unwrapOr(now);
-        blocked.push({ credential, age_seconds: seconds(now - modified) });
+        blocked.push(blockedReport(credential, join(path, file.name), now));
         continue;
       }
 

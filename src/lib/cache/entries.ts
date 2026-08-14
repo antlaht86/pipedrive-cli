@@ -91,3 +91,32 @@ export const entryFileName = (name: CacheEntryName): string => `${name}.json`;
  * would delete the sentinel for one release.
  */
 export const SENTINEL_FILE = "blocked.json";
+
+/**
+ * The sentinel's own version, separate from `CACHE_SCHEMA_VERSION` because it is
+ * a different file format with a different lifetime. An unrecognised version is
+ * treated as an absent sentinel (ADR-0010 "Consequences"), which fails open —
+ * accepted there, because the alternative is a tool bricked by a corrupt file.
+ */
+export const SENTINEL_SCHEMA_VERSION = 1;
+
+/**
+ * ADR-0010 §6: a fixed cool-off rather than "until the daily reset", because the
+ * reset instant is unknowable — the budget resets "at midnight at server's
+ * timezone" and the server timezone is named nowhere.
+ */
+export const SENTINEL_TTL_SECONDS = 15 * 60;
+
+/**
+ * The sentinel's contents. It records **when** the block was met and nothing
+ * else: no credential (ADR-0005 §6), no path, no response body. The expiry is a
+ * constant above rather than a field, so a file cannot ask for a longer life
+ * than this binary grants.
+ */
+export const StoredSentinel = z.object({
+  version: z.int(),
+  /** Milliseconds since the epoch, from the injected clock. */
+  blocked_at: z.int(),
+});
+
+export type StoredSentinel = z.infer<typeof StoredSentinel>;

@@ -27,6 +27,11 @@
  *    question twice.
  * 5. **The credential**, last, because it is the only step that touches the
  *    filesystem.
+ * 6. **The `blocked` sentinel**, which needs the credential's fingerprint and so
+ *    cannot come earlier. It is the last thing between the caller and the
+ *    network, and every command that makes a request passes through here — which
+ *    is what makes "zero HTTP requests while the block is live" a property of
+ *    this file rather than a rule five command modules must remember.
  *
  * ## The error channel is an exit code
  *
@@ -40,6 +45,11 @@
 import { err, ok, type Result } from "neverthrow";
 
 import { resolveCredential, type Credential } from "../lib/auth/credentials.ts";
+import {
+  blockedFromMemory,
+  createSentinel,
+  type Sentinel,
+} from "../lib/cache/sentinel.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
 import { createGuardedFetch } from "../lib/pipedrive/guarded-fetch.ts";
 import type { GuardedFetch, Transport } from "../lib/pipedrive/guarded-fetch.ts";
@@ -120,12 +130,20 @@ export const begin = <T>({
   const parsed = parseArguments({ command, flags: allowed, positional, argv });
   const flags = parsed.isOk() ? parsed.value.flags : undefined;
 
+  // The gate is built before the credential is — the writer needs its dispatch
+  // counter to report a parse failure — and the sentinel cannot exist until the
+  // fingerprint does. So the gate is handed a closure over this box, rather than
+  // the credential the gate must never learn about (ADR-0010 §6). It is empty on
+  // every path that fails before step 5, and every one of those made no request.
+  const pending: { sentinel?: Sentinel } = {};
+
   const guarded = createGuardedFetch({
     ...(transport === undefined ? {} : { transport }),
     clock,
     ...(flags?.["max-requests"] === undefined
       ? {}
       : { maxRequests: flags["max-requests"] }),
+    onBlocked: () => pending.sentinel?.record(),
   });
 
   const writer = new NdjsonWriter({
@@ -158,6 +176,27 @@ export const begin = <T>({
   // ADR-0012 §3 and ADR-0021 §8: a credentials file the rest of the machine can
   // read is a `warning`, not a refusal. It rides the stream like any other.
   for (const warning of credential.value.warnings) writer.warn(warning);
+
+  // ADR-0010 §6 and §7. The check sits below the credential warnings because
+  // those are true regardless of the block and a human reading them is the human
+  // this refusal is addressed to. There is **no flag and no environment
+  // variable** past this point: a documented escape hatch from the one
+  // company-wide safety stop would be advertised by `--help` to the very
+  // consumer it exists to stop, and `--no-cache` is defined over cached data
+  // rather than over guard state.
+  const sentinel = createSentinel({
+    platform,
+    env,
+    home,
+    fingerprint: credential.value.fingerprint,
+    clock,
+  });
+  pending.sentinel = sentinel;
+
+  const remaining = sentinel.remaining();
+  if (remaining !== undefined) {
+    return err(writer.error(blockedFromMemory(remaining, sentinel.path)));
+  }
 
   return ok({
     parsed: parsed.value,

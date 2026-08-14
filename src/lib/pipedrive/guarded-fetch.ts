@@ -269,6 +269,19 @@ export type GuardedFetchOptions = {
    * `undefined` is the default: absent the flag, a run is unbounded in requests.
    */
   maxRequests?: number;
+  /**
+   * Called once, at the instant a Cloudflare block is recognised — ADR-0010 §6.
+   * The prologue hangs the sentinel write on it.
+   *
+   * It is a callback rather than a store because this module must not learn what
+   * a credential is: the sentinel is keyed by the token's fingerprint and the
+   * gate is built before any token is resolved. It fires *here* rather than
+   * wherever the error surfaces so that a run refused **from** the sentinel can
+   * never reach it — that path makes no request, so it never enters this module,
+   * and the fifteen minutes therefore cannot be pushed forward by a looping
+   * agent (ADR-0010 §7).
+   */
+  onBlocked?: () => void;
 };
 
 export type GuardedFetch = {
@@ -302,6 +315,7 @@ export const createGuardedFetch = ({
   transport = throwingTransport,
   clock = systemClock,
   maxRequests,
+  onBlocked,
 }: GuardedFetchOptions = {}): GuardedFetch => {
   const gate = new BurstGate(clock);
   const limiter = pLimit(CONCURRENCY);
@@ -451,6 +465,9 @@ export const createGuardedFetch = ({
           () => undefined,
         ).unwrapOr("");
         if (looksLikeHtml(body, response.headers.get("content-type"))) {
+          // ADR-0010 §6, before the throw: the next invocation on this
+          // credential must refuse without asking Pipedrive again.
+          onBlocked?.();
           throw fail({
             code: "blocked",
             message:

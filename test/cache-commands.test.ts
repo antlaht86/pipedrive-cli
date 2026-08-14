@@ -14,7 +14,11 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { cacheCommand, isCacheVerb } from "../src/commands/cache.ts";
-import { SENTINEL_FILE } from "../src/lib/cache/entries.ts";
+import {
+  SENTINEL_FILE,
+  SENTINEL_SCHEMA_VERSION,
+  SENTINEL_TTL_SECONDS,
+} from "../src/lib/cache/entries.ts";
 import { FakeClock } from "./support/clock.ts";
 
 const FINGERPRINT = "0123456789abcdef";
@@ -35,6 +39,9 @@ const place = (file: string, body: string, fingerprint = FINGERPRINT): void => {
 
 const entry = (records: unknown[], fetchedAt = clock.now()): string =>
   JSON.stringify({ version: 1, fetched_at: fetchedAt, records });
+
+const sentinel = (blockedAt = clock.now()): string =>
+  JSON.stringify({ version: SENTINEL_SCHEMA_VERSION, blocked_at: blockedAt });
 
 type Run = { exit: number; report: Record<string, unknown>; stderr: string[] };
 
@@ -140,15 +147,29 @@ describe("pd cache info", () => {
     expect(report).toEqual({ path: root(), entries: [], blocked: [] });
   });
 
-  test("the sentinel's presence and age are reported", () => {
+  test("the sentinel's presence, age and remaining life are reported", () => {
     // ADR-0010 §7: a human debugging a refusal that made no requests has no
     // other way to see it.
-    place(SENTINEL_FILE, JSON.stringify({ at: clock.now() }));
+    place(SENTINEL_FILE, sentinel(clock.now() - 5 * 60 * 1000));
 
     const blocked = run("info").report["blocked"] as Record<string, unknown>[];
-    expect(blocked).toHaveLength(1);
-    expect(blocked[0]?.["credential"]).toBe(FINGERPRINT);
-    expect(typeof blocked[0]?.["age_seconds"]).toBe("number");
+    expect(blocked).toEqual([
+      {
+        credential: FINGERPRINT,
+        age_seconds: 5 * 60,
+        expires_in_seconds: SENTINEL_TTL_SECONDS - 5 * 60,
+      },
+    ]);
+  });
+
+  test("a sentinel pd would ignore is reported unreadable rather than aged", () => {
+    // All four ways it can be broken fail open at the guard, so an age here
+    // would describe a block that stops nothing.
+    place(SENTINEL_FILE, "{ not json");
+
+    expect(run("info").report["blocked"]).toEqual([
+      { credential: FINGERPRINT, readable: false },
+    ]);
   });
 
   test("the output is one JSON object, not NDJSON", () => {
@@ -188,7 +209,7 @@ describe("pd cache clear", () => {
     // reflex, and deleting the sentinel would walk straight back into a
     // company-wide block.
     place("users.json", entry([]));
-    place(SENTINEL_FILE, "{}");
+    place(SENTINEL_FILE, sentinel());
 
     const { report } = run("clear");
 
