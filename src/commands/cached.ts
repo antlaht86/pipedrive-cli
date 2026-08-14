@@ -33,6 +33,7 @@
 import { err, ok, type Result } from "neverthrow";
 import type { z } from "zod";
 
+import { commandNamed } from "../command-table.ts";
 import { pdError, type PdError } from "../lib/errors.ts";
 import { createCacheStore, type CacheStore } from "../lib/cache/store.ts";
 import {
@@ -53,7 +54,6 @@ import { createProjection, projectPages } from "../lib/output/projection.ts";
 import { createResolution } from "../lib/output/resolution.ts";
 import { stream } from "../lib/output/stream.ts";
 import type { Pages } from "../lib/pipedrive/resources.ts";
-import type { Flag } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
 
 export type CachedCommandInput = CommandInput & {
@@ -67,20 +67,6 @@ export type CachedCommandInput = CommandInput & {
  * cached resource it is an unknown flag, which is the same refusal every flag a
  * command lacks receives.
  */
-const flagsFor = (verb: Verb, resource: CachedResource): readonly Flag[] => [
-	"token-file",
-	...(verb === "list" ? (["limit"] as const) : []),
-	"max-requests",
-	"resolve-budget",
-	"no-cache",
-	"resolve",
-	"fields",
-	...(resource.needsEntity ? (["entity"] as const) : []),
-	...(verb === "list" && resource.listFilter !== undefined
-		? [resource.listFilter.flag]
-		: []),
-];
-
 /**
  * The `--entity` value as the table understands it. An unknown spelling becomes
  * `undefined`, which is the same answer a missing flag gives — and the same
@@ -187,7 +173,7 @@ export const cachedCommand = async ({
 	const started = begin({
 		...input,
 		command,
-		flags: flagsFor(verb, resource),
+		flags: commandNamed(`pd ${resource.name} ${verb}`)?.parserFlags ?? [],
 		positional: positionalFor(verb, resource),
 		recordType: resource.recordType,
 		resolve: (flags) => {

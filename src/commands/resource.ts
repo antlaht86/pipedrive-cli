@@ -22,6 +22,7 @@
 
 import { ok } from "neverthrow";
 
+import { commandNamed } from "../command-table.ts";
 import { createCacheStore } from "../lib/cache/store.ts";
 import { pdError } from "../lib/errors.ts";
 import { parseListFilters } from "../lib/pipedrive/list-filters.ts";
@@ -36,7 +37,7 @@ import {
 	createResolution,
 } from "../lib/output/resolution.ts";
 import { stream } from "../lib/output/stream.ts";
-import type { Flag, Positional } from "./arguments.ts";
+import type { Positional } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
 
 export type { Verb };
@@ -68,25 +69,6 @@ export type ResourceCommandInput = CommandInput &
  * apart: a flag `parseArgs` would accept and the schema would not validate is a
  * compile error rather than a value that reaches the walk unchecked.
  */
-const LIST_FLAGS: readonly Flag[] = [
-	"token-file",
-	"limit",
-	"max-requests",
-	"resolve-budget",
-	"no-cache",
-	"resolve",
-	"fields",
-];
-
-const GET_FLAGS: readonly Flag[] = [
-	"token-file",
-	"max-requests",
-	"resolve-budget",
-	"no-cache",
-	"resolve",
-	"fields",
-];
-
 export const resourceCommand = async (
 	input: ResourceCommandInput,
 ): Promise<number> => {
@@ -94,11 +76,8 @@ export const resourceCommand = async (
 	const search = verb === "search" ? input.search : undefined;
 	const resource = verb === "search" ? undefined : input.resource;
 	const name = verb === "search" ? input.name : input.resource.name;
-	let flags: readonly Flag[] = GET_FLAGS;
-	if (verb === "list") {
-		flags = [...LIST_FLAGS, ...input.resource.filterFlags];
-	}
-	if (search !== undefined) flags = search.flags;
+	const definition = commandNamed(`pd ${name} ${verb}`);
+	const flags = definition?.parserFlags ?? [];
 	let positional: Positional = "none";
 	if (verb === "get") positional = "integer-id";
 	if (verb === "search") positional = "search-term";

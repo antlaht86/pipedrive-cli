@@ -18,6 +18,7 @@
  * startup against 27.1 ms, for +2.9 MB on a ~63 MB binary.
  */
 
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { stampVersion } from "../src/version.ts";
@@ -47,7 +48,12 @@ export const buildBinary = async ({
     format: "esm",
     minify: true,
     bytecode: true,
-    define: { PD_VERSION: JSON.stringify(version) },
+    define: {
+      PD_VERSION: JSON.stringify(version),
+      PD_DOCS: JSON.stringify(
+        readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8"),
+      ),
+    },
     compile: {
       outfile: target,
       autoloadDotenv: false,

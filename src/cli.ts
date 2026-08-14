@@ -1,14 +1,15 @@
 /**
  * `pd` entrypoint — the file `bun run build` compiles into `dist/pd`.
  *
- * `--version` (ADR-0021 §6) and `pd auth status` (ADR-0012 §5) are wired here,
- * because ADR-0009 §8 puts both outside the resource grammar. Everything else
- * goes to `router.ts`, which owns that grammar and the refusal for what is not
- * in it. The manifest and `--help` arrive with ticket 16.
+ * Surface-introspection and named exception commands are wired here because
+ * ADR-0009 puts them outside the resource grammar. Data commands go to
+ * `router.ts`; their manifest entries and every help page come from the shared
+ * command table.
  */
 
 import { homedir } from "node:os";
 
+import { createManifest, renderHelp } from "./command-table.ts";
 import { pdError, type PdError } from "./lib/errors.ts";
 import { authStatus } from "./lib/auth/status.ts";
 import { route } from "./router.ts";
@@ -18,6 +19,8 @@ import { errorLine, failWith, ZERO_COUNTERS } from "./lib/output/ndjson-writer.t
 
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
+/** AGENTS.md, embedded by the same build so `pd docs` survives being copied. */
+declare const PD_DOCS: string | undefined;
 
 /**
  * Running from source — `bun src/cli.ts` — has no stamp. A built binary always
@@ -27,6 +30,11 @@ declare const PD_VERSION: string | undefined;
  */
 const version = (): string =>
   typeof PD_VERSION === "undefined" ? "0.0.0+source" : PD_VERSION;
+
+const docs = async (): Promise<string> =>
+  typeof PD_DOCS === "undefined"
+    ? Bun.file(new URL("../AGENTS.md", import.meta.url)).text()
+    : PD_DOCS;
 
 /**
  * ADR-0001: the machine-readable error object goes to **stdout**, and stderr
@@ -106,8 +114,26 @@ const runAuthStatus = (argv: readonly string[]): number => {
 };
 
 const main = async (argv: readonly string[]): Promise<number> => {
+  if (argv.includes("--help")) {
+    const help = renderHelp(argv);
+    if (help !== "") {
+      process.stdout.write(help);
+      return 0;
+    }
+  }
+
   if (argv.length === 1 && argv[0] === "--version") {
     process.stdout.write(`${version()}\n`);
+    return 0;
+  }
+
+  if (argv.length === 1 && argv[0] === "manifest") {
+    process.stdout.write(`${JSON.stringify(createManifest(version()))}\n`);
+    return 0;
+  }
+
+  if (argv.length === 1 && argv[0] === "docs") {
+    process.stdout.write(await docs());
     return 0;
   }
 
