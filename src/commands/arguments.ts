@@ -60,6 +60,8 @@ export const Arguments = z.object({
   limit: positiveInteger("limit").optional(),
   /** ADR-0010 §3: network requests, no default, the only quantitative guard. */
   "max-requests": positiveInteger("max-requests").optional(),
+  /** ADR-0008 §9: implicit relation requests, defaulted by the resolver. */
+  "resolve-budget": positiveInteger("resolve-budget").optional(),
   /** ADR-0005 §8: skips the cached **read** and still writes the fresh answer. */
   "no-cache": z.boolean().optional(),
   /** ADR-0008: one additive switch for every id-to-name resolution. */
@@ -82,6 +84,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
   "token-file": "string",
   limit: "string",
   "max-requests": "string",
+  "resolve-budget": "string",
   "no-cache": "boolean",
   resolve: "boolean",
   entity: "string",

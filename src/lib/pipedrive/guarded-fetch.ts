@@ -296,6 +296,8 @@ export type GuardedFetch = {
    * one question put to this one object.
    */
   dispatches: () => number;
+  /** ADR-0010 §4: enrichment may dispatch only while one request remains afterward. */
+  canDispatchEnrichment: () => boolean;
   /** For ADR-0015's stderr diagnostics, which report what paced a slow run. */
   limitOf: (family: GateFamily) => number;
   concurrency: number;
@@ -511,6 +513,8 @@ export const createGuardedFetch = ({
     // socket outside the gate is exactly what this module exists to prevent.
     fetch: Object.assign(guarded, { preconnect: (): void => {} }),
     dispatches: () => dispatches,
+    canDispatchEnrichment: () =>
+      maxRequests === undefined || dispatches + 1 < maxRequests,
     limitOf: (family) => gate.limitOf(family),
     concurrency: CONCURRENCY,
   };

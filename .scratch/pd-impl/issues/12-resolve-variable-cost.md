@@ -4,7 +4,7 @@
 
 **Blocked by:** 11
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0008 §variable cost, ADR-0010 (the budget position), ADR-0003 (bounding).
 
@@ -18,11 +18,17 @@ Notes for the implementer:
 - Search commands accept `--resolve` and resolve **owner ids only, at zero requests** (see ticket 14 — a hit already carries `stage_name`, `person_name` and `org_name` from the API).
 - **Search gets no ceiling of its own.** Its requests are the ones the caller asked for; `--resolve-budget` exists because resolve's requests are implicit. The asymmetry is deliberate.
 
-- [ ] Person and organization relations resolve to `person_name` / `org_name` under `--resolve`
-- [ ] Batching is per page at 100 ids per request, with a run-scoped id→name map
-- [ ] The walk stays streaming — records still start arriving in roughly 250 ms under `--resolve`
-- [ ] The default ceiling is 50 requests and `--resolve-budget <n>` changes it
-- [ ] Exhausting the resolve budget emits one `resolution_budget_exhausted` warning, sets `resolved: "partial"`, and exits **0**
-- [ ] A batch is dispatched only if `--max-requests` headroom survives it, so enrichment never produces `request_ceiling`
-- [ ] `--fields` measurably reduces resolve request count on the same fixture
-- [ ] `--resolve` on a search command resolves owner ids only and dispatches zero extra requests
+- [x] Person and organization relations resolve to `person_name` / `org_name` under `--resolve`
+- [x] Batching is per page at 100 ids per request, with a run-scoped id→name map
+- [x] The walk stays streaming — records still start arriving in roughly 250 ms under `--resolve`
+- [x] The default ceiling is 50 requests and `--resolve-budget <n>` changes it
+- [x] Exhausting the resolve budget emits one `resolution_budget_exhausted` warning, sets `resolved: "partial"`, and exits **0**
+- [x] A batch is dispatched only if `--max-requests` headroom survives it, so enrichment never produces `request_ceiling`
+- [x] `--fields` measurably reduces resolve request count on the same fixture
+- [ ] `--resolve` on a search command resolves owner ids only and dispatches zero extra requests — deferred to ticket 14, which introduces search commands
+
+## What shipped
+
+Variable-cost resolution now scans each projected page for standard and custom person/organization relations, fetches unseen ids in batches of 100, and keeps run-scoped name maps. Each page is enriched and emitted before the next walk page is requested.
+
+Relation batches have a soft 50-request default ceiling, configurable with `--resolve-budget`. Spending that ceiling—or lacking surviving `--max-requests` headroom—warns once, marks resolution partial, leaves subsequent ids raw, and preserves exit 0. Search-specific zero-cost owner resolution remains with ticket 14 because this branch has no search command surface yet.

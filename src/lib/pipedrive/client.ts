@@ -182,6 +182,8 @@ export type PipedriveClient = {
   ) => ResultAsync<unknown, PdError>;
   /** ADR-0011 §9's counter, for the trailer's `requests` field. */
   requests: () => number;
+  /** Whether one enrichment request leaves --max-requests headroom for the query. */
+  canDispatchEnrichment: () => boolean;
 };
 
 export type PipedriveClientOptions = {
@@ -232,5 +234,6 @@ export const createPipedriveClient = ({
     v2: (call, options) => run(call({ ...options, client: v2Client })),
     v1: (call, options) => run(call({ ...options, client: v1Client })),
     requests: guarded.dispatches,
+    canDispatchEnrichment: guarded.canDispatchEnrichment,
   };
 };

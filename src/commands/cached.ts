@@ -45,7 +45,7 @@ import {
 import { rejectedRecord } from "../lib/pipedrive/single.ts";
 import { noSurvivors, rejection, type Bound, type Page } from "../lib/pipedrive/walk.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
-import { createFixedResolution } from "../lib/output/resolution.ts";
+import { createResolution } from "../lib/output/resolution.ts";
 import { stream } from "../lib/output/stream.ts";
 import type { Pages } from "../lib/pipedrive/resources.ts";
 import type { Flag } from "./arguments.ts";
@@ -66,6 +66,7 @@ const flagsFor = (verb: Verb, needsEntity: boolean): readonly Flag[] => [
   "token-file",
   ...(verb === "list" ? (["limit"] as const) : []),
   "max-requests",
+  "resolve-budget",
   "no-cache",
   "resolve",
   "fields",
@@ -211,12 +212,13 @@ export const cachedCommand = async ({
 
   const withResolution = async (pages: Pages): Promise<Pages> =>
     flags.resolve === true
-      ? (await createFixedResolution({
+      ? (await createResolution({
           resource: { name: resource.name, fields: source.fields },
           projection,
           client,
           store,
           noCache: flags["no-cache"] === true,
+          resolveBudget: flags["resolve-budget"] ?? 50,
           writer,
         }))(pages)
       : pages;

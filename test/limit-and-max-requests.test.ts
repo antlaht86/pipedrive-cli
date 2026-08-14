@@ -271,18 +271,18 @@ describe("--limit does not exist on a non-list command", () => {
     const { last } = await runWith(undefined, ["deals", "get", "42", "--limit", "5"]);
 
     expect(last["message"]).toBe(
-      "pd deals get does not accept --limit. It takes --token-file, --max-requests, --no-cache, --resolve and --fields and no other flag.",
+      "pd deals get does not accept --limit. It takes --token-file, --max-requests, --resolve-budget, --no-cache, --resolve and --fields and no other flag.",
     );
   });
 });
 
-describe("both flags reject their bad values offline", () => {
+describe("quantitative flags reject their bad values offline", () => {
   // No fixtures: the default transport throws, so `requests: 0` on the trailer
   // is the assertion that nothing reached Pipedrive.
   const bad = async (flag: string, value: string): Promise<Run> =>
     runWith(undefined, ["deals", "list", flag, value]);
 
-  for (const flag of ["--limit", "--max-requests"]) {
+  for (const flag of ["--limit", "--max-requests", "--resolve-budget"]) {
     for (const value of ["0", "-1", "1.5", "abc", "", " 4", "4 ", "1e3", "0x10"]) {
       test(`${flag} ${JSON.stringify(value)} is usage, exit 2, and no request`, async () => {
         const { exit, lines, last } = await bad(flag, value);

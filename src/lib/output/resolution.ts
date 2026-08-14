@@ -13,6 +13,10 @@ import type { PipedriveClient } from "../pipedrive/client.ts";
 import type { Pages } from "../pipedrive/resources.ts";
 import type { Page } from "../pipedrive/walk.ts";
 import type { NdjsonWriter } from "./ndjson-writer.ts";
+import {
+  createRelationResolution,
+  type RelationLookups,
+} from "./relation-resolution.ts";
 import type { Projection } from "./projection.ts";
 
 const HASH = /^[0-9a-f]{40}$/i;
@@ -22,12 +26,15 @@ const STANDARD_PAIRS = [
   ["owner_id", "owner_name", "users"],
   ["creator_user_id", "creator_user_name", "users"],
   ["user_id", "user_name", "users"],
+  ["person_id", "person_name", "persons"],
+  ["org_id", "org_name", "organizations"],
   ["pipeline_id", "pipeline_name", "pipelines"],
   ["stage_id", "stage_name", "stages"],
 ] as const;
 
-type LookupName = "users" | "pipelines" | "stages";
-type LookupMaps = Partial<Record<LookupName, ReadonlyMap<number, string>>>;
+type FixedLookupName = "users" | "pipelines" | "stages";
+type LookupMaps = Partial<Record<FixedLookupName, ReadonlyMap<number, string>>> &
+  RelationLookups;
 
 const Scalar = z.union([z.string(), z.number()]);
 const ResolutionOption = z.object({ id: Scalar, label: z.string() });
@@ -59,6 +66,7 @@ type ResolutionContext = {
   client: PipedriveClient;
   store: CacheStore;
   noCache: boolean;
+  resolveBudget: number;
   writer: NdjsonWriter;
 };
 
@@ -151,9 +159,21 @@ const customLabel = (
     case "enum":
     case "set":
       return optionLabel(schema, value);
-    case "user": {
+    case "user":
+    case "person":
+    case "people":
+    case "organization":
+    case "org": {
       const id = z.int().safeParse(value);
-      return id.success ? lookups.users?.get(id.data) : undefined;
+      let lookup: ReadonlyMap<number, string> | undefined;
+      if (schema.field_type === "user") {
+        lookup = lookups.users;
+      } else if (schema.field_type === "person" || schema.field_type === "people") {
+        lookup = lookups.persons;
+      } else {
+        lookup = lookups.organizations;
+      }
+      return id.success ? lookup?.get(id.data) : undefined;
     }
     case "monetary":
       return moneyLabel(value);
@@ -164,12 +184,13 @@ const customLabel = (
   }
 };
 
-export const createFixedResolution = async ({
+export const createResolution = async ({
   resource,
   projection,
   client,
   store,
   noCache,
+  resolveBudget,
   writer,
 }: ResolutionContext): Promise<(pages: Pages) => Pages> => {
   let unavailableWarned = false;
@@ -225,7 +246,10 @@ export const createFixedResolution = async ({
   let schema = needsCustom && resource.entity !== undefined
     ? await load(fieldSource(resource.entity))
     : undefined;
-  const lookups: LookupMaps = {};
+  const lookups: LookupMaps = {
+    persons: new Map(),
+    organizations: new Map(),
+  };
   if (needsUsers) {
     const loaded = await load(fixedSource("users"));
     if (loaded !== undefined) lookups.users = idNameMap(loaded.records);
@@ -240,6 +264,14 @@ export const createFixedResolution = async ({
   }
 
   let fields = schema === undefined ? new Map<string, FieldSchema>() : fieldMap(schema.records);
+  const resolveRelations = createRelationResolution({
+    client,
+    writer,
+    budget: resolveBudget,
+    lookups,
+    fields: () => fields,
+    unavailable,
+  });
 
   const refreshUnknown = async (): Promise<void> => {
     if (refreshAttempted || schema === undefined) return;
@@ -300,6 +332,8 @@ export const createFixedResolution = async ({
         }
       }
       if (unknown.size > 0 && !refreshAttempted) await refreshUnknown();
+
+      await resolveRelations(page.value.records);
 
       const surviving = [...unknown].filter((hash) => !fields.has(hash));
       const warnings: PdWarning[] = [...page.value.warnings];

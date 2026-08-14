@@ -101,7 +101,7 @@ describe("--resolve fixed-cost enrichment", () => {
     const { exit, lines, last } = await run([
       ...lookupFixtures(fields),
       dealFixture([raw]),
-    ]);
+    ], ["--fields", "owner_id,pipeline_id,stage_id,custom_fields"]);
 
     expect(exit).toBe(0);
     const record = records(lines)[0] as Line;
@@ -126,7 +126,7 @@ describe("--resolve fixed-cost enrichment", () => {
     const { lines, last } = await run([
       ...lookupFixtures([]),
       dealFixture([deal(1, { owner_id: 999, pipeline_id: 999, stage_id: 999 })]),
-    ]);
+    ], ["--fields", "owner_id,pipeline_id,stage_id"]);
     const record = records(lines)[0] as Line;
     expect("owner_name" in record).toBe(false);
     expect("pipeline_name" in record).toBe(false);
@@ -142,7 +142,7 @@ describe("--resolve fixed-cost enrichment", () => {
       cachedPage("stages", [stage(4)]),
       dealFixture([deal(1, { owner_id: 12, stage_id: 4 })]),
     ];
-    const { exit, lines, last } = await run(fixtures);
+    const { exit, lines, last } = await run(fixtures, ["--fields", "owner_id,stage_id"]);
 
     expect(exit).toBe(0);
     expect((records(lines)[0] as Line).owner_name).toBeUndefined();
@@ -173,12 +173,12 @@ describe("--resolve fixed-cost enrichment", () => {
     const first = await run([
       ...lookupFixtures(fields),
       dealFixture([deal(1, { stage_id: 4, custom_fields: { [HASH_ENUM]: 1 } })]),
-    ]);
-    expect(first.last.requests).toBe(5);
+    ], ["--fields", "stage_id,custom_fields"]);
+    expect(first.last.requests).toBe(4);
 
     const second = await run([
       dealFixture([deal(2, { stage_id: 4, custom_fields: { [HASH_ENUM]: 1 } })]),
-    ]);
+    ], ["--fields", "stage_id,custom_fields"]);
     expect(second.exit).toBe(0);
     expect(second.last).toMatchObject({ resolved: "full", requests: 1 });
   });
@@ -206,7 +206,7 @@ describe("--resolve fixed-cost enrichment", () => {
     ]);
     const out = capture();
     const exit = await route({
-      argv: ["deals", "list", "--resolve"],
+      argv: ["deals", "list", "--resolve", "--fields", "custom_fields"],
       platform: "linux",
       env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
       home,
@@ -218,7 +218,7 @@ describe("--resolve fixed-cost enrichment", () => {
     expect(exit).toBe(0);
     expect(seen.filter((path) => path === "/api/v2/dealFields")).toHaveLength(2);
     expect(out.of("warning").filter((line) => line.kind === "unknown_custom_field")).toHaveLength(1);
-    expect(out.last()).toMatchObject({ resolved: "partial", requests: 7 });
+    expect(out.last()).toMatchObject({ resolved: "partial", requests: 5 });
   });
 
   test("never sends include_option_labels", async () => {
@@ -229,7 +229,7 @@ describe("--resolve fixed-cost enrichment", () => {
     ]);
     const out = capture();
     const exit = await route({
-      argv: ["deals", "list", "--resolve"],
+      argv: ["deals", "list", "--resolve", "--fields", "custom_fields"],
       platform: "linux",
       env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
       home,

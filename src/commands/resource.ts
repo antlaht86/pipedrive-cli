@@ -23,7 +23,7 @@
 import { createCacheStore } from "../lib/cache/store.ts";
 import type { Resource } from "../lib/pipedrive/resources.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
-import { createFixedResolution } from "../lib/output/resolution.ts";
+import { createResolution } from "../lib/output/resolution.ts";
 import { stream } from "../lib/output/stream.ts";
 import type { Flag } from "./arguments.ts";
 import { begin, type CommandInput, type Verb } from "./prologue.ts";
@@ -57,8 +57,8 @@ export type ResourceCommandInput = CommandInput & {
  * compile error rather than a value that reaches the walk unchecked.
  */
 const FLAGS: Record<Verb, readonly Flag[]> = {
-  list: ["token-file", "limit", "max-requests", "no-cache", "resolve", "fields"],
-  get: ["token-file", "max-requests", "no-cache", "resolve", "fields"],
+  list: ["token-file", "limit", "max-requests", "resolve-budget", "no-cache", "resolve", "fields"],
+  get: ["token-file", "max-requests", "resolve-budget", "no-cache", "resolve", "fields"],
 };
 
 export const resourceCommand = async ({
@@ -99,12 +99,13 @@ export const resourceCommand = async ({
     projection,
   );
   const pages = parsed.flags.resolve === true
-    ? (await createFixedResolution({
+    ? (await createResolution({
         resource,
         projection,
         client,
         store,
         noCache: parsed.flags["no-cache"] === true,
+        resolveBudget: parsed.flags["resolve-budget"] ?? 50,
         writer,
       }))(projected)
     : projected;
