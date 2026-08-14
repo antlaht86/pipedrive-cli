@@ -38,16 +38,13 @@ const HEADER_ALLOWLIST = new Set([
 ]);
 
 const safeUrl = (url: string): { path: string; query: string } => {
-	try {
-		const parsed = new URL(url);
-		const query = [...parsed.searchParams].map(
-			([name, value]) =>
-				`${name}=${QUERY_VALUE_ALLOWLIST.has(name) && name !== "term" ? value : "[redacted]"}`,
-		);
-		return { path: parsed.pathname, query: query.join("&") };
-	} catch {
-		return { path: "<unparseable url>", query: "" };
-	}
+	const parsed = URL.parse(url);
+	if (parsed === null) return { path: "<unparseable url>", query: "" };
+	const query = [...parsed.searchParams].map(
+		([name, value]) =>
+			`${name}=${QUERY_VALUE_ALLOWLIST.has(name) && name !== "term" ? value : "[redacted]"}`,
+	);
+	return { path: parsed.pathname, query: query.join("&") };
 };
 
 const safeHeaders = (...sources: readonly Headers[]): string => {
@@ -73,6 +70,12 @@ export type RequestDiagnostic = {
 	transportError?: boolean;
 };
 
+export type PacingDiagnostic = {
+	defaultLimit: number;
+	searchLimit: number;
+	concurrency: number;
+};
+
 export type RunDiagnosticsOptions = {
 	sink?: Sink;
 	/** The sole TTY seam. Production checks stderr's descriptor, not stdout's. */
@@ -81,6 +84,7 @@ export type RunDiagnosticsOptions = {
 	clock?: Clock;
 	startedAt?: number;
 	requests: () => number;
+	pacing?: () => PacingDiagnostic | undefined;
 	maxRequests?: number;
 };
 
@@ -91,6 +95,7 @@ export class RunDiagnostics {
 	readonly #sink: Sink;
 	readonly #clock: Clock;
 	readonly #requests: () => number;
+	readonly #pacing: () => PacingDiagnostic | undefined;
 	readonly #maxRequests: number | undefined;
 	readonly #verbose: boolean;
 	readonly #enabled: boolean;
@@ -107,11 +112,13 @@ export class RunDiagnostics {
 		clock = systemClock,
 		startedAt,
 		requests,
+		pacing = () => undefined,
 		maxRequests,
 	}: RunDiagnosticsOptions) {
 		this.#sink = sink;
 		this.#clock = clock;
 		this.#requests = requests;
+		this.#pacing = pacing;
 		this.#maxRequests = maxRequests;
 		this.#verbose = verbose;
 		this.#enabled = verbose || isTty();
@@ -128,7 +135,12 @@ export class RunDiagnostics {
 
 	refresh(): void {
 		if (!this.#enabled || this.#finished) return;
-		const status = `pd: ${this.#records} records, ${this.#requests()} requests, ${this.#elapsed()}`;
+		const pacing = this.#pacing();
+		const pacingText =
+			pacing === undefined
+				? ""
+				: `, gate ${pacing.defaultLimit}/${pacing.searchLimit} per 2s, concurrency ${pacing.concurrency}`;
+		const status = `pd: ${this.#records} records, ${this.#requests()} requests, ${this.#elapsed()}${pacingText}`;
 		const padding = " ".repeat(
 			Math.max(0, this.#lastStatusWidth - status.length),
 		);

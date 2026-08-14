@@ -437,6 +437,12 @@ export class NdjsonWriter {
 		}
 	}
 
+	/** A permanent human diagnostic; silent in machine mode. */
+	anomaly(message: string): void {
+		this.#refuseAfterTrailer("anomaly");
+		this.#diagnostics?.anomaly(message);
+	}
+
 	/** ADR-0008: an ancillary resolver failed after the writer was constructed. */
 	resolutionPartial(): void {
 		if (this.#resolved === "full") this.#resolved = "partial";

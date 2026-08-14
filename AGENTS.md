@@ -14,3 +14,5 @@ pd organizations list --ids 7,9,11
 ```
 
 `--ids` accepts any number of IDs. The CLI deduplicates them and hides Pipedrive's 100-ID request boundary while preserving the caller's order. An `unmatched_ids` warning means one or more requested records do not exist or are not visible.
+
+stderr is human prose, not an output contract: do not parse it or rely on receiving it. Its wording may change without a version bump. Pass `--limit` to bound a walk instead of watching for the 10,000-record stderr warning, which an agent harness may discard.

@@ -96,7 +96,7 @@ const of = (lines: Line[], type: string): Line[] =>
 
 describe("the walk", () => {
 	test("--verbose changes no stdout byte and forces request diagnostics without a TTY", async () => {
-		const fixture = page([deal(1)], null);
+		const fixture = { ...page([deal(1)], null), headers: { age: "12" } };
 		const normal = await run([fixture], ["--limit", "1"]);
 		const verbose = await run([fixture], ["--limit", "1", "--verbose"]);
 
@@ -105,8 +105,42 @@ describe("the walk", () => {
 		expect(diagnostics).toContain("GET /api/v2/deals");
 		expect(diagnostics).toContain("status=200");
 		expect(diagnostics).toContain("attempt=1");
-		expect(diagnostics).toContain("cache_hit=no");
+		expect(diagnostics).toContain("cache_hit=yes");
+		expect(diagnostics).not.toContain("age=12");
 		expect(diagnostics).toContain("pd: finished:");
+	});
+
+	test("a default non-TTY replay is silent on success and emits only the error summary on failure", async () => {
+		const success = await run([page([deal(1)], null)], ["--limit", "1"]);
+		expect(success.stderr).toEqual([]);
+
+		const failure = await run(
+			[{ ...page([], null), status: 401 }],
+			["--limit", "1"],
+		);
+		expect(failure.stderr).toHaveLength(1);
+		expect(failure.stderr[0]).toStartWith("pd: ");
+		expect(failure.stderr[0]).not.toContain("\r");
+
+		const large = await run([
+			page(
+				Array.from({ length: 10_000 }, (_, index) => deal(index + 1)),
+				null,
+			),
+		]);
+		expect(large.stderr).toEqual([
+			"pd: 10000 records emitted so far. Pass --limit to bound the walk.\n",
+		]);
+	});
+
+	test("does not add aliases or logging controls beside --verbose", async () => {
+		for (const argv of [["-v"], ["--quiet"], ["--log-format", "json"]]) {
+			const result = await runWith(undefined, argv, {
+				PD_API_TOKEN: "test-token",
+			});
+			expect(result.exit).toBe(2);
+			expect(result.last["code"]).toBe("usage");
+		}
 	});
 
 	test("walks every page to a null cursor and emits one record line per deal", async () => {

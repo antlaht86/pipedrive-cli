@@ -149,6 +149,12 @@ const rateLimitHeader = (
 	return parsed.success ? parsed.data : undefined;
 };
 
+/** Standard proxy cache signals; their values never enter diagnostics. */
+const responseCameFromCache = (response: Response): boolean =>
+	response.headers.has("age") ||
+	/\bhit\b/i.test(response.headers.get("x-cache") ?? "") ||
+	/\bhit\b/i.test(response.headers.get("cf-cache-status") ?? "");
+
 /**
  * ADR-0001 and ADR-0010 §6: the Cloudflare block body is an HTML error page, and
  * 403 is overloaded between that block and an ordinary permission failure. They
@@ -427,7 +433,7 @@ export const createGuardedFetch = ({
 					: { transportError: true }),
 				durationMs,
 				attempt: attemptNumber,
-				cacheHit: false,
+				cacheHit: attempt.isOk() && responseCameFromCache(attempt.value),
 			});
 
 			// A transport that refuses with a `PdFailure` has already said what went

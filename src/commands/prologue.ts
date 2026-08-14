@@ -158,6 +158,16 @@ export const begin = <T>({
 		clock,
 		startedAt,
 		requests: () => pending.guarded?.dispatches() ?? 0,
+		pacing: () => {
+			const guarded = pending.guarded;
+			return guarded === undefined
+				? undefined
+				: {
+						defaultLimit: guarded.limitOf("default"),
+						searchLimit: guarded.limitOf("search"),
+						concurrency: guarded.concurrency,
+					};
+		},
 		...(flags?.["max-requests"] === undefined
 			? {}
 			: { maxRequests: flags["max-requests"] }),

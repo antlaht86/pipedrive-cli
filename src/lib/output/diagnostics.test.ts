@@ -20,6 +20,7 @@ const diagnosticsOf = ({
 		verbose,
 		clock,
 		requests: () => requests,
+		pacing: () => ({ defaultLimit: 10, searchLimit: 5, concurrency: 4 }),
 	});
 	return {
 		clock,
@@ -39,20 +40,20 @@ describe("run diagnostics", () => {
 		expect(output.join("")).toBe("");
 	});
 
-	test("a TTY gets rewriting progress, permanent anomalies and a final summary", () => {
-		const { clock, diagnostics, output, request } = diagnosticsOf({
-			tty: true,
-		});
+	test("a TTY timer rewrites progress at roughly 1 Hz", async () => {
+		const { clock, diagnostics, output, request } = diagnosticsOf({ tty: true });
 		diagnostics.record();
 		request();
 		clock.advance(1_000);
-		diagnostics.refresh();
+
+		await new Promise((resolve) => setTimeout(resolve, 1_050));
 		diagnostics.anomaly("gate paused for 2s");
 		clock.advance(250);
 		diagnostics.finish();
 
 		const text = output.join("");
 		expect(text).toContain("\rpd: 1 records, 1 requests, 1.0s");
+		expect(text).toContain("gate 10/5 per 2s, concurrency 4");
 		expect(text).toContain("gate paused for 2s\n");
 		expect(text).toContain("pd: finished: 1 records, 1 requests, 1.3s\n");
 		expect(text).not.toContain("token");

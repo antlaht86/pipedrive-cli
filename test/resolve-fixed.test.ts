@@ -304,14 +304,18 @@ describe("--resolve fixed-cost enrichment", () => {
 			env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
 			home,
 			transport: (request) => {
-				seen.push(new URL(request.url).pathname);
+				seen.push(URL.parse(request.url)?.pathname ?? "<invalid url>");
 				return replay(request);
 			},
 			sink: out.sink,
 			stderr: out.stderr,
+			isTty: () => true,
 		});
 
 		expect(exit).toBe(0);
+		expect(out.errors.join("")).toContain(
+			"field schema refreshed after an unrecognised deal custom field key",
+		);
 		expect(seen.filter((path) => path === "/api/v2/dealFields")).toHaveLength(
 			2,
 		);

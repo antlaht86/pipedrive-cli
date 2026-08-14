@@ -339,6 +339,9 @@ export const createResolution = async ({
 		if (refreshAttempted || schema === undefined) return;
 		refreshAttempted = true;
 		if (resource.entity === undefined) return;
+		writer.anomaly(
+			`field schema refreshed after an unrecognised ${resource.entity} custom field key`,
+		);
 		schema = await fresh(fieldSource(resource.entity));
 		fields = schema === undefined ? new Map() : fieldMap(schema.records);
 	};
