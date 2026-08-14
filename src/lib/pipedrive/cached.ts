@@ -32,6 +32,7 @@ import type { z } from "zod";
 import { pdError, type PdError } from "../errors.ts";
 import type { CacheEntryName } from "../cache/entries.ts";
 import type { PipedriveClient } from "./client.ts";
+import type { ObjectSchema } from "./schema.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
 import { UserRecord, fetchUsers } from "./users.ts";
@@ -95,10 +96,6 @@ export type CachedResource = {
    * refusal below rather than with a throw.
    */
   readonly source: (entity?: Entity) => CachedSource | undefined;
-};
-
-type ObjectSchema<T> = z.ZodType<T, unknown> & {
-  readonly shape: z.ZodRawShape;
 };
 
 type SourceDefinition<T extends Record<string, unknown>> = {

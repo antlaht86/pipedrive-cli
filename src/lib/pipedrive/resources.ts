@@ -25,12 +25,12 @@
  * `get` alike, which is the contract worth having.
  */
 
-import type { z } from "zod";
 import type { Result } from "neverthrow";
 
 import type { PdError } from "../errors.ts";
 import type { Projection } from "../output/projection.ts";
 import type { PipedriveClient } from "./client.ts";
+import type { ObjectSchema } from "./schema.ts";
 import { LIST_PAGE_SIZE, walk, type Page } from "./walk.ts";
 import { single } from "./single.ts";
 import {
@@ -79,10 +79,6 @@ export type Resource = {
 type Fetch = (
   client: PipedriveClient,
 ) => ReturnType<PipedriveClient["v2"]>;
-
-type ObjectSchema<T> = z.ZodType<T, unknown> & {
-  readonly shape: z.ZodRawShape;
-};
 
 type Definition<T> = {
   name: string;
