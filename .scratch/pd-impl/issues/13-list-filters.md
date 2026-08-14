@@ -6,7 +6,7 @@ This is the second half of the two-command join that replaces related-entity exp
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0017 (list filtering), ADR-0018 (related-entity expansion), ADR-0003 (`--ids` chunking).
 
@@ -24,20 +24,21 @@ Notes for the implementer:
 - Timestamp flags take **RFC3339 verbatim** and are validated offline. `pd` never parses or normalises the value it sends.
 - **There is no related-entity expansion**, no `--expand`, no `--include`. The two-command join is the documented answer:
 
-```
+```sh
 pd deals list --fields title,org_id        # → org_id 7, 9, 11 …
 pd organizations list --ids 7,9,11         # → the whole organisation records
 ```
 
   The fact that decided it: `ids` is a parameter on the **same operation** as the unfiltered list, so the second command issues exactly the request an in-run expansion would have issued. Request cost against the shared budget is identical either way.
+
 - `--filter-id` is marked `"enumerable": false` in the manifest (ticket 16), because `pd` has no command that lists filter ids.
 
-- [ ] Every named filter flag applies on the commands where it is valid, and is a usage error where it is not
-- [ ] `--ids` accepts any number of ids, deduplicates, and chunks at 100 in caller order
-- [ ] 250 ids issue exactly three requests (replay test)
-- [ ] Duplicate ids issue the same requests as the deduplicated set (replay test)
-- [ ] Two omitted ids produce exactly one `unmatched_ids` warning, `complete: true`, exit 0 (replay test)
-- [ ] `--filter-id` together with `--ids` is exit 2 offline with zero dispatches
-- [ ] `--updated-since` and `--updated-until` take RFC3339 verbatim, are validated offline, and are sent unmodified
-- [ ] `--sort-by update_time` combines with `--updated-since`
-- [ ] No `--expand` or `--include` flag exists
+- [x] Every named filter flag applies on the commands where it is valid, and is a usage error where it is not
+- [x] `--ids` accepts any number of ids, deduplicates, and chunks at 100 in caller order
+- [x] 250 ids issue exactly three requests (replay test)
+- [x] Duplicate ids issue the same requests as the deduplicated set (replay test)
+- [x] Two omitted ids produce exactly one `unmatched_ids` warning, `complete: true`, exit 0 (replay test)
+- [x] `--filter-id` together with `--ids` is exit 2 offline with zero dispatches
+- [x] `--updated-since` and `--updated-until` take RFC3339 verbatim, are validated offline, and are sent unmodified
+- [x] `--sort-by update_time` combines with `--updated-since`
+- [x] No `--expand` or `--include` flag exists

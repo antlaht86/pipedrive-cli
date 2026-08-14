@@ -37,14 +37,14 @@ import type { PipedriveClient } from "./client.ts";
 export type Bound = "limit";
 
 export type Page<T> = {
-  /** Validated, deduplicated and bounded. Nothing downstream re-filters. */
-  records: T[];
-  /** One per record this page's record schema rejected, before deduplication. */
-  warnings: PdWarning[];
-  /** Records this page suppressed as already seen earlier in the run. */
-  duplicates: number;
-  /** Set on the final page only. */
-  bound?: Bound;
+	/** Validated, deduplicated and bounded. Nothing downstream re-filters. */
+	records: T[];
+	/** One per record this page's record schema rejected, before deduplication. */
+	warnings: PdWarning[];
+	/** Records this page suppressed as already seen earlier in the run. */
+	duplicates: number;
+	/** Set on the final page only. */
+	bound?: Bound;
 };
 
 /**
@@ -56,21 +56,28 @@ export const LIST_PAGE_SIZE = 500;
 
 /** A cursor page fetch, already gated, retried and counted below this layer. */
 export type FetchPage = (
-  cursor: string | undefined,
+	cursor: string | undefined,
+	segment: number,
 ) => ReturnType<PipedriveClient["v2"]>;
 
 export type WalkOptions<T> = {
-  /** The `resource` field on a `record_rejected` warning — `"deal"`. */
-  resource: string;
-  record: z.ZodType<T, unknown>;
-  fetchPage: FetchPage;
-  /**
-   * ADR-0003 §4 / ADR-0017 §9: `id` on a list, `(record_type, id)` on the mixed
-   * `pd items search` stream, where a deal and a person may share an id.
-   */
-  keyOf: (record: T) => string | number;
-  /** ADR-0003 §1, counted after rejection and deduplication. Ticket 06 wires it. */
-  limit?: number;
+	/** The `resource` field on a `record_rejected` warning — `"deal"`. */
+	resource: string;
+	record: z.ZodType<T, unknown>;
+	fetchPage: FetchPage;
+	/**
+	 * ADR-0003 §4 / ADR-0017 §9: `id` on a list, `(record_type, id)` on the mixed
+	 * `pd items search` stream, where a deal and a person may share an id.
+	 */
+	keyOf: (record: T) => string | number;
+	/** ADR-0003 §1, counted after rejection and deduplication. Ticket 06 wires it. */
+	limit?: number;
+	/** Invisible request sequences, used by ADR-0018's chunks of at most 100 ids. */
+	segments?: number;
+	/** Warnings that can only be known after every segment completed. */
+	completedWarnings?: (returned: ReadonlySet<string | number>) => PdWarning[];
+	/** Optional caller-defined output order, used by `--ids` joins. */
+	outputOrder?: readonly (string | number)[];
 };
 
 /**
@@ -82,8 +89,8 @@ export type WalkOptions<T> = {
 const IdOnly = z.object({ id: z.int() });
 
 const idOf = (raw: unknown): number | undefined => {
-  const parsed = IdOnly.safeParse(raw);
-  return parsed.success ? parsed.data.id : undefined;
+	const parsed = IdOnly.safeParse(raw);
+	return parsed.success ? parsed.data.id : undefined;
 };
 
 /**
@@ -101,30 +108,30 @@ const idOf = (raw: unknown): number | undefined => {
  * Key order here is the key order on the wire; the writer does not reorder.
  */
 export const rejection = (
-  resource: string,
-  raw: unknown,
-  error: z.ZodError,
+	resource: string,
+	raw: unknown,
+	error: z.ZodError,
 ): RecordRejected => {
-  const issue = error.issues[0];
-  const id = idOf(raw);
-  return {
-    kind: "record_rejected",
-    resource,
-    ...(id === undefined ? {} : { id }),
-    path: (issue?.path ?? []).join("."),
-    issue: issue?.code ?? "invalid_type",
-    message: issue?.message ?? "The record did not match pd's schema.",
-  };
+	const issue = error.issues[0];
+	const id = idOf(raw);
+	return {
+		kind: "record_rejected",
+		resource,
+		...(id === undefined ? {} : { id }),
+		path: (issue?.path ?? []).join("."),
+		issue: issue?.code ?? "invalid_type",
+		message: issue?.message ?? "The record did not match pd's schema.",
+	};
 };
 
 export const noSurvivors = (resource: string, count: number): PdError =>
-  pdError({
-    code: "invalid_response",
-    message:
-      `None of the ${count} ${resource} records on the first page matched pd's schema. ` +
-      "The schema does not describe this resource; retrying will not help.",
-    details: { resource, rejected: count },
-  });
+	pdError({
+		code: "invalid_response",
+		message:
+			`None of the ${count} ${resource} records on the first page matched pd's schema. ` +
+			"The schema does not describe this resource; retrying will not help.",
+		details: { resource, rejected: count },
+	});
 
 /**
  * Exported for `single.ts`, which reads the by-id envelope: the two shapes
@@ -132,111 +139,143 @@ export const noSurvivors = (resource: string, count: number): PdError =>
  * same first-five issues either way, and one builder keeps it that way.
  */
 export const structural = (message: string, error: z.ZodError): PdError =>
-  pdError({
-    code: "invalid_response",
-    message,
-    details: {
-      issues: error.issues.slice(0, 5).map((issue) => ({
-        path: issue.path.join("."),
-        code: issue.code,
-        message: issue.message,
-      })),
-    },
-  });
+	pdError({
+		code: "invalid_response",
+		message,
+		details: {
+			issues: error.issues.slice(0, 5).map((issue) => ({
+				path: issue.path.join("."),
+				code: issue.code,
+				message: issue.message,
+			})),
+		},
+	});
 
 export async function* walk<T>({
-  resource,
-  record,
-  fetchPage,
-  keyOf,
-  limit,
+	resource,
+	record,
+	fetchPage,
+	keyOf,
+	limit,
+	segments = 1,
+	completedWarnings,
+	outputOrder,
 }: WalkOptions<T>): AsyncGenerator<Result<Page<T>, PdError>> {
-  const seen = new Set<string | number>();
-  let cursor: string | undefined;
-  let first = true;
-  // A countdown, not a total. `undefined` is ADR-0003's default: everything.
-  let remaining = limit;
+	const seen = new Set<string | number>();
+	const returned = new Set<string | number>();
+	const order = new Map(outputOrder?.map((key, index) => [key, index]) ?? []);
+	let cursor: string | undefined;
+	let segment = 0;
+	let first = true;
+	// A countdown, not a total. `undefined` is ADR-0003's default: everything.
+	let remaining = limit;
 
-  for (;;) {
-    const body = await fetchPage(cursor);
-    if (body.isErr()) {
-      yield err(body.error);
-      return;
-    }
+	for (;;) {
+		const body = await fetchPage(cursor, segment);
+		if (body.isErr()) {
+			yield err(body.error);
+			return;
+		}
 
-    const envelope = ListEnvelope.safeParse(body.value);
-    if (!envelope.success) {
-      yield err(
-        structural(
-          "Pipedrive returned a list body pd cannot read. Retrying will not help.",
-          envelope.error,
-        ),
-      );
-      return;
-    }
+		const envelope = ListEnvelope.safeParse(body.value);
+		if (!envelope.success) {
+			yield err(
+				structural(
+					"Pipedrive returned a list body pd cannot read. Retrying will not help.",
+					envelope.error,
+				),
+			);
+			return;
+		}
 
-    const records: T[] = [];
-    const warnings: PdWarning[] = [];
-    let rejected = 0;
-    let duplicates = 0;
+		const records: T[] = [];
+		const warnings: PdWarning[] = [];
+		let rejected = 0;
+		let duplicates = 0;
 
-    for (const raw of envelope.data.data) {
-      const parsed = record.safeParse(raw);
-      if (!parsed.success) {
-        rejected += 1;
-        warnings.push(rejection(resource, raw, parsed.error));
-        continue;
-      }
-      // ADR-0003 §4: every id seen for the whole run, no cap, no window.
-      const key = keyOf(parsed.data);
-      if (seen.has(key)) {
-        duplicates += 1;
-        continue;
-      }
-      seen.add(key);
-      records.push(parsed.data);
-    }
+		for (const raw of envelope.data.data) {
+			const returnedId = idOf(raw);
+			if (returnedId !== undefined) returned.add(returnedId);
+			const parsed = record.safeParse(raw);
+			if (!parsed.success) {
+				rejected += 1;
+				warnings.push(rejection(resource, raw, parsed.error));
+				continue;
+			}
+			// ADR-0003 §4: every id seen for the whole run, no cap, no window.
+			const key = keyOf(parsed.data);
+			if (seen.has(key)) {
+				duplicates += 1;
+				continue;
+			}
+			seen.add(key);
+			records.push(parsed.data);
+		}
+		if (order.size > 0) {
+			records.sort(
+				(left, right) =>
+					(order.get(keyOf(left)) ?? Number.MAX_SAFE_INTEGER) -
+					(order.get(keyOf(right)) ?? Number.MAX_SAFE_INTEGER),
+			);
+		}
 
-    // ADR-0006 §4. Zero survivors out of one or more elements on the **first**
-    // page means the schema does not describe this resource at all. It fires
-    // before any `record` line is written, so the error trailer's `emitted: 0`
-    // is true and nothing has to be retracted. No later page escalates, and
-    // there is no ratio threshold: under keyset-like cursors old records cluster
-    // on the early pages, so a wholly rejected later page is the survivable case.
-    if (first && rejected > 0 && rejected === envelope.data.data.length) {
-      yield err(noSurvivors(resource, rejected));
-      return;
-    }
-    first = false;
+		// ADR-0006 §4. Zero survivors out of one or more elements on the **first**
+		// page means the schema does not describe this resource at all. It fires
+		// before any `record` line is written, so the error trailer's `emitted: 0`
+		// is true and nothing has to be retracted. No later page escalates, and
+		// there is no ratio threshold: under keyset-like cursors old records cluster
+		// on the early pages, so a wholly rejected later page is the survivable case.
+		if (first && rejected > 0 && rejected === envelope.data.data.length) {
+			yield err(noSurvivors(resource, rejected));
+			return;
+		}
+		first = false;
 
-    cursor = nextCursorOf(envelope.data);
+		cursor = nextCursorOf(envelope.data);
+		const segmentComplete = cursor === undefined;
+		const hasAnotherSegment = segmentComplete && segment + 1 < segments;
+		const hasMore = cursor !== undefined || hasAnotherSegment;
+		if (hasAnotherSegment) segment += 1;
 
-    if (remaining === undefined) {
-      yield ok({ records, warnings, duplicates });
-      if (cursor === undefined) return;
-      continue;
-    }
+		if (remaining === undefined) {
+			yield ok({
+				records,
+				warnings: hasMore
+					? warnings
+					: [...warnings, ...(completedWarnings?.(returned) ?? [])],
+				duplicates,
+			});
+			if (!hasMore) return;
+			continue;
+		}
 
-    // ADR-0004: the marker may not lie. A limit that fills exactly at a page
-    // boundary with a `null` cursor is a complete answer; a limit that fills
-    // where the cursor continues is bounded, even if the next page would have
-    // been empty. There is no way to know that without fetching it, and
-    // reporting a walk complete when it might not be is the worse mistake.
-    if (records.length >= remaining) {
-      const bounded = records.slice(0, remaining);
-      const exactlyAtBoundary =
-        records.length === remaining && cursor === undefined;
-      yield ok({
-        records: bounded,
-        warnings,
-        duplicates,
-        ...(exactlyAtBoundary ? {} : { bound: "limit" as const }),
-      });
-      return;
-    }
+		// ADR-0004: the marker may not lie. A limit that fills exactly at a page
+		// boundary with a `null` cursor is a complete answer; a limit that fills
+		// where the cursor continues is bounded, even if the next page would have
+		// been empty. There is no way to know that without fetching it, and
+		// reporting a walk complete when it might not be is the worse mistake.
+		if (records.length >= remaining) {
+			const bounded = records.slice(0, remaining);
+			const exactlyAtBoundary = records.length === remaining && !hasMore;
+			yield ok({
+				records: bounded,
+				warnings: exactlyAtBoundary
+					? [...warnings, ...(completedWarnings?.(returned) ?? [])]
+					: warnings,
+				duplicates,
+				...(exactlyAtBoundary ? {} : { bound: "limit" as const }),
+			});
+			return;
+		}
 
-    remaining -= records.length;
-    yield ok({ records, warnings, duplicates });
-    if (cursor === undefined) return;
-  }
+		remaining -= records.length;
+		yield ok({
+			records,
+			warnings: hasMore
+				? warnings
+				: [...warnings, ...(completedWarnings?.(returned) ?? [])],
+			duplicates,
+		});
+		if (!hasMore) return;
+	}
 }

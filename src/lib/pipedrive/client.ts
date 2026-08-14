@@ -38,15 +38,15 @@ import { pdError, type PdError } from "../errors.ts";
 import { isPdFailure } from "./failure.ts";
 import type { GuardedFetch } from "./guarded-fetch.ts";
 import {
-  PIPEDRIVE_V1_BASE_URL,
-  PIPEDRIVE_V2_BASE_URL,
-  redactUrl,
+	PIPEDRIVE_V1_BASE_URL,
+	PIPEDRIVE_V2_BASE_URL,
+	redactUrl,
 } from "./guarded-fetch.ts";
 import { createClient, createConfig } from "./v2/generated/client/index.ts";
 import type { Auth, Client } from "./v2/generated/client/index.ts";
 import {
-  createClient as createV1Client,
-  createConfig as createV1Config,
+	createClient as createV1Client,
+	createConfig as createV1Config,
 } from "./v1/generated/client/index.ts";
 import type { Client as V1Client } from "./v1/generated/client/index.ts";
 
@@ -58,18 +58,18 @@ import type { Client as V1Client } from "./v1/generated/client/index.ts";
  * Answering only the `apiKey` scheme sends exactly the header ADR-0012 chose.
  */
 const apiKeyOnly =
-  (token: string) =>
-  (auth: Auth): string | undefined =>
-    auth.type === "apiKey" ? token : undefined;
+	(token: string) =>
+	(auth: Auth): string | undefined =>
+		auth.type === "apiKey" ? token : undefined;
 
 const jsonParse = Result.fromThrowable(
-  (text: string): unknown => JSON.parse(text),
-  () =>
-    pdError({
-      code: "invalid_response",
-      message:
-        "Pipedrive returned a body that is not JSON. Retrying will not help.",
-    }),
+	(text: string): unknown => JSON.parse(text),
+	() =>
+		pdError({
+			code: "invalid_response",
+			message:
+				"Pipedrive returned a body that is not JSON. Retrying will not help.",
+		}),
 );
 
 /**
@@ -79,9 +79,9 @@ const jsonParse = Result.fromThrowable(
  * and this function deliberately is not.
  */
 type ClientResult = {
-  data?: unknown;
-  error?: unknown;
-  response?: Response;
+	data?: unknown;
+	error?: unknown;
+	response?: Response;
 };
 
 /**
@@ -92,58 +92,58 @@ type ClientResult = {
  * `invalid_response`, which is about a body's shape.
  */
 const statusError = (status: number, path: string): PdError => {
-  const details = { path, status };
-  if (status === 401) {
-    return pdError({
-      code: "auth",
-      message:
-        "Pipedrive rejected the API token. A human must supply a valid one.",
-      details,
-    });
-  }
-  if (status === 403) {
-    return pdError({
-      code: "forbidden",
-      message:
-        "The API token is valid but lacks permission for this resource. A human must grant access.",
-      details,
-    });
-  }
-  if (status === 404) {
-    return pdError({
-      code: "not_found",
-      message: "Pipedrive does not have that resource.",
-      details,
-    });
-  }
-  return pdError({
-    code: "internal",
-    message:
-      `Pipedrive refused a request pd composed, with status ${status}. ` +
-      "This is a bug in pd, not a usage error.",
-    details,
-  });
+	const details = { path, status };
+	if (status === 401) {
+		return pdError({
+			code: "auth",
+			message:
+				"Pipedrive rejected the API token. A human must supply a valid one.",
+			details,
+		});
+	}
+	if (status === 403) {
+		return pdError({
+			code: "forbidden",
+			message:
+				"The API token is valid but lacks permission for this resource. A human must grant access.",
+			details,
+		});
+	}
+	if (status === 404) {
+		return pdError({
+			code: "not_found",
+			message: "Pipedrive does not have that resource.",
+			details,
+		});
+	}
+	return pdError({
+		code: "internal",
+		message:
+			`Pipedrive refused a request pd composed, with status ${status}. ` +
+			"This is a bug in pd, not a usage error.",
+		details,
+	});
 };
 
 const readBody = (result: ClientResult): Result<unknown, PdError> => {
-  if (result.error !== undefined) {
-    // The carrier `guardedFetch` throws already holds an ADR-0001 error object
-    // that says what happened and that waiting cannot fix it.
-    if (isPdFailure(result.error)) return err(result.error.error);
-    const response = result.response;
-    return err(
-      response === undefined
-        ? pdError({
-            code: "internal",
-            message: `pd could not issue a request: ${String(result.error)}`,
-          })
-        : statusError(response.status, redactUrl(response.url)),
-    );
-  }
+	if (result.error !== undefined) {
+		// The carrier `guardedFetch` throws already holds an ADR-0001 error object
+		// that says what happened and that waiting cannot fix it.
+		if (isPdFailure(result.error)) return err(result.error.error);
+		const response = result.response;
+		return err(
+			response === undefined
+				? pdError({
+						code: "internal",
+						message: `pd could not issue a request: ${String(result.error)}`,
+					})
+				: statusError(response.status, redactUrl(response.url)),
+		);
+	}
 
-  // `parseAs: "text"` makes `data` a string on every success, including the
-  // empty-body branch of the generated client.
-  return jsonParse(typeof result.data === "string" ? result.data : "");
+	// `parseAs: "text"` makes `data` a string on every success, including the
+	// empty-body branch of the generated client.
+	return jsonParse(typeof result.data === "string" ? result.data : "");
 };
 
 /**
@@ -157,96 +157,97 @@ const readBody = (result: ClientResult): Result<unknown, PdError> => {
  * could be handed the v2 client and reach `/api/v2/users`.
  */
 export type SdkCall<TOptions, TClient = Client> = (
-  options: TOptions & { client: TClient },
+	options: TOptions & { client: TClient },
 ) => Promise<ClientResult>;
 
 export type PipedriveClient = {
-  /**
-   * Runs a generated v2 operation and hands back the parsed body as `unknown`.
-   * Validation is the caller's, per ADR-0006 §1 — this function classifies
-   * transport and status, never shape.
-   */
-  v2: <TOptions>(
-    call: SdkCall<TOptions>,
-    options: TOptions,
-  ) => ResultAsync<unknown, PdError>;
-  /** Variable-cost relation call, accounted separately while sharing the gate. */
-  relation: <TOptions>(
-    call: SdkCall<TOptions>,
-    options: TOptions,
-  ) => ResultAsync<unknown, PdError>;
-  /**
-   * The same, for the one v1 operation `pd` calls — `GET /users` (ADR-0007 §1).
-   * It differs from `v2` in its `baseUrl` and in nothing else: both clients are
-   * given the same `guardedFetch`, so a v1 request queues in the same limiter
-   * and decrements the same counter (ADR-0007 §2).
-   */
-  v1: <TOptions>(
-    call: SdkCall<TOptions, V1Client>,
-    options: TOptions,
-  ) => ResultAsync<unknown, PdError>;
-  /** ADR-0011 §9's counter, for the trailer's `requests` field. */
-  requests: () => number;
+	/**
+	 * Runs a generated v2 operation and hands back the parsed body as `unknown`.
+	 * Validation is the caller's, per ADR-0006 §1 — this function classifies
+	 * transport and status, never shape.
+	 */
+	v2: <TOptions>(
+		call: SdkCall<TOptions>,
+		options: TOptions,
+	) => ResultAsync<unknown, PdError>;
+	/** Variable-cost relation call, accounted separately while sharing the gate. */
+	relation: <TOptions>(
+		call: SdkCall<TOptions>,
+		options: TOptions,
+	) => ResultAsync<unknown, PdError>;
+	/**
+	 * The same, for the one v1 operation `pd` calls — `GET /users` (ADR-0007 §1).
+	 * It differs from `v2` in its `baseUrl` and in nothing else: both clients are
+	 * given the same `guardedFetch`, so a v1 request queues in the same limiter
+	 * and decrements the same counter (ADR-0007 §2).
+	 */
+	v1: <TOptions>(
+		call: SdkCall<TOptions, V1Client>,
+		options: TOptions,
+	) => ResultAsync<unknown, PdError>;
+	/** ADR-0011 §9's counter, for the trailer's `requests` field. */
+	requests: () => number;
 };
 
 export type PipedriveClientOptions = {
-  token: string;
-  guarded: GuardedFetch;
+	token: string;
+	guarded: GuardedFetch;
 };
 
 export const createPipedriveClient = ({
-  token,
-  guarded,
+	token,
+	guarded,
 }: PipedriveClientOptions): PipedriveClient => {
-  const v2Client: Client = createClient(
-    createConfig({
-      baseUrl: PIPEDRIVE_V2_BASE_URL,
-      fetch: guarded.fetch,
-      auth: apiKeyOnly(token),
-      parseAs: "text",
-      throwOnError: false,
-    }),
-  );
+	const v2Client: Client = createClient(
+		createConfig({
+			baseUrl: PIPEDRIVE_V2_BASE_URL,
+			fetch: guarded.fetch,
+			auth: apiKeyOnly(token),
+			parseAs: "text",
+			throwOnError: false,
+		}),
+	);
 
-  const relationClient: Client = createClient(
-    createConfig({
-      baseUrl: PIPEDRIVE_V2_BASE_URL,
-      fetch: guarded.relationFetch,
-      auth: apiKeyOnly(token),
-      parseAs: "text",
-      throwOnError: false,
-    }),
-  );
+	const relationClient: Client = createClient(
+		createConfig({
+			baseUrl: PIPEDRIVE_V2_BASE_URL,
+			fetch: guarded.relationFetch,
+			auth: apiKeyOnly(token),
+			parseAs: "text",
+			throwOnError: false,
+		}),
+	);
 
-  const v1Client: V1Client = createV1Client(
-    createV1Config({
-      baseUrl: PIPEDRIVE_V1_BASE_URL,
-      fetch: guarded.fetch,
-      auth: apiKeyOnly(token),
-      parseAs: "text",
-      throwOnError: false,
-    }),
-  );
+	const v1Client: V1Client = createV1Client(
+		createV1Config({
+			baseUrl: PIPEDRIVE_V1_BASE_URL,
+			fetch: guarded.fetch,
+			auth: apiKeyOnly(token),
+			parseAs: "text",
+			throwOnError: false,
+		}),
+	);
 
-  /**
-   * The generated client only rejects when an interceptor does, and `pd`
-   * installs none. Reaching the rejection path at all is a programmer error —
-   * except for the carrier, which is unwrapped rather than reworded.
-   */
-  const run = (call: Promise<ClientResult>): ResultAsync<unknown, PdError> =>
-    ResultAsync.fromPromise(call, (cause) =>
-      isPdFailure(cause)
-        ? cause.error
-        : pdError({
-            code: "internal",
-            message: `The generated client rejected unexpectedly: ${String(cause)}`,
-          }),
-    ).andThen(readBody);
+	/**
+	 * The generated client only rejects when an interceptor does, and `pd`
+	 * installs none. Reaching the rejection path at all is a programmer error —
+	 * except for the carrier, which is unwrapped rather than reworded.
+	 */
+	const run = (call: Promise<ClientResult>): ResultAsync<unknown, PdError> =>
+		ResultAsync.fromPromise(call, (cause) =>
+			isPdFailure(cause)
+				? cause.error
+				: pdError({
+						code: "internal",
+						message: `The generated client rejected unexpectedly: ${String(cause)}`,
+					}),
+		).andThen(readBody);
 
-  return {
-    v2: (call, options) => run(call({ ...options, client: v2Client })),
-    relation: (call, options) => run(call({ ...options, client: relationClient })),
-    v1: (call, options) => run(call({ ...options, client: v1Client })),
-    requests: guarded.dispatches,
-  };
+	return {
+		v2: (call, options) => run(call({ ...options, client: v2Client })),
+		relation: (call, options) =>
+			run(call({ ...options, client: relationClient })),
+		v1: (call, options) => run(call({ ...options, client: v1Client })),
+		requests: guarded.dispatches,
+	};
 };

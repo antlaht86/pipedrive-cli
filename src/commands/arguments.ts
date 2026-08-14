@@ -31,6 +31,7 @@ import { Result, err, ok } from "neverthrow";
 import { z } from "zod";
 
 import { pdError, type PdError } from "../lib/errors.ts";
+import { DEAL_STATUSES, SORT_FIELDS } from "../lib/pipedrive/list-filters.ts";
 
 /**
  * The value both quantitative flags take — ADR-0003: a positive integer of 1 or
@@ -47,29 +48,172 @@ import { pdError, type PdError } from "../lib/errors.ts";
  * heading would be reading about the wrong one.
  */
 const positiveInteger = (flag: string) =>
-  z
-    .string()
-    .regex(/^[1-9][0-9]*$/, {
-      error: `--${flag} takes a positive integer of 1 or greater.`,
-    })
-    .transform(Number);
+	z
+		.string()
+		.regex(/^[1-9][0-9]*$/, {
+			error: `--${flag} takes a positive integer of 1 or greater.`,
+		})
+		.transform(Number);
+
+const positiveId = (flag: string) =>
+	z
+		.string()
+		.regex(/^[1-9][0-9]*$/, {
+			error: `--${flag} takes a positive integer id.`,
+		})
+		.refine((value) => Number.isSafeInteger(Number(value)), {
+			error: `--${flag} takes a positive integer id.`,
+		})
+		.transform(Number);
+
+const ids = z
+	.string()
+	.refine(
+		(value) =>
+			value !== "" &&
+			value
+				.split(",")
+				.every(
+					(id) => /^[1-9][0-9]*$/.test(id) && Number.isSafeInteger(Number(id)),
+				),
+		{ error: "--ids takes comma-separated positive integer ids." },
+	)
+	.transform((value) => [...new Set(value.split(",").map((id) => Number(id)))]);
+
+const RFC3339 =
+	/^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|([+-])(\d{2}):(\d{2}))$/;
+
+const LEAP_SECOND_DATES = new Set([
+	"1972-06-30",
+	"1972-12-31",
+	"1973-12-31",
+	"1974-12-31",
+	"1975-12-31",
+	"1976-12-31",
+	"1977-12-31",
+	"1978-12-31",
+	"1979-12-31",
+	"1981-06-30",
+	"1982-06-30",
+	"1983-06-30",
+	"1985-06-30",
+	"1987-12-31",
+	"1989-12-31",
+	"1990-12-31",
+	"1992-06-30",
+	"1993-06-30",
+	"1994-06-30",
+	"1995-12-31",
+	"1997-06-30",
+	"1998-12-31",
+	"2005-12-31",
+	"2008-12-31",
+	"2012-06-30",
+	"2015-06-30",
+	"2016-12-31",
+]);
+
+const isRfc3339 = (value: string): boolean => {
+	const match = RFC3339.exec(value);
+	if (match === null) return false;
+	const [
+		,
+		yearText,
+		monthText,
+		dayText,
+		hourText,
+		minuteText,
+		secondText,
+		offsetSign,
+		offsetHourText,
+		offsetMinuteText,
+	] = match;
+	const year = Number(yearText);
+	const month = Number(monthText);
+	const day = Number(dayText);
+	const hour = Number(hourText);
+	const minute = Number(minuteText);
+	const second = Number(secondText);
+	const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText);
+	const offsetMinute =
+		offsetMinuteText === undefined ? 0 : Number(offsetMinuteText);
+	if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 60)
+		return false;
+	if (offsetHour > 23 || offsetMinute > 59) return false;
+	const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+	const days = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+	if (day < 1 || day > (days[month - 1] ?? 0)) return false;
+	if (second !== 60) return true;
+
+	const offset =
+		(offsetHour * 60 + offsetMinute) * (offsetSign === "-" ? -1 : 1);
+	const utc = new Date(
+		Date.UTC(year, month - 1, day, hour, minute) - offset * 60_000,
+	);
+	const utcDate = [
+		utc.getUTCFullYear().toString().padStart(4, "0"),
+		(utc.getUTCMonth() + 1).toString().padStart(2, "0"),
+		utc.getUTCDate().toString().padStart(2, "0"),
+	].join("-");
+	return (
+		utc.getUTCHours() === 23 &&
+		utc.getUTCMinutes() === 59 &&
+		LEAP_SECOND_DATES.has(utcDate)
+	);
+};
+
+const rfc3339 = (flag: string) =>
+	z.string().refine(isRfc3339, {
+		error: `--${flag} takes an RFC3339 timestamp.`,
+	});
 
 export const Arguments = z.object({
-  "token-file": z.string().min(1, { error: "--token-file needs a path." }).optional(),
-  /** ADR-0003 §1: a record count, never a page size, and with no upper bound. */
-  limit: positiveInteger("limit").optional(),
-  /** ADR-0010 §3: network requests, no default, the only quantitative guard. */
-  "max-requests": positiveInteger("max-requests").optional(),
-  /** ADR-0008 §9: implicit relation requests, defaulted by the resolver. */
-  "resolve-budget": positiveInteger("resolve-budget").optional(),
-  /** ADR-0005 §8: skips the cached **read** and still writes the fresh answer. */
-  "no-cache": z.boolean().optional(),
-  /** ADR-0008: one additive switch for every id-to-name resolution. */
-  resolve: z.boolean().optional(),
-  /** ADR-0009 §4: required on `fields`, and its value set is checked there. */
-  entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
-  /** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
-  fields: z.array(z.string()).optional(),
+	"token-file": z
+		.string()
+		.min(1, { error: "--token-file needs a path." })
+		.optional(),
+	/** ADR-0003 §1: a record count, never a page size, and with no upper bound. */
+	limit: positiveInteger("limit").optional(),
+	/** ADR-0010 §3: network requests, no default, the only quantitative guard. */
+	"max-requests": positiveInteger("max-requests").optional(),
+	/** ADR-0008 §9: implicit relation requests, defaulted by the resolver. */
+	"resolve-budget": positiveInteger("resolve-budget").optional(),
+	/** ADR-0005 §8: skips the cached **read** and still writes the fresh answer. */
+	"no-cache": z.boolean().optional(),
+	/** ADR-0008: one additive switch for every id-to-name resolution. */
+	resolve: z.boolean().optional(),
+	/** ADR-0009 §4: required on `fields`, and its value set is checked there. */
+	entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
+	/** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
+	fields: z.array(z.string()).optional(),
+	/** ADR-0018 §3: deduplicated before the API's 100-id chunks are formed. */
+	ids: ids.optional(),
+	"owner-id": positiveId("owner-id").optional(),
+	"person-id": positiveId("person-id").optional(),
+	"org-id": positiveId("org-id").optional(),
+	"deal-id": positiveId("deal-id").optional(),
+	"pipeline-id": positiveId("pipeline-id").optional(),
+	"stage-id": positiveId("stage-id").optional(),
+	"filter-id": positiveId("filter-id").optional(),
+	status: z
+		.enum(DEAL_STATUSES, {
+			error: "--status takes one of: open, won, lost, deleted.",
+		})
+		.optional(),
+	done: z.boolean().optional(),
+	"not-done": z.boolean().optional(),
+	"updated-since": rfc3339("updated-since").optional(),
+	"updated-until": rfc3339("updated-until").optional(),
+	"sort-by": z
+		.enum(SORT_FIELDS, {
+			error: "--sort-by takes a supported list field.",
+		})
+		.optional(),
+	"sort-direction": z
+		.enum(["asc", "desc"], {
+			error: "--sort-direction takes one of: asc, desc.",
+		})
+		.optional(),
 });
 
 export type Arguments = z.infer<typeof Arguments>;
@@ -81,22 +225,37 @@ export type Flag = keyof Arguments;
  * `--no-cache=false` is a spelling nobody should have to guess the meaning of.
  */
 const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
-  "token-file": "string",
-  limit: "string",
-  "max-requests": "string",
-  "resolve-budget": "string",
-  "no-cache": "boolean",
-  resolve: "boolean",
-  entity: "string",
-  fields: "string",
+	"token-file": "string",
+	limit: "string",
+	"max-requests": "string",
+	"resolve-budget": "string",
+	"no-cache": "boolean",
+	resolve: "boolean",
+	entity: "string",
+	fields: "string",
+	ids: "string",
+	"owner-id": "string",
+	"person-id": "string",
+	"org-id": "string",
+	"deal-id": "string",
+	"pipeline-id": "string",
+	"stage-id": "string",
+	"filter-id": "string",
+	status: "string",
+	done: "boolean",
+	"not-done": "boolean",
+	"updated-since": "string",
+	"updated-until": "string",
+	"sort-by": "string",
+	"sort-direction": "string",
 };
 
 /** `--a, --b and --c` — the Oxford-less list the refusal below reads best with. */
 const listed = (flags: readonly string[]): string => {
-  const named = flags.map((flag) => `--${flag}`);
-  return named.length < 2
-    ? (named[0] ?? "")
-    : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1] ?? ""}`;
+	const named = flags.map((flag) => `--${flag}`);
+	return named.length < 2
+		? (named[0] ?? "")
+		: `${named.slice(0, -1).join(", ")} and ${named[named.length - 1] ?? ""}`;
 };
 
 /**
@@ -106,36 +265,39 @@ const listed = (flags: readonly string[]): string => {
  * other grammar failure passes through.
  */
 const usageMessage = (
-  command: string,
-  flags: readonly Flag[],
-  cause: unknown,
+	command: string,
+	flags: readonly Flag[],
+	cause: unknown,
 ): string => {
-  const node = cause instanceof Error ? cause : undefined;
-  const code = (node as { code?: string } | undefined)?.code;
-  if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
-    const flag = /'([^']+)'/.exec(node?.message ?? "")?.[1] ?? "that flag";
-    return `${command} does not accept ${flag}. It takes ${listed(flags)} and no other flag.`;
-  }
-  return node?.message ?? String(cause);
+	const node = cause instanceof Error ? cause : undefined;
+	const code = (node as { code?: string } | undefined)?.code;
+	if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+		const flag = /'([^']+)'/.exec(node?.message ?? "")?.[1] ?? "that flag";
+		return `${command} does not accept ${flag}. It takes ${listed(flags)} and no other flag.`;
+	}
+	return node?.message ?? String(cause);
 };
 
 const tokenise = (command: string, flags: readonly Flag[]) =>
-  Result.fromThrowable(
-    (argv: readonly string[]) =>
-      parseArgs({
-        args: [...argv],
-        strict: true,
-        allowPositionals: true,
-        options: Object.fromEntries(
-          flags.map((flag) => [
-            flag,
-            { type: FLAG_TYPE[flag], ...(flag === "fields" ? { multiple: true } : {}) },
-          ]),
-        ),
-      }),
-    (cause): PdError =>
-      pdError({ code: "usage", message: usageMessage(command, flags, cause) }),
-  );
+	Result.fromThrowable(
+		(argv: readonly string[]) =>
+			parseArgs({
+				args: [...argv],
+				strict: true,
+				allowPositionals: true,
+				options: Object.fromEntries(
+					flags.map((flag) => [
+						flag,
+						{
+							type: FLAG_TYPE[flag],
+							...(flag === "fields" ? { multiple: true } : {}),
+						},
+					]),
+				),
+			}),
+		(cause): PdError =>
+			pdError({ code: "usage", message: usageMessage(command, flags, cause) }),
+	);
 
 /**
  * How a command reads its positional. `none` is `list`; the other two are `get`,
@@ -153,89 +315,94 @@ export type Positional = "none" | "integer-id" | "code-id";
 const INTEGER_ID = /^[1-9][0-9]*$/;
 
 export type Parsed = {
-  flags: Arguments;
-  /** Present on the `get` verb, absent on `list`. */
-  id?: string | number;
+	flags: Arguments;
+	/** Present on the `get` verb, absent on `list`. */
+	id?: string | number;
 };
 
 const positionals = (
-  command: string,
-  positional: Positional,
-  found: readonly string[],
+	command: string,
+	positional: Positional,
+	found: readonly string[],
 ): Result<string | number | undefined, PdError> => {
-  const wantsId = positional !== "none";
-  const extra = found[wantsId ? 1 : 0];
-  if (extra !== undefined) {
-    return err(
-      pdError({
-        code: "usage",
-        message: wantsId
-          ? `${command} takes one id; got ${found.length} arguments.`
-          : `${command} takes no arguments; got ${extra}.`,
-      }),
-    );
-  }
+	const wantsId = positional !== "none";
+	const extra = found[wantsId ? 1 : 0];
+	if (extra !== undefined) {
+		return err(
+			pdError({
+				code: "usage",
+				message: wantsId
+					? `${command} takes one id; got ${found.length} arguments.`
+					: `${command} takes no arguments; got ${extra}.`,
+			}),
+		);
+	}
 
-  if (!wantsId) return ok(undefined);
+	if (!wantsId) return ok(undefined);
 
-  const id = found[0];
-  if (id === undefined) {
-    return err(pdError({ code: "usage", message: `${command} needs an id.` }));
-  }
+	const id = found[0];
+	if (id === undefined) {
+		return err(pdError({ code: "usage", message: `${command} needs an id.` }));
+	}
 
-  if (positional === "code-id") {
-    // ADR-0009 §3: a field's id is its `field_code` — a hex hash for a custom
-    // field, a plain name for a standard one. Whether it exists is a question
-    // for the cached list rather than for a pattern here.
-    return id === ""
-      ? err(
-          pdError({
-            code: "usage",
-            message: `${command} takes a field code; got an empty one.`,
-          }),
-        )
-      : ok(id);
-  }
+	if (positional === "code-id") {
+		// ADR-0009 §3: a field's id is its `field_code` — a hex hash for a custom
+		// field, a plain name for a standard one. Whether it exists is a question
+		// for the cached list rather than for a pattern here.
+		return id === ""
+			? err(
+					pdError({
+						code: "usage",
+						message: `${command} takes a field code; got an empty one.`,
+					}),
+				)
+			: ok(id);
+	}
 
-  return INTEGER_ID.test(id)
-    ? ok(Number(id))
-    : err(
-        pdError({
-          code: "usage",
-          message: `${command} takes a positive integer id; got ${id}.`,
-        }),
-      );
+	return INTEGER_ID.test(id)
+		? ok(Number(id))
+		: err(
+				pdError({
+					code: "usage",
+					message: `${command} takes a positive integer id; got ${id}.`,
+				}),
+			);
 };
 
 export type ParseInput = {
-  /** `pd deals list` — what every message about this invocation names. */
-  command: string;
-  flags: readonly Flag[];
-  positional: Positional;
-  argv: readonly string[];
+	/** `pd deals list` — what every message about this invocation names. */
+	command: string;
+	flags: readonly Flag[];
+	positional: Positional;
+	argv: readonly string[];
 };
 
 export const parseArguments = ({
-  command,
-  flags,
-  positional,
-  argv,
+	command,
+	flags,
+	positional,
+	argv,
 }: ParseInput): Result<Parsed, PdError> =>
-  tokenise(command, flags)(argv).andThen(({ values, positionals: found }) =>
-    positionals(command, positional, found).andThen((id) => {
-      const parsed = Arguments.safeParse(values);
-      return parsed.success
-        ? ok({ flags: parsed.data, ...(id === undefined ? {} : { id }) })
-        : err(
-            pdError({
-              code: "usage",
-              // Each schema above names its own flag, so the issues are already
-              // sentences a caller can act on and need no path prefix.
-              message: parsed.error.issues.map((issue) => issue.message).join(" "),
-            }),
-          );
-    }),
-  );
+	tokenise(
+		command,
+		flags,
+	)(argv).andThen(({ values, positionals: found }) =>
+		positionals(command, positional, found).andThen((id) => {
+			const parsed = Arguments.safeParse(values);
+			return parsed.success
+				? ok({ flags: parsed.data, ...(id === undefined ? {} : { id }) })
+				: err(
+						pdError({
+							code: "usage",
+							// Each schema above names its own flag, so the issues are already
+							// sentences a caller can act on and need no path prefix.
+							message: parsed.error.issues
+								.map((issue) => issue.message)
+								.join(" "),
+						}),
+					);
+		}),
+	);
 
 /**
  * ADR-0012 §3 refuses `--token <value>` in any form: argv is readable by every
@@ -246,12 +413,12 @@ export const parseArguments = ({
 const TOKEN_FLAG = /^--token(=.*)?$/;
 
 export const refusesToken = (argv: readonly string[]): boolean =>
-  argv.some((arg) => TOKEN_FLAG.test(arg));
+	argv.some((arg) => TOKEN_FLAG.test(arg));
 
 export const TOKEN_REFUSAL = pdError({
-  code: "usage",
-  message:
-    "There is no --token flag. argv is readable by every other user on this " +
-    "machine, so pd takes a token only from --token-file, the PD_API_TOKEN " +
-    "environment variable, or the credentials file.",
+	code: "usage",
+	message:
+		"There is no --token flag. argv is readable by every other user on this " +
+		"machine, so pd takes a token only from --token-file, the PD_API_TOKEN " +
+		"environment variable, or the credentials file.",
 });

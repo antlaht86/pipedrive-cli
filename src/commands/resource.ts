@@ -20,7 +20,10 @@
  * system clock and `process.stdout.write` explicitly.
  */
 
+import { ok } from "neverthrow";
+
 import { createCacheStore } from "../lib/cache/store.ts";
+import { parseListFilters } from "../lib/pipedrive/list-filters.ts";
 import type { Resource } from "../lib/pipedrive/resources.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
 import { createResolution } from "../lib/output/resolution.ts";
@@ -31,8 +34,8 @@ import { begin, type CommandInput, type Verb } from "./prologue.ts";
 export type { Verb };
 
 export type ResourceCommandInput = CommandInput & {
-  resource: Resource;
-  verb: Verb;
+	resource: Resource;
+	verb: Verb;
 };
 
 /**
@@ -56,57 +59,91 @@ export type ResourceCommandInput = CommandInput & {
  * apart: a flag `parseArgs` would accept and the schema would not validate is a
  * compile error rather than a value that reaches the walk unchecked.
  */
-const FLAGS: Record<Verb, readonly Flag[]> = {
-  list: ["token-file", "limit", "max-requests", "resolve-budget", "no-cache", "resolve", "fields"],
-  get: ["token-file", "max-requests", "resolve-budget", "no-cache", "resolve", "fields"],
-};
+const LIST_FLAGS: readonly Flag[] = [
+	"token-file",
+	"limit",
+	"max-requests",
+	"resolve-budget",
+	"no-cache",
+	"resolve",
+	"fields",
+];
+
+const GET_FLAGS: readonly Flag[] = [
+	"token-file",
+	"max-requests",
+	"resolve-budget",
+	"no-cache",
+	"resolve",
+	"fields",
+];
 
 export const resourceCommand = async ({
-  resource,
-  verb,
-  ...input
+	resource,
+	verb,
+	...input
 }: ResourceCommandInput): Promise<number> => {
-  const started = begin({
-    ...input,
-    command: `pd ${resource.name} ${verb}`,
-    flags: FLAGS[verb],
-    positional: verb === "get" ? "integer-id" : "none",
-    recordType: resource.recordType,
-    rename: resource.rename,
-    // Selector names come from the local zod schema, so a typo is refused
-    // before credential resolution or dispatch.
-    resolve: (flags) => createProjection(flags.fields, resource.fields, resource.rename),
-  });
-  if (started.isErr()) return started.error;
+	const started = begin({
+		...input,
+		command: `pd ${resource.name} ${verb}`,
+		flags:
+			verb === "list" ? [...LIST_FLAGS, ...resource.filterFlags] : GET_FLAGS,
+		positional: verb === "get" ? "integer-id" : "none",
+		recordType: resource.recordType,
+		rename: resource.rename,
+		// Selector names come from the local zod schema, so a typo is refused
+		// before credential resolution or dispatch.
+		resolve: (flags) =>
+			createProjection(flags.fields, resource.fields, resource.rename).andThen(
+				(projection) =>
+					verb === "list"
+						? parseListFilters(resource, flags).map((filters) => ({
+								projection,
+								filters,
+							}))
+						: ok({ projection, filters: {} }),
+			),
+	});
+	if (started.isErr()) return started.error;
 
-  const { parsed, resolved: projection, writer, client, credential, clock } = started.value;
+	const {
+		parsed,
+		resolved: { projection, filters },
+		writer,
+		client,
+		credential,
+		clock,
+	} = started.value;
 
-  const store = createCacheStore({
-    platform: input.platform,
-    env: input.env,
-    home: input.home,
-    fingerprint: credential.fingerprint,
-    clock,
-  });
+	const store = createCacheStore({
+		platform: input.platform,
+		env: input.env,
+		home: input.home,
+		fingerprint: credential.fingerprint,
+		clock,
+	});
 
-  // `integer-id` above is what makes this a number; the shared parser also
-  // serves `pd fields get <field_code>`, whose id is a string.
-  const id = parsed.id;
-  const projected = projectPages(
-    typeof id === "number"
-      ? resource.get(client, id, projection)
-      : resource.list(client, parsed.flags.limit, projection),
-    projection,
-  );
-  const pages = parsed.flags.resolve === true
-    ? (await createResolution({
-        resource,
-        projection,
-        client,
-        store,
-        noCache: parsed.flags["no-cache"] === true,
-        writer,
-      }))(projected)
-    : projected;
-  return stream(pages, writer);
+	// `integer-id` above is what makes this a number; the shared parser also
+	// serves `pd fields get <field_code>`, whose id is a string.
+	const id = parsed.id;
+	const projected = projectPages(
+		typeof id === "number"
+			? resource.get(client, id, projection)
+			: resource.list(client, parsed.flags.limit, projection, filters),
+		projection,
+	);
+	const pages =
+		parsed.flags.resolve === true
+			? (
+					await createResolution({
+						resource,
+						projection,
+						client,
+						store,
+						noCache: parsed.flags["no-cache"] === true,
+						writer,
+					})
+				)(projected)
+			: projected;
+	return stream(pages, writer);
 };

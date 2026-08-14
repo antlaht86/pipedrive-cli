@@ -37,73 +37,83 @@ import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
 import { UserRecord, fetchUsers } from "./users.ts";
 import {
-  getActivityFields,
-  getDealFields,
-  getOrganizationFields,
-  getPersonFields,
-  getPipelines,
-  getProductFields,
-  getStages,
+	getActivityFields,
+	getDealFields,
+	getOrganizationFields,
+	getPersonFields,
+	getPipelines,
+	getProductFields,
+	getStages,
 } from "./v2/generated/sdk.gen.ts";
 import {
-  zGetActivityFieldsResponse,
-  zGetDealFieldsResponse,
-  zGetOrganizationFieldsResponse,
-  zGetPersonFieldsResponse,
-  zGetPipelinesItem,
-  zGetProductFieldsResponse,
-  zGetStagesItem,
+	zGetActivityFieldsResponse,
+	zGetDealFieldsResponse,
+	zGetOrganizationFieldsResponse,
+	zGetPersonFieldsResponse,
+	zGetPipelinesItem,
+	zGetProductFieldsResponse,
+	zGetStagesItem,
 } from "./v2/generated/zod.gen.ts";
 
 /** ADR-0009 §4: the permitted values of `--entity`, and there are no others. */
 export const ENTITIES = [
-  "deal",
-  "person",
-  "organization",
-  "product",
-  "activity",
+	"deal",
+	"person",
+	"organization",
+	"product",
+	"activity",
 ] as const;
 
 export type Entity = (typeof ENTITIES)[number];
 
 export type CachedSource = {
-  /** Which of the eight cache entries this source fills. */
-  readonly entry: CacheEntryName;
-  /** The identity of an **unvalidated** record; `undefined` when unrecoverable. */
-  readonly key: (raw: unknown) => string | number | undefined;
-  /** Top-level names in the local record schema, in output order. */
-  readonly fields: readonly string[];
-  /** `field_code` for fields, `id` for every other cached resource. */
-  readonly identityField: string;
-  /** ADR-0006 §2's second stage, one record at a time. */
-  readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
-  /** Every record, all pages, exactly as Pipedrive returned them. */
-  readonly fetch: (
-    client: PipedriveClient,
-  ) => PromiseLike<Result<unknown[], PdError>>;
+	/** Which of the eight cache entries this source fills. */
+	readonly entry: CacheEntryName;
+	/** The identity of an **unvalidated** record; `undefined` when unrecoverable. */
+	readonly key: (raw: unknown) => string | number | undefined;
+	/** Top-level names in the local record schema, in output order. */
+	readonly fields: readonly string[];
+	/** `field_code` for fields, `id` for every other cached resource. */
+	readonly identityField: string;
+	/** ADR-0006 §2's second stage, one record at a time. */
+	readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
+	/** Every record, all pages, exactly as Pipedrive returned them. */
+	readonly fetch: (
+		client: PipedriveClient,
+	) => PromiseLike<Result<unknown[], PdError>>;
+};
+
+type CachedListFilter = {
+	readonly flag: "pipeline-id";
+	readonly apply: (
+		records: readonly Record<string, unknown>[],
+		value: number,
+	) => Record<string, unknown>[];
 };
 
 export type CachedResource = {
-  /** The plural noun on the command line — ADR-0009 §5, Pipedrive's own. */
-  readonly name: string;
-  /** ADR-0009: singular, the `record_type` on every emitted line. */
-  readonly recordType: string;
-  /** True for `fields` alone: `--entity` exists, and it is required. */
-  readonly needsEntity: boolean;
-  /**
-   * The entity is present exactly when `needsEntity` is true, and `undefined`
-   * comes back when it is not — which the command answers with the `usage`
-   * refusal below rather than with a throw.
-   */
-  readonly source: (entity?: Entity) => CachedSource | undefined;
+	/** The plural noun on the command line — ADR-0009 §5, Pipedrive's own. */
+	readonly name: string;
+	/** ADR-0009: singular, the `record_type` on every emitted line. */
+	readonly recordType: string;
+	/** True for `fields` alone: `--entity` exists, and it is required. */
+	readonly needsEntity: boolean;
+	/** Optional command-scoped filter over the cached whole list. */
+	readonly listFilter?: CachedListFilter;
+	/**
+	 * The entity is present exactly when `needsEntity` is true, and `undefined`
+	 * comes back when it is not — which the command answers with the `usage`
+	 * refusal below rather than with a throw.
+	 */
+	readonly source: (entity?: Entity) => CachedSource | undefined;
 };
 
 type SourceDefinition<T extends Record<string, unknown>> = {
-  entry: CacheEntryName;
-  record: ObjectSchema<T>;
-  identityField?: string;
-  key: (raw: unknown) => string | number | undefined;
-  fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
+	entry: CacheEntryName;
+	record: ObjectSchema<T>;
+	identityField?: string;
+	key: (raw: unknown) => string | number | undefined;
+	fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
 };
 
 /**
@@ -112,21 +122,21 @@ type SourceDefinition<T extends Record<string, unknown>> = {
  * hold four different record shapes in one table.
  */
 const defineSource = <T extends Record<string, unknown>>({
-  entry,
-  record,
-  identityField = "id",
-  key,
-  fetch,
+	entry,
+	record,
+	identityField = "id",
+	key,
+	fetch,
 }: SourceDefinition<T>): CachedSource => ({
-  entry,
-  fields: Object.keys(record.shape),
-  identityField,
-  key,
-  fetch,
-  parse: (raw) => {
-    const parsed = record.safeParse(raw);
-    return parsed.success ? ok(parsed.data) : err(parsed.error);
-  },
+	entry,
+	fields: Object.keys(record.shape),
+	identityField,
+	key,
+	fetch,
+	parse: (raw) => {
+		const parsed = record.safeParse(raw);
+		return parsed.success ? ok(parsed.data) : err(parsed.error);
+	},
 });
 
 /**
@@ -136,13 +146,15 @@ const defineSource = <T extends Record<string, unknown>>({
  * `get` — which is the correct answer for a record the schema would reject too.
  */
 const numberKey = (raw: unknown): number | undefined => {
-  const value = (raw as Record<string, unknown> | null)?.["id"];
-  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+	const value = (raw as Record<string, unknown> | null)?.["id"];
+	return typeof value === "number" && Number.isInteger(value)
+		? value
+		: undefined;
 };
 
 const codeKey = (raw: unknown): string | undefined => {
-  const value = (raw as Record<string, unknown> | null)?.["field_code"];
-  return typeof value === "string" && value !== "" ? value : undefined;
+	const value = (raw as Record<string, unknown> | null)?.["field_code"];
+	return typeof value === "string" && value !== "" ? value : undefined;
 };
 
 /**
@@ -153,41 +165,41 @@ const codeKey = (raw: unknown): string | undefined => {
  * counts or backs off — that is all below, in `guardedFetch`.
  */
 type PageCall = (
-  cursor: string | undefined,
+	cursor: string | undefined,
 ) => (client: PipedriveClient) => ReturnType<PipedriveClient["v2"]>;
 
 const collectPages =
-  (page: PageCall) =>
-  async (client: PipedriveClient): Promise<Result<unknown[], PdError>> => {
-    const records: unknown[] = [];
-    let cursor: string | undefined;
+	(page: PageCall) =>
+	async (client: PipedriveClient): Promise<Result<unknown[], PdError>> => {
+		const records: unknown[] = [];
+		let cursor: string | undefined;
 
-    for (;;) {
-      const body = await page(cursor)(client);
-      if (body.isErr()) return err(body.error);
+		for (;;) {
+			const body = await page(cursor)(client);
+			if (body.isErr()) return err(body.error);
 
-      const envelope = ListEnvelope.safeParse(body.value);
-      if (!envelope.success) {
-        return err(
-          structural(
-            "Pipedrive returned a list body pd cannot read. Retrying will not help.",
-            envelope.error,
-          ),
-        );
-      }
+			const envelope = ListEnvelope.safeParse(body.value);
+			if (!envelope.success) {
+				return err(
+					structural(
+						"Pipedrive returned a list body pd cannot read. Retrying will not help.",
+						envelope.error,
+					),
+				);
+			}
 
-      records.push(...envelope.data.data);
-      cursor = nextCursorOf(envelope.data);
-      if (cursor === undefined) return ok(records);
-    }
-  };
+			records.push(...envelope.data.data);
+			cursor = nextCursorOf(envelope.data);
+			if (cursor === undefined) return ok(records);
+		}
+	};
 
 /** The cursor query every v2 list takes — the same one `resources.ts` sends. */
 const listQuery = (
-  cursor: string | undefined,
+	cursor: string | undefined,
 ): { limit: number; cursor?: string } => ({
-  limit: LIST_PAGE_SIZE,
-  ...(cursor === undefined ? {} : { cursor }),
+	limit: LIST_PAGE_SIZE,
+	...(cursor === undefined ? {} : { cursor }),
 });
 
 /**
@@ -197,27 +209,28 @@ const listQuery = (
  * with one of them subtly wrong.
  */
 const v2Source = <T extends Record<string, unknown>>(
-  entry: CacheEntryName,
-  record: ObjectSchema<T>,
-  operation: Parameters<PipedriveClient["v2"]>[0],
-  key: (raw: unknown) => string | number | undefined,
-  identityField?: string,
+	entry: CacheEntryName,
+	record: ObjectSchema<T>,
+	operation: Parameters<PipedriveClient["v2"]>[0],
+	key: (raw: unknown) => string | number | undefined,
+	identityField?: string,
 ): CachedSource =>
-  defineSource({
-    entry,
-    record,
-    ...(identityField === undefined ? {} : { identityField }),
-    key,
-    fetch: collectPages(
-      (cursor) => (client) => client.v2(operation, { query: listQuery(cursor) }),
-    ),
-  });
+	defineSource({
+		entry,
+		record,
+		...(identityField === undefined ? {} : { identityField }),
+		key,
+		fetch: collectPages(
+			(cursor) => (client) =>
+				client.v2(operation, { query: listQuery(cursor) }),
+		),
+	});
 
 /** Every field source has the same string identity; only its schema and endpoint vary. */
 const v2FieldSource = <T extends Record<string, unknown>>(
-  entry: CacheEntryName,
-  record: ObjectSchema<T>,
-  operation: Parameters<PipedriveClient["v2"]>[0],
+	entry: CacheEntryName,
+	record: ObjectSchema<T>,
+	operation: Parameters<PipedriveClient["v2"]>[0],
 ): CachedSource => v2Source(entry, record, operation, codeKey, "field_code");
 
 /**
@@ -229,109 +242,111 @@ const v2FieldSource = <T extends Record<string, unknown>>(
  * drifts silently on the next regeneration.
  */
 const FIELD_SOURCES: Record<Entity, CachedSource> = {
-  deal: v2FieldSource(
-    "dealFields",
-    zGetDealFieldsResponse.shape.data.element,
-    getDealFields,
-  ),
-  person: v2FieldSource(
-    "personFields",
-    zGetPersonFieldsResponse.shape.data.element,
-    getPersonFields,
-  ),
-  organization: v2FieldSource(
-    "organizationFields",
-    zGetOrganizationFieldsResponse.shape.data.element,
-    getOrganizationFields,
-  ),
-  product: v2FieldSource(
-    "productFields",
-    zGetProductFieldsResponse.shape.data.element,
-    getProductFields,
-  ),
-  activity: v2FieldSource(
-    "activityFields",
-    zGetActivityFieldsResponse.shape.data.element,
-    getActivityFields,
-  ),
+	deal: v2FieldSource(
+		"dealFields",
+		zGetDealFieldsResponse.shape.data.element,
+		getDealFields,
+	),
+	person: v2FieldSource(
+		"personFields",
+		zGetPersonFieldsResponse.shape.data.element,
+		getPersonFields,
+	),
+	organization: v2FieldSource(
+		"organizationFields",
+		zGetOrganizationFieldsResponse.shape.data.element,
+		getOrganizationFields,
+	),
+	product: v2FieldSource(
+		"productFields",
+		zGetProductFieldsResponse.shape.data.element,
+		getProductFields,
+	),
+	activity: v2FieldSource(
+		"activityFields",
+		zGetActivityFieldsResponse.shape.data.element,
+		getActivityFields,
+	),
 };
 
 /** Sources shared by their own commands and ADR-0008's fixed-cost resolver. */
 const FIXED_SOURCES = {
-  users: defineSource({
-    entry: "users",
-    record: UserRecord,
-    key: numberKey,
-    fetch: fetchUsers,
-  }),
-  pipelines: v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey),
-  stages: v2Source("stages", zGetStagesItem, getStages, numberKey),
+	users: defineSource({
+		entry: "users",
+		record: UserRecord,
+		key: numberKey,
+		fetch: fetchUsers,
+	}),
+	pipelines: v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey),
+	stages: v2Source("stages", zGetStagesItem, getStages, numberKey),
 } as const;
 
 export type FixedSourceName = keyof typeof FIXED_SOURCES;
 
 export const fixedSource = (name: FixedSourceName): CachedSource =>
-  FIXED_SOURCES[name];
+	FIXED_SOURCES[name];
 
-export const fieldSource = (entity: Entity): CachedSource => FIELD_SOURCES[entity];
+export const fieldSource = (entity: Entity): CachedSource =>
+	FIELD_SOURCES[entity];
 
 /** A resource with one source: the entity a `fields` command passes is ignored. */
-const only =
-  (source: CachedSource) =>
-  (): CachedSource =>
-    source;
+const only = (source: CachedSource) => (): CachedSource => source;
 
 const CACHED: readonly CachedResource[] = [
-  {
-    name: "users",
-    recordType: "user",
-    needsEntity: false,
-    source: only(FIXED_SOURCES.users),
-  },
-  {
-    name: "pipelines",
-    recordType: "pipeline",
-    needsEntity: false,
-    source: only(FIXED_SOURCES.pipelines),
-  },
-  {
-    name: "stages",
-    recordType: "stage",
-    needsEntity: false,
-    source: only(FIXED_SOURCES.stages),
-  },
-  {
-    name: "fields",
-    recordType: "field",
-    needsEntity: true,
-    source: (entity) =>
-      entity === undefined ? undefined : FIELD_SOURCES[entity],
-  },
+	{
+		name: "users",
+		recordType: "user",
+		needsEntity: false,
+		source: only(FIXED_SOURCES.users),
+	},
+	{
+		name: "pipelines",
+		recordType: "pipeline",
+		needsEntity: false,
+		source: only(FIXED_SOURCES.pipelines),
+	},
+	{
+		name: "stages",
+		recordType: "stage",
+		needsEntity: false,
+		listFilter: {
+			flag: "pipeline-id",
+			apply: (records, pipelineId) =>
+				records.filter((record) => record["pipeline_id"] === pipelineId),
+		},
+		source: only(FIXED_SOURCES.stages),
+	},
+	{
+		name: "fields",
+		recordType: "field",
+		needsEntity: true,
+		source: (entity) =>
+			entity === undefined ? undefined : FIELD_SOURCES[entity],
+	},
 ];
 
 /** Every cached resource, in the order `--help` and the manifest will list them. */
 export const CACHED_RESOURCES: readonly string[] = CACHED.map(
-  (resource) => resource.name,
+	(resource) => resource.name,
 );
 
 const BY_NAME = new Map(CACHED.map((resource) => [resource.name, resource]));
 
 /** ADR-0009 §5: exact match, no aliases, no synonyms. */
-export const cachedResourceNamed = (
-  name: string,
-): CachedResource | undefined => BY_NAME.get(name);
+export const cachedResourceNamed = (name: string): CachedResource | undefined =>
+	BY_NAME.get(name);
 
 export const isEntity = (value: string): value is Entity =>
-  (ENTITIES as readonly string[]).includes(value);
+	(ENTITIES as readonly string[]).includes(value);
 
 /** The `usage` refusal ADR-0009 §4 requires when `--entity` is missing or wrong. */
 export const entityRefusal = (command: string, given?: string): PdError =>
-  pdError({
-    code: "usage",
-    message:
-      (given === undefined
-        ? `${command} requires --entity. `
-        : `${command} does not have an entity '${given}'. `) +
-      `--entity takes one of: ${ENTITIES.join(", ")}.`,
-    details: { ...(given === undefined ? {} : { entity: given }) },
-  });
+	pdError({
+		code: "usage",
+		message:
+			(given === undefined
+				? `${command} requires --entity. `
+				: `${command} does not have an entity '${given}'. `) +
+			`--entity takes one of: ${ENTITIES.join(", ")}.`,
+		details: { ...(given === undefined ? {} : { entity: given }) },
+	});
