@@ -72,6 +72,11 @@ type ResolutionContext = {
 	writer: NdjsonWriter;
 };
 
+type CachedOwnerResolutionContext = Pick<
+	ResolutionContext,
+	"projection" | "store" | "noCache" | "writer"
+> & { resource: string };
+
 type Loaded = { records: Record<string, unknown>[]; source: CachedSource };
 
 const parseAll = (
@@ -187,6 +192,56 @@ const customLabel = (
 		default:
 			return undefined;
 	}
+};
+
+/** Search owner resolution is deliberately cache-only: the search request is the
+ * only request the caller asked for, and `--resolve` must not add another one. */
+export const createCachedOwnerResolution = ({
+	resource,
+	projection,
+	store,
+	noCache,
+	writer,
+}: CachedOwnerResolutionContext): ((pages: Pages) => Pages) => {
+	if (projection?.includes("owner_id") === false) return (pages) => pages;
+
+	const source = fixedSource("users");
+	const read = noCache ? undefined : store.read(source.entry);
+	if (read?.outcome === "skipped") writer.warn(read.warning);
+	const records =
+		read?.outcome === "hit" ? parseAll(source, read.records) : undefined;
+	const users = records === undefined ? undefined : idNameMap(records);
+	if (users === undefined) {
+		writer.resolutionPartial();
+		writer.warn({
+			kind: "owner_resolution_unavailable",
+			resource,
+			message:
+				"Could not read cached user metadata; owner ids are unresolved.",
+		});
+	}
+
+	return async function* resolveOwners(pages: Pages): Pages {
+		for await (const page of pages) {
+			if (page.isErr()) {
+				yield page;
+				return;
+			}
+			yield ok({
+				...page.value,
+				records: page.value.records.map((record) => {
+					const out: Record<string, unknown> = {};
+					for (const [key, value] of Object.entries(record)) {
+						out[key] = value;
+						if (key !== "owner_id" || typeof value !== "number") continue;
+						const name = users?.get(value);
+						if (name !== undefined) out.owner_name = name;
+					}
+					return out;
+				}),
+			});
+		}
+	};
 };
 
 export const createResolution = async ({

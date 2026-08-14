@@ -73,8 +73,8 @@ import {
 	type Positional,
 } from "./arguments.ts";
 
-/** ADR-0009 §1, minus `search`, which arrives with ticket 14. */
-export type Verb = "list" | "get";
+/** ADR-0017: search is a distinct verb because it emits distinct hit records. */
+export type Verb = "list" | "get" | "search";
 
 /** What every data command is handed, whichever table its resource is in. */
 export type CommandInput = {
@@ -103,7 +103,7 @@ export type PrologueInput<T> = CommandInput & {
 	 * `ok(undefined)`; `pd fields` returns the source `--entity` names, or the
 	 * `usage` refusal when it names none.
 	 */
-	resolve: (flags: Arguments) => Result<T, PdError>;
+	resolve: (flags: Arguments, parsed: Parsed) => Result<T, PdError>;
 };
 
 export type Started<T> = {
@@ -169,7 +169,7 @@ export const begin = <T>({
 	if (refused) return err(writer.error(TOKEN_REFUSAL));
 	if (parsed.isErr()) return err(writer.error(parsed.error));
 
-	const resolved = resolve(parsed.value.flags);
+	const resolved = resolve(parsed.value.flags, parsed.value);
 	if (resolved.isErr()) return err(writer.error(resolved.error));
 
 	const credential = resolveCredential({

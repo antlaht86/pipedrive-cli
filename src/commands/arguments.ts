@@ -182,6 +182,12 @@ export const Arguments = z.object({
 	"no-cache": z.boolean().optional(),
 	/** ADR-0008: one additive switch for every id-to-name resolution. */
 	resolve: z.boolean().optional(),
+	/** ADR-0017: exact search permits a one-character term. */
+	exact: z.boolean().optional(),
+	/** ADR-0017: names where to search, never what to emit. */
+	"search-in": z.string().min(1, { error: "--search-in needs a value." }).optional(),
+	/** Search endpoints spell this out, unlike list's `org_id`. */
+	"organization-id": positiveId("organization-id").optional(),
 	/** ADR-0009 §4: required on `fields`, and its value set is checked there. */
 	entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
 	/** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
@@ -231,6 +237,9 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
 	"resolve-budget": "string",
 	"no-cache": "boolean",
 	resolve: "boolean",
+	exact: "boolean",
+	"search-in": "string",
+	"organization-id": "string",
 	entity: "string",
 	fields: "string",
 	ids: "string",
@@ -255,7 +264,7 @@ const listed = (flags: readonly string[]): string => {
 	const named = flags.map((flag) => `--${flag}`);
 	return named.length < 2
 		? (named[0] ?? "")
-		: `${named.slice(0, -1).join(", ")} and ${named[named.length - 1] ?? ""}`;
+		: `${named.slice(0, -1).join(", ")} and ${named.at(-1) ?? ""}`;
 };
 
 /**
@@ -304,7 +313,7 @@ const tokenise = (command: string, flags: readonly Flag[]) =>
  * and they differ only in what an id is allowed to look like — ADR-0009 §3 makes
  * `fields` the one resource whose id is not an integer.
  */
-export type Positional = "none" | "integer-id" | "code-id";
+export type Positional = "none" | "integer-id" | "code-id" | "search-term";
 
 /**
  * A Pipedrive record id, validated offline and at the same boundary as the
@@ -316,33 +325,48 @@ const INTEGER_ID = /^[1-9][0-9]*$/;
 
 export type Parsed = {
 	flags: Arguments;
-	/** Present on the `get` verb, absent on `list`. */
+	/** Present on the `get` verb. */
 	id?: string | number;
+	/** Present on the `search` verb. */
+	term?: string;
 };
 
 const positionals = (
 	command: string,
 	positional: Positional,
 	found: readonly string[],
-): Result<string | number | undefined, PdError> => {
-	const wantsId = positional !== "none";
-	const extra = found[wantsId ? 1 : 0];
+): Result<Pick<Parsed, "id" | "term">, PdError> => {
+	const wantsArgument = positional !== "none";
+	const extra = found[wantsArgument ? 1 : 0];
 	if (extra !== undefined) {
+		const argument = positional === "search-term" ? "search term" : "id";
+		const message = wantsArgument
+			? `${command} takes one ${argument}; got ${found.length} arguments.`
+			: `${command} takes no arguments; got ${extra}.`;
+		return err(pdError({ code: "usage", message }));
+	}
+
+	if (!wantsArgument) return ok({});
+
+	const id = found[0];
+	if (id === undefined) {
 		return err(
 			pdError({
 				code: "usage",
-				message: wantsId
-					? `${command} takes one id; got ${found.length} arguments.`
-					: `${command} takes no arguments; got ${extra}.`,
+				message:
+					positional === "search-term"
+						? `${command} needs a search term.`
+						: `${command} needs an id.`,
 			}),
 		);
 	}
 
-	if (!wantsId) return ok(undefined);
-
-	const id = found[0];
-	if (id === undefined) {
-		return err(pdError({ code: "usage", message: `${command} needs an id.` }));
+	if (positional === "search-term") {
+		return id === ""
+			? err(
+					pdError({ code: "usage", message: `${command} needs a search term.` }),
+				)
+			: ok({ term: id });
 	}
 
 	if (positional === "code-id") {
@@ -356,11 +380,11 @@ const positionals = (
 						message: `${command} takes a field code; got an empty one.`,
 					}),
 				)
-			: ok(id);
+			: ok({ id });
 	}
 
 	return INTEGER_ID.test(id)
-		? ok(Number(id))
+		? ok({ id: Number(id) })
 		: err(
 				pdError({
 					code: "usage",
@@ -387,10 +411,10 @@ export const parseArguments = ({
 		command,
 		flags,
 	)(argv).andThen(({ values, positionals: found }) =>
-		positionals(command, positional, found).andThen((id) => {
+		positionals(command, positional, found).andThen((positionalValues) => {
 			const parsed = Arguments.safeParse(values);
 			return parsed.success
-				? ok({ flags: parsed.data, ...(id === undefined ? {} : { id }) })
+				? ok({ flags: parsed.data, ...positionalValues })
 				: err(
 						pdError({
 							code: "usage",

@@ -58,7 +58,7 @@ export type RouteInput = {
   stderr?: Sink;
 };
 
-const VERBS = new Set<string>(["list", "get"]);
+const VERBS = new Set<string>(["list", "get", "search"]);
 
 const isVerb = (value: string | undefined): value is Verb =>
   value !== undefined && VERBS.has(value);
@@ -159,8 +159,15 @@ export const route = async ({
     );
   }
 
-  if (resource !== undefined) return resourceCommand({ resource, verb, ...common });
-  if (cached !== undefined) return cachedCommand({ resource: cached, verb, ...common });
+  if (resource !== undefined) {
+    if (verb === "search" && resource.search === undefined) {
+      return refuse(unrecognised(argv, true), sink, stderr);
+    }
+    return resourceCommand({ resource, verb, ...common });
+  }
+  if (cached !== undefined && verb !== "search") {
+    return cachedCommand({ resource: cached, verb, ...common });
+  }
 
   // A verb `pd` knows on a noun it does not: `pd frobnicate list`.
   return refuse(unrecognised(argv, false), sink, stderr);

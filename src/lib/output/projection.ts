@@ -33,7 +33,9 @@ const selectorSchema = (
 ) =>
   z.string().transform((selector, context): ParsedSelector => {
     const correction = RESOLUTION_ARTIFACTS[selector];
-    if (correction !== undefined) {
+    // Search hits can receive these names directly from Pipedrive. They are
+    // artifacts only when the command's own schema does not contain them.
+    if (correction !== undefined && !outputToRaw.has(selector)) {
       context.addIssue({
         code: "custom",
         message:
@@ -143,7 +145,9 @@ export const createProjection = (
     if (selector.raw === "custom_fields") wholeCustomFields = true;
   }
 
-  const sortedHashes = [...hashes].sort();
+  const sortedHashes = [...hashes].sort((left, right) =>
+    left.localeCompare(right),
+  );
   const matched = new Set<CustomFieldHash>();
 
   return ok({

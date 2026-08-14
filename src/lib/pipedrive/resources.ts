@@ -33,6 +33,7 @@ import type { Entity } from "./cached.ts";
 import type { PipedriveClient } from "./client.ts";
 import type { ListFilterFlag, ListFilters, SortField } from "./list-filters.ts";
 import type { ObjectSchema } from "./schema.ts";
+import { searchNamed, type Search } from "./searches.ts";
 import { LIST_PAGE_SIZE, walk, type Page } from "./walk.ts";
 import { single } from "./single.ts";
 import {
@@ -79,6 +80,8 @@ export type Resource = {
 	readonly filterFlags: readonly ListFilterFlag[];
 	/** The endpoint's closed `sort_by` vocabulary, validated offline. */
 	readonly sortFields: readonly SortField[];
+	/** Present only where ADR-0017 exposes the distinct search verb. */
+	readonly search?: Search;
 	/** `limit` is ADR-0003's `--limit`, a record count; `undefined` is everything. */
 	readonly list: (
 		client: PipedriveClient,
@@ -121,6 +124,11 @@ type Definition<T> = {
  * open record happens on the way out — which is what lets the table hold five
  * differently-typed resources without an `as` anywhere.
  */
+const optionalSearch = (name: string): Pick<Resource, "search"> => {
+	const search = searchNamed(name);
+	return search === undefined ? {} : { search };
+};
+
 const define = <T extends Record<string, unknown> & { id: number }>({
 	name,
 	recordType,
@@ -140,6 +148,7 @@ const define = <T extends Record<string, unknown> & { id: number }>({
 	fields: Object.keys(record.shape),
 	filterFlags,
 	sortFields,
+	...optionalSearch(name),
 	list: (client, limit, projection, filters = {}) => {
 		const requested = filters.ids ?? [];
 		const chunks =
