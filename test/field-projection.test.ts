@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { route } from "../src/router.ts";
 import { capture, type Line } from "./support/ndjson.ts";
 import { deal } from "./support/deals.ts";
-import { user, usersFixture } from "./support/cached.ts";
+import { cachedPage, field, user, usersFixture } from "./support/cached.ts";
 import { LIVE, getRecord, listPage, product } from "./support/records.ts";
 import { createReplayTransport, type Fixture } from "./support/replay.ts";
 
@@ -152,6 +152,21 @@ describe("--fields projection", () => {
       record_type: "user",
       id: 11,
       email: "aino.11@example.invalid",
+    });
+  });
+
+  test("field_code remains as the followable identity of projected field records", async () => {
+    const { exit, lines } = await run(
+      [cachedPage("dealFields", [field(HASH_A)])],
+      ["fields", "list", "--entity", "deal", "--fields", "field_name"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toEqual({
+      type: "record",
+      record_type: "field",
+      field_name: "Renewal quarter aaaa",
+      field_code: HASH_A,
     });
   });
 

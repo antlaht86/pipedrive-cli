@@ -72,6 +72,8 @@ export type CachedSource = {
   readonly key: (raw: unknown) => string | number | undefined;
   /** Top-level names in the local record schema, in output order. */
   readonly fields: readonly string[];
+  /** `field_code` for fields, `id` for every other cached resource. */
+  readonly identityField: string;
   /** ADR-0006 §2's second stage, one record at a time. */
   readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
   /** Every record, all pages, exactly as Pipedrive returned them. */
@@ -95,10 +97,14 @@ export type CachedResource = {
   readonly source: (entity?: Entity) => CachedSource | undefined;
 };
 
+type ObjectSchema<T> = z.ZodType<T, unknown> & {
+  readonly shape: z.ZodRawShape;
+};
+
 type SourceDefinition<T extends Record<string, unknown>> = {
   entry: CacheEntryName;
-  record: z.ZodType<T, unknown>;
-  fields: readonly string[];
+  record: ObjectSchema<T>;
+  identityField?: string;
   key: (raw: unknown) => string | number | undefined;
   fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
 };
@@ -111,12 +117,13 @@ type SourceDefinition<T extends Record<string, unknown>> = {
 const defineSource = <T extends Record<string, unknown>>({
   entry,
   record,
-  fields,
+  identityField = "id",
   key,
   fetch,
 }: SourceDefinition<T>): CachedSource => ({
   entry,
-  fields,
+  fields: Object.keys(record.shape),
+  identityField,
   key,
   fetch,
   parse: (raw) => {
@@ -194,20 +201,27 @@ const listQuery = (
  */
 const v2Source = <T extends Record<string, unknown>>(
   entry: CacheEntryName,
-  record: z.ZodType<T, unknown>,
+  record: ObjectSchema<T>,
   operation: Parameters<PipedriveClient["v2"]>[0],
   key: (raw: unknown) => string | number | undefined,
-  fields: readonly string[],
+  identityField?: string,
 ): CachedSource =>
   defineSource({
     entry,
     record,
-    fields,
+    ...(identityField === undefined ? {} : { identityField }),
     key,
     fetch: collectPages(
       (cursor) => (client) => client.v2(operation, { query: listQuery(cursor) }),
     ),
   });
+
+/** Every field source has the same string identity; only its schema and endpoint vary. */
+const v2FieldSource = <T extends Record<string, unknown>>(
+  entry: CacheEntryName,
+  record: ObjectSchema<T>,
+  operation: Parameters<PipedriveClient["v2"]>[0],
+): CachedSource => v2Source(entry, record, operation, codeKey, "field_code");
 
 /**
  * The five `*Fields` responses carry no response `title`, so the hoist in
@@ -218,40 +232,30 @@ const v2Source = <T extends Record<string, unknown>>(
  * drifts silently on the next regeneration.
  */
 const FIELD_SOURCES: Record<Entity, CachedSource> = {
-  deal: v2Source(
+  deal: v2FieldSource(
     "dealFields",
     zGetDealFieldsResponse.shape.data.element,
     getDealFields,
-    codeKey,
-    Object.keys(zGetDealFieldsResponse.shape.data.element.shape),
   ),
-  person: v2Source(
+  person: v2FieldSource(
     "personFields",
     zGetPersonFieldsResponse.shape.data.element,
     getPersonFields,
-    codeKey,
-    Object.keys(zGetPersonFieldsResponse.shape.data.element.shape),
   ),
-  organization: v2Source(
+  organization: v2FieldSource(
     "organizationFields",
     zGetOrganizationFieldsResponse.shape.data.element,
     getOrganizationFields,
-    codeKey,
-    Object.keys(zGetOrganizationFieldsResponse.shape.data.element.shape),
   ),
-  product: v2Source(
+  product: v2FieldSource(
     "productFields",
     zGetProductFieldsResponse.shape.data.element,
     getProductFields,
-    codeKey,
-    Object.keys(zGetProductFieldsResponse.shape.data.element.shape),
   ),
-  activity: v2Source(
+  activity: v2FieldSource(
     "activityFields",
     zGetActivityFieldsResponse.shape.data.element,
     getActivityFields,
-    codeKey,
-    Object.keys(zGetActivityFieldsResponse.shape.data.element.shape),
   ),
 };
 
@@ -270,7 +274,6 @@ const CACHED: readonly CachedResource[] = [
       defineSource({
         entry: "users",
         record: UserRecord,
-        fields: Object.keys(UserRecord.shape),
         key: numberKey,
         fetch: fetchUsers,
       }),
@@ -285,7 +288,6 @@ const CACHED: readonly CachedResource[] = [
       zGetPipelinesItem,
       getPipelines,
       numberKey,
-      Object.keys(zGetPipelinesItem.shape),
     )),
   },
   {
@@ -297,7 +299,6 @@ const CACHED: readonly CachedResource[] = [
       zGetStagesItem,
       getStages,
       numberKey,
-      Object.keys(zGetStagesItem.shape),
     )),
   },
   {

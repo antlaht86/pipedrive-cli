@@ -178,10 +178,12 @@ export const cachedCommand = async ({
     resolve: (flags) => {
       const source = resource.source(entityOf(flags.entity));
       if (source === undefined) return err(entityRefusal(command, flags.entity));
-      return createProjection(flags.fields, source.fields).map((projection) => ({
-        source,
-        projection,
-      }));
+      return createProjection(
+        flags.fields,
+        source.fields,
+        {},
+        source.identityField,
+      ).map((projection) => ({ source, projection }));
     },
   });
   if (started.isErr()) return started.error;

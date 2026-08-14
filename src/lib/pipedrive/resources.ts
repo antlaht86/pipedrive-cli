@@ -69,7 +69,7 @@ export type Resource = {
    * overwrite ADR-0002's line discriminator.
    */
   readonly rename: Readonly<Record<string, string>>;
-  /** Output field names in zod/schema order, used for offline projection validation. */
+  /** Raw zod field names in schema order, used for offline projection validation. */
   readonly fields: readonly string[];
   /** `limit` is ADR-0003's `--limit`, a record count; `undefined` is everything. */
   readonly list: (client: PipedriveClient, limit?: number, projection?: Projection) => Pages;
@@ -80,12 +80,15 @@ type Fetch = (
   client: PipedriveClient,
 ) => ReturnType<PipedriveClient["v2"]>;
 
+type ObjectSchema<T> = z.ZodType<T, unknown> & {
+  readonly shape: z.ZodRawShape;
+};
+
 type Definition<T> = {
   name: string;
   recordType: string;
   rename?: Readonly<Record<string, string>>;
-  record: z.ZodType<T, unknown>;
-  fields: readonly string[];
+  record: ObjectSchema<T>;
   /** Whether each endpoint offers ADR-0016's subtractive custom_fields parameter. */
   pushdown: { list: boolean; get: boolean };
   /** The generated list operation, already bound to its query shape. */
@@ -105,7 +108,6 @@ const define = <T extends { id: number }>({
   recordType,
   rename = {},
   record,
-  fields,
   pushdown,
   page,
   one,
@@ -113,7 +115,7 @@ const define = <T extends { id: number }>({
   name,
   recordType,
   rename,
-  fields,
+  fields: Object.keys(record.shape),
   list: (client, limit, projection) =>
     walk<T>({
       resource: recordType,
@@ -156,7 +158,6 @@ const RESOURCES: readonly Resource[] = [
     name: "deals",
     recordType: "deal",
     record: zGetDealsItem,
-    fields: Object.keys(zGetDealsItem.shape),
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
       client.v2(getDeals, { query: listQuery(cursor, customFields) }),
@@ -167,7 +168,6 @@ const RESOURCES: readonly Resource[] = [
     name: "persons",
     recordType: "person",
     record: zGetPersonsItem,
-    fields: Object.keys(zGetPersonsItem.shape),
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
       client.v2(getPersons, { query: listQuery(cursor, customFields) }),
@@ -178,7 +178,6 @@ const RESOURCES: readonly Resource[] = [
     name: "organizations",
     recordType: "organization",
     record: zGetOrganizationsItem,
-    fields: Object.keys(zGetOrganizationsItem.shape),
     pushdown: { list: true, get: true },
     page: (cursor, customFields) => (client) =>
       client.v2(getOrganizations, { query: listQuery(cursor, customFields) }),
@@ -196,7 +195,6 @@ const RESOURCES: readonly Resource[] = [
     // name (ADR-0025 §1).
     rename: { type: "activity_type" },
     record: zGetActivitiesItem,
-    fields: Object.keys(zGetActivitiesItem.shape),
     pushdown: { list: false, get: false },
     page: (cursor) => (client) =>
       client.v2(getActivities, { query: listQuery(cursor) }),
@@ -206,7 +204,6 @@ const RESOURCES: readonly Resource[] = [
     name: "products",
     recordType: "product",
     record: zGetProductsItem,
-    fields: Object.keys(zGetProductsItem.shape),
     pushdown: { list: true, get: false },
     page: (cursor, customFields) => (client) =>
       client.v2(getProducts, { query: listQuery(cursor, customFields) }),

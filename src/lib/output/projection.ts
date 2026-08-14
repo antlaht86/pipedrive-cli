@@ -5,7 +5,12 @@ import { pdError, type PdError } from "../errors.ts";
 import type { PdWarning } from "../warnings.ts";
 import type { Page } from "../pipedrive/walk.ts";
 
-const CUSTOM_HASH = /^[0-9a-f]{40}$/i;
+const CustomFieldHash = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/i)
+  .brand<"CustomFieldHash">();
+
+type CustomFieldHash = z.infer<typeof CustomFieldHash>;
 
 const RESOLUTION_ARTIFACTS: Readonly<Record<string, string>> = {
   custom_fields_resolved: "custom_fields",
@@ -18,83 +23,126 @@ const RESOLUTION_ARTIFACTS: Readonly<Record<string, string>> = {
   stage_name: "stage_id",
 };
 
-const FieldArguments = z.array(z.string()).transform((values, context) => {
-  const selectors: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    for (const selector of value.split(",")) {
-      if (selector === "") {
-        context.addIssue({ code: "custom", message: "--fields contains an empty field name." });
-        return z.NEVER;
-      }
-      if (!seen.has(selector)) {
-        seen.add(selector);
-        selectors.push(selector);
+type ParsedSelector =
+  | { kind: "top-level"; raw: string }
+  | { kind: "custom-field"; hash: CustomFieldHash };
+
+const selectorSchema = (
+  outputToRaw: ReadonlyMap<string, string>,
+  valid: readonly string[],
+) =>
+  z.string().transform((selector, context): ParsedSelector => {
+    const correction = RESOLUTION_ARTIFACTS[selector];
+    if (correction !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message:
+          `--fields cannot select ${selector}; it is a resolution artifact. ` +
+          `Select ${correction} instead.`,
+      });
+      return z.NEVER;
+    }
+
+    if (selector.startsWith("custom_fields.")) {
+      const parsedHash = CustomFieldHash.safeParse(
+        selector.slice("custom_fields.".length),
+      );
+      if (parsedHash.success && outputToRaw.has("custom_fields")) {
+        return { kind: "custom-field", hash: parsedHash.data };
       }
     }
-  }
-  return selectors;
-});
+
+    const raw = outputToRaw.get(selector);
+    if (raw !== undefined) return { kind: "top-level", raw };
+
+    context.addIssue({
+      code: "custom",
+      message:
+        `pd does not have a selectable field '${selector}'. Valid fields: ` +
+        `${valid.join(", ")}. Custom fields use ` +
+        "custom_fields.<40-character-hash>.",
+    });
+    return z.NEVER;
+  });
+
+/** One zod boundary for repeatable values, CSV syntax and contextual selectors. */
+const fieldArgumentsSchema = (
+  outputToRaw: ReadonlyMap<string, string>,
+  valid: readonly string[],
+) =>
+  z
+    .array(z.string())
+    .transform((values, context) => {
+      const selectors: string[] = [];
+      const seen = new Set<string>();
+      for (const value of values) {
+        for (const selector of value.split(",")) {
+          if (selector === "") {
+            context.addIssue({
+              code: "custom",
+              message: "--fields contains an empty field name.",
+            });
+            return z.NEVER;
+          }
+          if (!seen.has(selector)) {
+            seen.add(selector);
+            selectors.push(selector);
+          }
+        }
+      }
+      return selectors;
+    })
+    .pipe(z.array(selectorSchema(outputToRaw, valid)));
 
 export type Projection = {
   /** A comma-separated value suitable for Pipedrive's subtractive query parameter. */
   readonly pushdown: string | undefined;
   readonly apply: (record: Record<string, unknown>) => Record<string, unknown>;
-  readonly unmatched: () => readonly string[];
+  readonly unmatched: () => readonly CustomFieldHash[];
 };
-
-const validList = (fields: readonly string[]): string => fields.join(", ");
 
 export const createProjection = (
   given: readonly string[] | undefined,
   schemaFields: readonly string[],
   rename: Readonly<Record<string, string>> = {},
+  identityField = "id",
 ): Result<Projection | undefined, PdError> => {
   if (given === undefined) return ok(undefined);
 
-  const parsed = FieldArguments.safeParse(given);
+  const outputToRaw = new Map(
+    schemaFields.map((raw) => [rename[raw] ?? raw, raw]),
+  );
+  const valid = [...outputToRaw.keys()];
+  const parsed = fieldArgumentsSchema(outputToRaw, valid).safeParse(given);
   if (!parsed.success) {
-    return err(pdError({ code: "usage", message: parsed.error.issues[0]?.message ?? "Invalid --fields value." }));
+    return err(
+      pdError({
+        code: "usage",
+        message:
+          parsed.error.issues[0]?.message ?? "Invalid --fields value.",
+      }),
+    );
   }
 
-  const outputToRaw = new Map(schemaFields.map((raw) => [rename[raw] ?? raw, raw]));
-  const valid = [...outputToRaw.keys()];
-  const rawSelected = new Set<string>(["id"]);
-  const hashes: string[] = [];
+  // `field_code` is the id of a `field` resource (ADR-0009 §3); every other
+  // resource uses `id`. Keeping the source's identity makes every projected
+  // record followable without inventing a second identifier on field records.
+  const rawSelected = new Set<string>([identityField]);
+  const hashes: CustomFieldHash[] = [];
   let wholeCustomFields = false;
 
   for (const selector of parsed.data) {
-    const correction = RESOLUTION_ARTIFACTS[selector];
-    if (correction !== undefined) {
-      return err(pdError({
-        code: "usage",
-        message: `--fields cannot select ${selector}; it is a resolution artifact. Select ${correction} instead.`,
-      }));
+    if (selector.kind === "custom-field") {
+      hashes.push(selector.hash);
+      rawSelected.add("custom_fields");
+      continue;
     }
-
-    if (selector.startsWith("custom_fields.")) {
-      const hash = selector.slice("custom_fields.".length);
-      if (CUSTOM_HASH.test(hash) && outputToRaw.has("custom_fields")) {
-        hashes.push(hash);
-        rawSelected.add("custom_fields");
-        continue;
-      }
-    }
-
-    const raw = outputToRaw.get(selector);
-    if (raw === undefined) {
-      return err(pdError({
-        code: "usage",
-        message: `pd does not have a selectable field '${selector}'. Valid fields: ${validList(valid)}. Custom fields use custom_fields.<40-character-hash>.`,
-        details: { field: selector, valid_fields: valid },
-      }));
-    }
-    rawSelected.add(raw);
-    if (raw === "custom_fields") wholeCustomFields = true;
+    rawSelected.add(selector.raw);
+    if (selector.raw === "custom_fields") wholeCustomFields = true;
   }
 
   const sortedHashes = [...hashes].sort();
-  const matched = new Set<string>();
+  const matched = new Set<CustomFieldHash>();
 
   return ok({
     pushdown:
@@ -110,9 +158,10 @@ export const createProjection = (
           continue;
         }
 
-        const source = value !== null && typeof value === "object"
-          ? value as Record<string, unknown>
-          : {};
+        const source =
+          value !== null && typeof value === "object"
+            ? (value as Record<string, unknown>)
+            : {};
         const selected: Record<string, unknown> = {};
         for (const hash of sortedHashes) {
           if (!Object.hasOwn(source, hash)) continue;
@@ -127,7 +176,7 @@ export const createProjection = (
   });
 };
 
-const warning = (selector: string): PdWarning => ({
+const warning = (selector: CustomFieldHash): PdWarning => ({
   kind: "unmatched_field_selector",
   selector: `custom_fields.${selector}`,
   message: `The custom field selector custom_fields.${selector} matched no record in this run.`,
@@ -157,7 +206,10 @@ export async function* projectPages(
     if (projected.bound !== undefined) {
       yield ok({
         ...projected,
-        warnings: [...projected.warnings, ...projection.unmatched().map(warning)],
+        warnings: [
+          ...projected.warnings,
+          ...projection.unmatched().map(warning),
+        ],
       });
       return;
     }
