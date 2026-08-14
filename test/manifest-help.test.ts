@@ -173,9 +173,7 @@ test("root and command help are generated from the table", () => {
 	expect(dealsHelp).toContain("USAGE\n  pd deals list [flags]");
 	expect(dealsHelp).toContain("--pretty");
 	expect(dealsHelp).toContain("--verbose");
-	expect(dealsHelp).toContain(
-		"--sort-by <field> (id, update_time, add_time)",
-	);
+	expect(dealsHelp).toContain("--sort-by <field> (id, update_time, add_time)");
 	expect(renderHelp(["fields", "list"])).toContain(
 		"SELECTABLE FIELDS BY --ENTITY\n  deal: field_name, field_code",
 	);

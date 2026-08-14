@@ -72,7 +72,10 @@ const runAuthStatus = (argv: readonly string[]): number => {
 	const definition = otherCommandNamed("pd auth status");
 	if (definition === undefined) {
 		return fail(
-			pdError({ code: "internal", message: "pd auth status is missing from the command table." }),
+			pdError({
+				code: "internal",
+				message: "pd auth status is missing from the command table.",
+			}),
 		);
 	}
 	if (refusesToken(argv)) return fail(TOKEN_REFUSAL);

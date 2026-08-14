@@ -27,10 +27,7 @@ import { createCacheStore } from "../lib/cache/store.ts";
 import { pdError } from "../lib/errors.ts";
 import { parseListFilters } from "../lib/pipedrive/list-filters.ts";
 import type { Pages, Resource } from "../lib/pipedrive/resources.ts";
-import {
-	parseSearchOptions,
-	type Search,
-} from "../lib/pipedrive/searches.ts";
+import { parseSearchOptions, type Search } from "../lib/pipedrive/searches.ts";
 import { createProjection, projectPages } from "../lib/output/projection.ts";
 import {
 	createCachedOwnerResolution,

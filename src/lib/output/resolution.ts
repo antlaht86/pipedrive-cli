@@ -216,8 +216,7 @@ export const createCachedOwnerResolution = ({
 		writer.warn({
 			kind: "owner_resolution_unavailable",
 			resource,
-			message:
-				"Could not read cached user metadata; owner ids are unresolved.",
+			message: "Could not read cached user metadata; owner ids are unresolved.",
 		});
 	}
 

@@ -40,29 +40,29 @@ import { cachedCommand } from "./commands/cached.ts";
 import type { Clock } from "./lib/pipedrive/clock.ts";
 import type { Transport } from "./lib/pipedrive/guarded-fetch.ts";
 import {
-  errorLine,
-  stderrSink,
-  stdoutSink,
-  ZERO_COUNTERS,
-  type Sink,
+	errorLine,
+	stderrSink,
+	stdoutSink,
+	ZERO_COUNTERS,
+	type Sink,
 } from "./lib/output/ndjson-writer.ts";
 
 export type RouteInput = {
-  /** Everything after `pd`. */
-  argv: readonly string[];
-  platform: NodeJS.Platform;
-  env: Record<string, string | undefined>;
-  home: string;
-  transport?: Transport;
-  clock?: Clock;
-  sink?: Sink;
-  stderr?: Sink;
+	/** Everything after `pd`. */
+	argv: readonly string[];
+	platform: NodeJS.Platform;
+	env: Record<string, string | undefined>;
+	home: string;
+	transport?: Transport;
+	clock?: Clock;
+	sink?: Sink;
+	stderr?: Sink;
 };
 
 const VERBS = new Set<string>(["list", "get", "search"]);
 
 const isVerb = (value: string | undefined): value is Verb =>
-  value !== undefined && VERBS.has(value);
+	value !== undefined && VERBS.has(value);
 
 /**
  * What to quote back at the caller. Only the leading non-flag tokens are
@@ -70,12 +70,12 @@ const isVerb = (value: string | undefined): value is Verb =>
  * put that value in an error message that an agent will log.
  */
 const probe = (argv: readonly string[]): string => {
-  const words: string[] = [];
-  for (const arg of argv) {
-    if (arg.startsWith("-") || words.length === 3) break;
-    words.push(arg);
-  }
-  return words.join(" ");
+	const words: string[] = [];
+	for (const arg of argv) {
+		if (arg.startsWith("-") || words.length === 3) break;
+		words.push(arg);
+	}
+	return words.join(" ");
 };
 
 /**
@@ -84,9 +84,9 @@ const probe = (argv: readonly string[]): string => {
  * because ADR-0017 §1 added a third one.
  */
 const READ_ONLY =
-  "pd is read-only: it issues GET requests only and has no write commands at " +
-  "all, so no spelling of create, update or delete exists to find. Run pd " +
-  "manifest for the commands that do exist.";
+	"pd is read-only: it issues GET requests only and has no write commands at " +
+	"all, so no spelling of create, update or delete exists to find. Run pd " +
+	"manifest for the commands that do exist.";
 
 /**
  * Three openings, because they are three different mistakes and telling an
@@ -96,18 +96,18 @@ const READ_ONLY =
  * `pd people` probe ADR-0009 §5 refuses to answer.
  */
 const unrecognised = (argv: readonly string[], known: boolean): PdError => {
-  const attempted = probe(argv);
-  const missingVerb = known && argv[1] === undefined;
-  return pdError({
-    code: "usage",
-    message:
-      (attempted === ""
-        ? "pd needs a command. "
-        : missingVerb
-          ? `pd ${attempted} needs a verb. `
-          : `pd has no command '${attempted}'. `) + READ_ONLY,
-    details: { ...(attempted === "" ? {} : { attempted }) },
-  });
+	const attempted = probe(argv);
+	const missingVerb = known && argv[1] === undefined;
+	return pdError({
+		code: "usage",
+		message:
+			(attempted === ""
+				? "pd needs a command. "
+				: missingVerb
+					? `pd ${attempted} needs a verb. `
+					: `pd has no command '${attempted}'. `) + READ_ONLY,
+		details: { ...(attempted === "" ? {} : { attempted }) },
+	});
 };
 
 /**
@@ -115,65 +115,65 @@ const unrecognised = (argv: readonly string[], known: boolean): PdError => {
  * is constructed around a `record_type`, and an unrecognised command has none.
  */
 const refuse = (error: PdError, sink: Sink, stderr: Sink): number => {
-  sink(`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`);
-  stderr(`pd: ${error.message}\n`);
-  return error.exit_code;
+	sink(`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`);
+	stderr(`pd: ${error.message}\n`);
+	return error.exit_code;
 };
 
 export const route = async ({
-  argv,
-  platform,
-  env,
-  home,
-  transport,
-  clock,
-  sink = stdoutSink,
-  stderr = stderrSink,
+	argv,
+	platform,
+	env,
+	home,
+	transport,
+	clock,
+	sink = stdoutSink,
+	stderr = stderrSink,
 }: RouteInput): Promise<number> => {
-  const noun = argv[0];
-  const resource = noun === undefined ? undefined : resourceNamed(noun);
+	const noun = argv[0];
+	const resource = noun === undefined ? undefined : resourceNamed(noun);
 	const search = noun === undefined ? undefined : searchNamed(noun);
-  // The two tables are disjoint and are consulted in turn rather than merged: a
-  // live resource walks a cursor, a cached one loads a whole list from disk,
-  // and the commands behind them take different flags (ADR-0005 §1).
-  const cached = noun === undefined ? undefined : cachedResourceNamed(noun);
-  const verb = argv[1];
+	// The two tables are disjoint and are consulted in turn rather than merged: a
+	// live resource walks a cursor, a cached one loads a whole list from disk,
+	// and the commands behind them take different flags (ADR-0005 §1).
+	const cached = noun === undefined ? undefined : cachedResourceNamed(noun);
+	const verb = argv[1];
 
-  const common = {
-    argv: argv.slice(2),
-    platform,
-    env,
-    home,
-    ...(transport === undefined ? {} : { transport }),
-    ...(clock === undefined ? {} : { clock }),
-    sink,
-    stderr,
-  };
+	const common = {
+		argv: argv.slice(2),
+		platform,
+		env,
+		home,
+		...(transport === undefined ? {} : { transport }),
+		...(clock === undefined ? {} : { clock }),
+		sink,
+		stderr,
+	};
 
-  if (!isVerb(verb)) {
-    return refuse(
+	if (!isVerb(verb)) {
+		return refuse(
 			unrecognised(
 				argv,
 				resource !== undefined || cached !== undefined || search !== undefined,
 			),
-      sink,
-      stderr,
-    );
-  }
+			sink,
+			stderr,
+		);
+	}
 
 	if (verb === "search") {
 		if (search === undefined || noun === undefined) {
 			return refuse(unrecognised(argv, resource !== undefined), sink, stderr);
-    }
+		}
 		return resourceCommand({ search, name: noun, verb, ...common });
 	}
 	if (resource !== undefined) {
-    return resourceCommand({ resource, verb, ...common });
-  }
+		return resourceCommand({ resource, verb, ...common });
+	}
 	if (cached !== undefined) {
-    return cachedCommand({ resource: cached, verb, ...common });
-  }
+		return cachedCommand({ resource: cached, verb, ...common });
+	}
 
-  // A verb `pd` knows on a noun it does not: `pd frobnicate list`.
-  return refuse(unrecognised(argv, false), sink, stderr);
+	// A verb `pd` knows on a noun it does not: `pd frobnicate list`.
+	return refuse(unrecognised(argv, false), sink, stderr);
 };

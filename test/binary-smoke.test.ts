@@ -22,28 +22,29 @@ afterAll(() => rmSync(workspace, { recursive: true, force: true }));
 const stamps = ["1.0.0", "1.0.0+g3f9a1c2", "1.0.0+g3f9a1c2.dirty"];
 
 for (const stamp of stamps) {
-  test(`the built pd reports one version in --version and its manifest: ${stamp}`, async () => {
-    const binary = await buildBinary({
-      entry: fileURLToPath(new URL("../src/cli.ts", import.meta.url)),
-      outfile: join(workspace, `pd-${stamp.replace(/[+.]/g, "_")}`),
-      version: stamp,
-    });
+	test(`the built pd reports one version in --version and its manifest: ${stamp}`, async () => {
+		const binary = await buildBinary({
+			entry: fileURLToPath(new URL("../src/cli.ts", import.meta.url)),
+			outfile: join(workspace, `pd-${stamp.replace(/[+.]/g, "_")}`),
+			version: stamp,
+		});
 
-    const run = Bun.spawnSync([binary, "--version"], { cwd: workspace });
-    const manifestRun = Bun.spawnSync([binary, "manifest"], { cwd: workspace });
-    const parsed = Result.fromThrowable(
-      (text: string): unknown => JSON.parse(text),
-    )(manifestRun.stdout.toString());
-    const manifest = parsed.isOk() && typeof parsed.value === "object" && parsed.value !== null
-      ? parsed.value as { pd_version?: string }
-      : {};
+		const run = Bun.spawnSync([binary, "--version"], { cwd: workspace });
+		const manifestRun = Bun.spawnSync([binary, "manifest"], { cwd: workspace });
+		const parsed = Result.fromThrowable((text: string): unknown =>
+			JSON.parse(text),
+		)(manifestRun.stdout.toString());
+		const manifest =
+			parsed.isOk() && typeof parsed.value === "object" && parsed.value !== null
+				? (parsed.value as { pd_version?: string })
+				: {};
 
-    expect(run.exitCode).toBe(0);
-    expect(run.stdout.toString()).toBe(`${stamp}\n`);
-    expect(run.stderr.toString()).toBe("");
-    expect(manifestRun.exitCode).toBe(0);
-    expect(manifestRun.stderr.toString()).toBe("");
-    expect(parsed.isOk()).toBe(true);
-    expect(manifest.pd_version).toBe(stamp);
-  });
+		expect(run.exitCode).toBe(0);
+		expect(run.stdout.toString()).toBe(`${stamp}\n`);
+		expect(run.stderr.toString()).toBe("");
+		expect(manifestRun.exitCode).toBe(0);
+		expect(manifestRun.stderr.toString()).toBe("");
+		expect(parsed.isOk()).toBe(true);
+		expect(manifest.pd_version).toBe(stamp);
+	});
 }
