@@ -21,7 +21,7 @@ const run = async (fixtures: readonly Fixture[] | undefined, argv: readonly stri
     sink: out.sink,
     stderr: out.stderr,
   });
-  return { exit, lines: out.lines(), stderr: out.errors };
+  return { exit, stdout: out.text(), lines: out.lines(), stderr: out.errors };
 };
 
 const records = (lines: Line[]) => lines.filter((line) => line["type"] === "record");
@@ -93,7 +93,7 @@ describe("--fields projection", () => {
 
     expect(fromList.exit).toBe(0);
     expect(fromGet.exit).toBe(0);
-    expect(JSON.stringify(records(fromList.lines)[0])).toBe(JSON.stringify(records(fromGet.lines)[0]));
+    expect(fromList.stdout).toBe(fromGet.stdout);
   });
 
   test("bare custom_fields and more than fifteen hashes fall back to local trimming", async () => {

@@ -21,6 +21,8 @@ export type Capture = {
   sink: (line: string) => void;
   /** Pass as the writer's or command's `stderr`. */
   stderr: (line: string) => void;
+  /** Exact bytes written to stdout, including line endings. */
+  text: () => string;
   lines: () => Line[];
   /** The trailer, once the run has ended. */
   last: () => Line | undefined;
@@ -36,6 +38,7 @@ export const capture = (): Capture => {
   return {
     sink: (line) => out.push(line),
     stderr: (line) => errors.push(line),
+    text: () => out.join(""),
     lines,
     last: () => lines().at(-1),
     of: (type) => lines().filter((line) => line["type"] === type),
