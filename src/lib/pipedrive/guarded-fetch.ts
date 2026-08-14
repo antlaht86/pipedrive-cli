@@ -41,6 +41,7 @@ import { z } from "zod";
 
 import { pdError } from "../errors.ts";
 import type { PdErrorInput } from "../errors.ts";
+import type { RunDiagnostics } from "../output/diagnostics.ts";
 import { DEFAULT_RESOLVE_BUDGET } from "./budgets.ts";
 import type { Clock } from "./clock.ts";
 import { systemClock } from "./clock.ts";
@@ -285,6 +286,8 @@ export type GuardedFetchOptions = {
 	 * agent (ADR-0010 §7).
 	 */
 	onBlocked?: () => void;
+	/** ADR-0015's human-only request and pacing events. */
+	diagnostics?: RunDiagnostics;
 };
 
 export type GuardedFetch = {
@@ -322,6 +325,7 @@ export const createGuardedFetch = ({
 	maxRequests,
 	resolveBudget = DEFAULT_RESOLVE_BUDGET,
 	onBlocked,
+	diagnostics,
 }: GuardedFetchOptions = {}): GuardedFetch => {
 	const gate = new BurstGate(clock);
 	const limiter = pLimit(CONCURRENCY);
@@ -335,7 +339,14 @@ export const createGuardedFetch = ({
 	const observeCeiling = (response: Response): void => {
 		const observed = rateLimitHeader(response, "x-ratelimit-limit");
 		if (observed !== undefined && observed > 0) {
+			const before = gate.limitOf("default");
 			gate.raiseDefaultTo(Math.floor(observed / 2));
+			const after = gate.limitOf("default");
+			if (after > before) {
+				diagnostics?.anomaly(
+					`rate-limit gate raised from ${before} to ${after} requests per window`,
+				);
+			}
 		}
 	};
 
@@ -401,11 +412,23 @@ export const createGuardedFetch = ({
 		for (;;) {
 			reserve(path, relation);
 			await gate.admit(family);
+			const attemptNumber = retriesForThisRequest + 1;
+			const startedAt = clock.now();
 
 			const attempt = await ResultAsync.fromPromise(
 				transport(request),
 				(cause) => cause,
 			);
+			const durationMs = Math.max(0, clock.now() - startedAt);
+			diagnostics?.request({
+				request,
+				...(attempt.isOk()
+					? { response: attempt.value }
+					: { transportError: true }),
+				durationMs,
+				attempt: attemptNumber,
+				cacheHit: false,
+			});
 
 			// A transport that refuses with a `PdFailure` has already said what went
 			// wrong and that waiting cannot fix it — a missing fixture, an absent
@@ -443,6 +466,9 @@ export const createGuardedFetch = ({
 				const wait = Math.round(base * clock.random());
 				retriesForThisRequest += 1;
 				retriesUsed += 1;
+				diagnostics?.anomaly(
+					`request ${path} backed off ${wait}ms after a 5xx or transport failure (attempt ${attemptNumber})`,
+				);
 				await clock.sleep(wait);
 				continue;
 			}
@@ -482,6 +508,9 @@ export const createGuardedFetch = ({
 				}
 				burstStrikes += 1;
 				gate.pauseFor(wait);
+				diagnostics?.anomaly(
+					`gate paused for ${wait}ms after rate limiting (strike ${burstStrikes})`,
+				);
 				continue;
 			}
 

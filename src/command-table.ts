@@ -68,7 +68,12 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
 		group: "global",
 		applies_to: "data commands and pd auth status",
 	},
-	{ name: "--verbose", group: "global", applies_to: "data commands" },
+	{
+		parser: "verbose",
+		name: "--verbose",
+		group: "global",
+		applies_to: "data commands",
+	},
 	{
 		parser: "fields",
 		name: "--fields <a,b>",
@@ -197,6 +202,7 @@ const dataFlags = (includeLimit: boolean): readonly Flag[] => [
 	"resolve-budget",
 	"no-cache",
 	"resolve",
+	"verbose",
 	"fields",
 ];
 
@@ -297,11 +303,7 @@ const command = ({
 	name,
 	description,
 	arguments: args,
-	flags: [
-		...parserFlags.map((flag) => FLAG_NAMES[flag]),
-		"--pretty",
-		"--verbose",
-	],
+	flags: [...parserFlags.map((flag) => FLAG_NAMES[flag]), "--pretty"],
 	...(flagValues === undefined ? {} : { flag_values: flagValues }),
 	delivery: "streams",
 	...(selectableFields === undefined

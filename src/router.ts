@@ -57,6 +57,7 @@ export type RouteInput = {
 	clock?: Clock;
 	sink?: Sink;
 	stderr?: Sink;
+	isTty?: () => boolean;
 };
 
 const VERBS = new Set<string>(["list", "get", "search"]);
@@ -129,6 +130,7 @@ export const route = async ({
 	clock,
 	sink = stdoutSink,
 	stderr = stderrSink,
+	isTty,
 }: RouteInput): Promise<number> => {
 	const noun = argv[0];
 	const resource = noun === undefined ? undefined : resourceNamed(noun);
@@ -148,6 +150,7 @@ export const route = async ({
 		...(clock === undefined ? {} : { clock }),
 		sink,
 		stderr,
+		...(isTty === undefined ? {} : { isTty }),
 	};
 
 	if (!isVerb(verb)) {

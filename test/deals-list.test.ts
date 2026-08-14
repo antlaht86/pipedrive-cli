@@ -19,6 +19,7 @@ import { capture, type Line } from "./support/ndjson.ts";
 
 type Run = {
 	exit: number;
+	stdout: string;
 	lines: Line[];
 	stderr: string[];
 	last: Line;
@@ -68,6 +69,7 @@ const runWith = async (
 	const lines = out.lines();
 	return {
 		exit,
+		stdout: out.text(),
 		lines,
 		stderr: out.errors,
 		last: lines[lines.length - 1] as Line,
@@ -93,6 +95,20 @@ const of = (lines: Line[], type: string): Line[] =>
 	lines.filter((line) => line["type"] === type);
 
 describe("the walk", () => {
+	test("--verbose changes no stdout byte and forces request diagnostics without a TTY", async () => {
+		const fixture = page([deal(1)], null);
+		const normal = await run([fixture], ["--limit", "1"]);
+		const verbose = await run([fixture], ["--limit", "1", "--verbose"]);
+
+		expect(verbose.stdout).toBe(normal.stdout);
+		const diagnostics = verbose.stderr.join("");
+		expect(diagnostics).toContain("GET /api/v2/deals");
+		expect(diagnostics).toContain("status=200");
+		expect(diagnostics).toContain("attempt=1");
+		expect(diagnostics).toContain("cache_hit=no");
+		expect(diagnostics).toContain("pd: finished:");
+	});
+
 	test("walks every page to a null cursor and emits one record line per deal", async () => {
 		const { exit, lines, last } = await run([
 			page([deal(1), deal(2)], "c2"),
@@ -523,7 +539,7 @@ describe("argument and credential failures still end in a trailer", () => {
 		// pd's own wording, not node:util's — that message advises a `--` positional
 		// syntax this command does not have, and an agent is the one reading it.
 		expect(last["message"]).toBe(
-			"pd deals list does not accept --frobnicate. It takes --token-file, --limit, --max-requests, --resolve-budget, --no-cache, --resolve, --fields, --ids, --owner-id, --person-id, --org-id, --pipeline-id, --stage-id, --status, --updated-since, --updated-until, --sort-by, --sort-direction and --filter-id and no other flag.",
+			"pd deals list does not accept --frobnicate. It takes --token-file, --limit, --max-requests, --resolve-budget, --no-cache, --resolve, --verbose, --fields, --ids, --owner-id, --person-id, --org-id, --pipeline-id, --stage-id, --status, --updated-since, --updated-until, --sort-by, --sort-direction and --filter-id and no other flag.",
 		);
 		expect(last).toMatchObject({
 			type: "error",

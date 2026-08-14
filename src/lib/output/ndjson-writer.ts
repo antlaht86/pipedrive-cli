@@ -35,6 +35,7 @@
 import { pdError, type PdError } from "../errors.ts";
 import { PdFailure } from "../pipedrive/failure.ts";
 import { causeOf, isRecordRejected } from "../warnings.ts";
+import type { RunDiagnostics } from "./diagnostics.ts";
 import type { PdWarning } from "../warnings.ts";
 import type { Bound, Page } from "../pipedrive/walk.ts";
 
@@ -99,6 +100,8 @@ export type NdjsonWriterOptions = {
 	 * the pair cannot come apart and no caller has to remember the second half.
 	 */
 	stderr?: Sink;
+	/** ADR-0015's sole human diagnostics writer for data commands. */
+	diagnostics?: RunDiagnostics;
 };
 
 /**
@@ -286,6 +289,7 @@ export const errorLine = (
 export class NdjsonWriter {
 	readonly #sink: Sink;
 	readonly #stderr: Sink;
+	readonly #diagnostics: RunDiagnostics | undefined;
 	readonly #recordType: string;
 	readonly #mixedRecordTypes: boolean;
 	readonly #requests: () => number;
@@ -308,6 +312,7 @@ export class NdjsonWriter {
 		bounded = false,
 		sink = stdoutSink,
 		stderr = stderrSink,
+		diagnostics,
 	}: NdjsonWriterOptions) {
 		this.#recordType = recordType;
 		this.#mixedRecordTypes = mixedRecordTypes;
@@ -317,6 +322,7 @@ export class NdjsonWriter {
 		this.#bounded = bounded;
 		this.#sink = sink;
 		this.#stderr = stderr;
+		this.#diagnostics = diagnostics;
 	}
 
 	#line(value: unknown): void {
@@ -400,6 +406,7 @@ export class NdjsonWriter {
 				);
 			}
 			this.#emitted += 1;
+			this.#diagnostics?.record();
 			this.#line({
 				type: "record",
 				record_type: recordType,
@@ -416,15 +423,18 @@ export class NdjsonWriter {
 		// The wording does not claim the walk continues. The threshold can be met
 		// by the very last record of a complete run, and a line that said "still
 		// going" would then be false on the one channel a human is reading.
-		this.#stderr(
-			`pd: ${this.#emitted} records emitted so far. Pass --limit to bound the walk.\n`,
-		);
+		const message = `${this.#emitted} records emitted so far. Pass --limit to bound the walk.`;
+		if (this.#diagnostics !== undefined) this.#diagnostics.sizeWarning(message);
+		else this.#stderr(`pd: ${message}\n`);
 	}
 
 	/** A `warning` that did not come from a rejected record — a cache skip, say. */
 	warn(warning: PdWarning): void {
 		this.#refuseAfterTrailer("warn");
 		this.#line({ type: "warning", ...warning });
+		if (warning.kind === "cache_entry_skipped") {
+			this.#diagnostics?.anomaly(warning.message);
+		}
 	}
 
 	/** ADR-0008: an ancillary resolver failed after the writer was constructed. */
@@ -446,6 +456,7 @@ export class NdjsonWriter {
 			...this.#counters(),
 			...(bound === null ? {} : { reason: bound }),
 		});
+		this.#diagnostics?.finish();
 		return 0;
 	}
 
@@ -460,7 +471,8 @@ export class NdjsonWriter {
 		this.#refuseAfterTrailer("error");
 		this.#finished = true;
 		this.#line(errorLine(error, this.#counters()));
-		this.#stderr(`pd: ${error.message}\n`);
+		if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
+		else this.#stderr(`pd: ${error.message}\n`);
 		return error.exit_code;
 	}
 
@@ -493,7 +505,8 @@ export class NdjsonWriter {
 			// as well as stdout, so the line below is the only one a reader sees.
 			details: { call, trailer_already_written: true },
 		});
-		this.#stderr(`pd: ${error.message}\n`);
+		if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
+		else this.#stderr(`pd: ${error.message}\n`);
 		throw new PdFailure(error);
 	}
 }

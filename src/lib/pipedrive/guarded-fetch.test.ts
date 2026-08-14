@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { FakeClock } from "../../../test/support/clock.ts";
 import { createReplayTransport } from "../../../test/support/replay.ts";
+import { RunDiagnostics } from "../output/diagnostics.ts";
 import type { Fixture } from "../../../test/support/replay.ts";
 import { client as v2Client } from "./v2/generated/client.gen.ts";
 import {
@@ -108,6 +109,41 @@ describe("redactUrl", () => {
 });
 
 describe("the burst gate", () => {
+  test("reports every pacing anomaly as a permanent TTY line", async () => {
+    const clock = new FakeClock({ random: () => 1 });
+    const output: string[] = [];
+    const pending: { guard?: ReturnType<typeof createGuardedFetch> } = {};
+    const diagnostics = new RunDiagnostics({
+      sink: (text) => output.push(text),
+      isTty: () => true,
+      clock,
+      requests: () => pending.guard?.dispatches() ?? 0,
+    });
+    const guard = createGuardedFetch({
+      clock,
+      diagnostics,
+      transport: createReplayTransport([
+        { ...ok, status: 500 },
+        {
+          ...ok,
+          status: 429,
+          headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1" },
+        },
+        { ...ok, headers: { "x-ratelimit-limit": "100" } },
+      ]),
+    });
+    pending.guard = guard;
+
+    expect((await guard.fetch(url("/deals"))).status).toBe(200);
+    diagnostics.finish();
+
+    const text = output.join("");
+    expect(text).toContain("backed off 250ms");
+    expect(text).toContain("gate paused for 1000ms");
+    expect(text).toContain("strike 1");
+    expect(text).toContain("gate raised from 10 to 50");
+  });
+
   test("holds 10 requests per rolling 2 seconds by default", async () => {
     const clock = new FakeClock();
     const guard = createGuardedFetch({

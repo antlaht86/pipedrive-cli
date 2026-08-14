@@ -182,6 +182,8 @@ export const Arguments = z.object({
 	"no-cache": z.boolean().optional(),
 	/** ADR-0008: one additive switch for every id-to-name resolution. */
 	resolve: z.boolean().optional(),
+	/** ADR-0015: human diagnostics on stderr, never a stdout change. */
+	verbose: z.boolean().optional(),
 	/** ADR-0017: exact search permits a one-character term. */
 	exact: z.boolean().optional(),
 	/** ADR-0017: names where to search, never what to emit. */
@@ -242,6 +244,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
 	"resolve-budget": "string",
 	"no-cache": "boolean",
 	resolve: "boolean",
+	verbose: "boolean",
 	exact: "boolean",
 	"search-in": "string",
 	types: "string",

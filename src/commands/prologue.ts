@@ -61,6 +61,7 @@ import {
 	createPipedriveClient,
 	type PipedriveClient,
 } from "../lib/pipedrive/client.ts";
+import { RunDiagnostics } from "../lib/output/diagnostics.ts";
 import { NdjsonWriter, type Sink } from "../lib/output/ndjson-writer.ts";
 import type { PdError } from "../lib/errors.ts";
 import {
@@ -87,6 +88,8 @@ export type CommandInput = {
 	clock?: Clock;
 	sink?: Sink;
 	stderr?: Sink;
+	/** Injected predicate for stderr's own descriptor; no environment override. */
+	isTty?: () => boolean;
 };
 
 export type PrologueInput<T> = CommandInput & {
@@ -135,7 +138,9 @@ export const begin = <T>({
 	clock = systemClock,
 	sink,
 	stderr,
+	isTty,
 }: PrologueInput<T>): Result<Started<T>, number> => {
+	const startedAt = clock.now();
 	const refused = refusesToken(argv);
 	const parsed = parseArguments({ command, flags: allowed, positional, argv });
 	const flags = parsed.isOk() ? parsed.value.flags : undefined;
@@ -145,7 +150,18 @@ export const begin = <T>({
 	// fingerprint does. So the gate is handed a closure over this box, rather than
 	// the credential the gate must never learn about (ADR-0010 §6). It is empty on
 	// every path that fails before step 5, and every one of those made no request.
-	const pending: { sentinel?: Sentinel } = {};
+	const pending: { sentinel?: Sentinel; guarded?: GuardedFetch } = {};
+	const diagnostics = new RunDiagnostics({
+		...(stderr === undefined ? {} : { sink: stderr }),
+		...(isTty === undefined ? {} : { isTty }),
+		verbose: flags?.verbose === true,
+		clock,
+		startedAt,
+		requests: () => pending.guarded?.dispatches() ?? 0,
+		...(flags?.["max-requests"] === undefined
+			? {}
+			: { maxRequests: flags["max-requests"] }),
+	});
 
 	const guarded = createGuardedFetch({
 		...(transport === undefined ? {} : { transport }),
@@ -155,7 +171,9 @@ export const begin = <T>({
 			: { maxRequests: flags["max-requests"] }),
 		resolveBudget: flags?.["resolve-budget"] ?? DEFAULT_RESOLVE_BUDGET,
 		onBlocked: () => pending.sentinel?.record(),
+		diagnostics,
 	});
+	pending.guarded = guarded;
 
 	const writer = new NdjsonWriter({
 		recordType,
@@ -168,10 +186,14 @@ export const begin = <T>({
 		...(rename === undefined ? {} : { rename }),
 		...(sink === undefined ? {} : { sink }),
 		...(stderr === undefined ? {} : { stderr }),
+		diagnostics,
 	});
 
 	if (refused) return err(writer.error(TOKEN_REFUSAL));
 	if (parsed.isErr()) return err(writer.error(parsed.error));
+	if (parsed.value.flags["no-cache"] === true) {
+		diagnostics.anomaly("cache reads bypassed by --no-cache");
+	}
 
 	const resolved = resolve(parsed.value.flags, parsed.value);
 	if (resolved.isErr()) return err(writer.error(resolved.error));
