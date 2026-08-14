@@ -1,4 +1,5 @@
 import { ok } from "neverthrow";
+import { z } from "zod";
 
 import type { CacheStore } from "../cache/store.ts";
 import type { PdWarning } from "../warnings.ts";
@@ -27,12 +28,24 @@ const STANDARD_PAIRS = [
 
 type LookupName = "users" | "pipelines" | "stages";
 type LookupMaps = Partial<Record<LookupName, ReadonlyMap<number, string>>>;
-type FieldSchema = {
-  field_code: string;
-  field_name: string;
-  field_type: string;
-  options?: unknown;
-};
+
+const Scalar = z.union([z.string(), z.number()]);
+const ResolutionOption = z.object({ id: Scalar, label: z.string() });
+const ResolutionField = z.object({
+  field_code: z.string().regex(HASH),
+  field_name: z.string(),
+  field_type: z.string(),
+  options: z.array(ResolutionOption).nullable().optional(),
+});
+type FieldSchema = z.infer<typeof ResolutionField>;
+
+const NamedRecord = z.object({ id: z.int(), name: z.string() });
+const OptionValue = z.union([Scalar, z.array(Scalar)]);
+const MoneyValue = z.object({ value: Scalar, currency: z.string() });
+const AddressValue = z.union([
+  z.array(Scalar),
+  z.record(z.string(), Scalar.nullish()),
+]);
 
 type ResolutionResource = {
   readonly name: string;
@@ -67,9 +80,8 @@ const parseAll = (
 const idNameMap = (records: readonly Record<string, unknown>[]): Map<number, string> => {
   const map = new Map<number, string>();
   for (const record of records) {
-    if (typeof record.id === "number" && typeof record.name === "string") {
-      map.set(record.id, record.name);
-    }
+    const parsed = NamedRecord.safeParse(record);
+    if (parsed.success) map.set(parsed.data.id, parsed.data.name);
   }
   return map;
 };
@@ -77,50 +89,29 @@ const idNameMap = (records: readonly Record<string, unknown>[]): Map<number, str
 const fieldMap = (records: readonly Record<string, unknown>[]): Map<string, FieldSchema> => {
   const map = new Map<string, FieldSchema>();
   for (const record of records) {
-    if (
-      typeof record.field_code === "string" &&
-      typeof record.field_name === "string" &&
-      typeof record.field_type === "string" &&
-      HASH.test(record.field_code)
-    ) {
-      map.set(record.field_code, {
-        field_code: record.field_code,
-        field_name: record.field_name,
-        field_type: record.field_type,
-        ...(record.options === undefined ? {} : { options: record.options }),
-      });
-    }
+    const parsed = ResolutionField.safeParse(record);
+    if (parsed.success) map.set(parsed.data.field_code, parsed.data);
   }
   return map;
 };
 
-const scalar = (value: unknown): string | undefined =>
-  typeof value === "string" || typeof value === "number" ? String(value) : undefined;
-
 const optionIds = (value: unknown): { ids: string[]; array: boolean } | undefined => {
-  if (Array.isArray(value)) {
-    const ids = value.map(scalar);
-    return ids.every((id) => id !== undefined)
-      ? { ids: ids as string[], array: true }
-      : undefined;
+  const parsed = OptionValue.safeParse(value);
+  if (!parsed.success) return undefined;
+  if (Array.isArray(parsed.data)) {
+    return { ids: parsed.data.map(String), array: true };
   }
-  const one = scalar(value);
-  if (one === undefined) return undefined;
-  if (typeof value === "string" && value.includes(",")) {
-    return { ids: value.split(",").map((id) => id.trim()), array: true };
+  if (typeof parsed.data === "string" && parsed.data.includes(",")) {
+    return { ids: parsed.data.split(",").map((id) => id.trim()), array: true };
   }
-  return { ids: [one], array: false };
+  return { ids: [String(parsed.data)], array: false };
 };
 
 const optionLabel = (schema: FieldSchema, value: unknown): string | string[] | undefined => {
   if (!Array.isArray(schema.options)) return undefined;
-  const labels = new Map<string, string>();
-  for (const option of schema.options) {
-    if (option === null || typeof option !== "object") continue;
-    const record = option as Record<string, unknown>;
-    const id = scalar(record.id);
-    if (id !== undefined && typeof record.label === "string") labels.set(id, record.label);
-  }
+  const labels = new Map(
+    schema.options.map((option) => [String(option.id), option.label]),
+  );
   const values = optionIds(value);
   if (values === undefined) return undefined;
   const resolved = values.ids.map((id) => labels.get(id));
@@ -129,22 +120,21 @@ const optionLabel = (schema: FieldSchema, value: unknown): string | string[] | u
 };
 
 const moneyLabel = (value: unknown): string | undefined => {
-  if (value === null || typeof value !== "object") return undefined;
-  const raw = value as Record<string, unknown>;
-  if (typeof raw.currency !== "string") return undefined;
-  const amount = raw.value;
-  if (typeof amount === "string" && amount !== "") return `${amount} ${raw.currency}`;
+  const parsed = MoneyValue.safeParse(value);
+  if (!parsed.success) return undefined;
+  const { value: amount, currency } = parsed.data;
+  if (typeof amount === "string" && amount !== "") return `${amount} ${currency}`;
   return typeof amount === "number" && Number.isFinite(amount)
-    ? `${amount.toFixed(2)} ${raw.currency}`
+    ? `${amount.toFixed(2)} ${currency}`
     : undefined;
 };
 
 const addressLabel = (value: unknown): string | undefined => {
-  const values = Array.isArray(value)
-    ? value
-    : value !== null && typeof value === "object"
-      ? Object.values(value as Record<string, unknown>)
-      : [];
+  const parsed = AddressValue.safeParse(value);
+  if (!parsed.success) return undefined;
+  const values = Array.isArray(parsed.data)
+    ? parsed.data
+    : Object.values(parsed.data);
   const parts = values.filter(
     (part): part is string | number =>
       (typeof part === "string" && part !== "") || typeof part === "number",
@@ -162,8 +152,8 @@ const customLabel = (
     case "set":
       return optionLabel(schema, value);
     case "user": {
-      const id = typeof value === "number" ? value : undefined;
-      return id === undefined ? undefined : lookups.users?.get(id);
+      const id = z.int().safeParse(value);
+      return id.success ? lookups.users?.get(id.data) : undefined;
     }
     case "monetary":
       return moneyLabel(value);
