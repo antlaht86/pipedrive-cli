@@ -172,6 +172,8 @@ test("root and command help are generated from the table", () => {
 	const dealsHelp = renderHelp(["deals", "list"]);
 	expect(dealsHelp).toContain("USAGE\n  pd deals list [flags]");
 	expect(dealsHelp).toContain("--pretty");
+	expect(dealsHelp).toContain("unstable human-readable output");
+	expect(dealsHelp).toContain("Never invoke --pretty from an agent");
 	expect(dealsHelp).toContain("--verbose");
 	expect(dealsHelp).toContain("--sort-by <field> (id, update_time, add_time)");
 	expect(renderHelp(["fields", "list"])).toContain(

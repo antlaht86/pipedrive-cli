@@ -5,7 +5,7 @@
  * `info` and `clear` are not `list` or `get`. Like `pd manifest` and `pd auth
  * status` they emit **one JSON object**, not NDJSON — neither is a record
  * stream, neither can be partial, and neither has anything for a trailer to
- * report.
+ * report. `--pretty` renders that object as unstable human text.
  *
  * ## Neither resolves a credential
  *
@@ -49,6 +49,8 @@ import {
 import { readSentinel } from "../lib/cache/sentinel.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
 import { failWith, type Sink } from "../lib/output/ndjson-writer.ts";
+import { renderObjectTable } from "../lib/output/pretty.ts";
+import { parseArguments } from "./arguments.ts";
 
 export type CacheVerb = "info" | "clear";
 
@@ -115,7 +117,7 @@ type BlockedReport = {
   readable?: false;
 };
 
-const parseJson = fromThrowable((text: string): unknown => JSON.parse(text));
+const parseJson = fromThrowable(JSON.parse);
 
 /**
  * `readable: false` for a sentinel `pd` itself would ignore — unreadable, not
@@ -232,15 +234,14 @@ const clear = (
 
 /**
  * ADR-0005 §7: `clear` takes **no path argument, no pattern and no widening
- * flag**, and `info` takes none either. The refusal names that rather than
- * naming the argument, because the answer to "which flag should I pass" is that
- * there is no flag to pass.
+ * flag**, and `info` takes none either. The human-only `--pretty` output switch
+ * is the sole exception; it cannot widen the deletion target.
  */
 const refusal = (command: string, argument: string): PdError =>
   pdError({
     code: "usage",
     message:
-      `${command} takes no arguments and no flags; got ${argument}. Its target ` +
+      `${command} takes no arguments and only --pretty; got ${argument}. Its target ` +
       "is a constant: the whole pd cache directory.",
   });
 
@@ -257,9 +258,20 @@ export const cacheCommand = ({
   const out = sink ?? ((line: string) => process.stdout.write(line));
   const error = stderr ?? ((line: string) => process.stderr.write(line));
   const command = `pd cache ${verb}`;
+  const pretty = argv.includes("--pretty");
+  const parsed = parseArguments({
+    command,
+    flags: ["pretty"],
+    positional: "none",
+    argv,
+  });
 
-  const extra = argv[0];
-  if (extra !== undefined) return failWith(refusal(command, extra), out, error);
+  if (parsed.isErr()) {
+    const failure = refusal(command, argv[0] ?? "that argument");
+    if (!pretty) return failWith(failure, out, error);
+    error(`pd: ${failure.message}\n`);
+    return failure.exit_code;
+  }
 
   const context: PathContext = { platform, env, home };
   const root = cacheRootDir(context);
@@ -267,6 +279,15 @@ export const cacheCommand = ({
 
   const report =
     verb === "info" ? info(root, join, clock.now()) : clear(root, join);
-  out(`${JSON.stringify(report)}\n`);
+  if (pretty) {
+    out(
+      renderObjectTable(
+        report,
+        verb === "info"
+          ? ["path", "entries", "blocked"]
+          : ["path", "removed", "preserved"],
+      ),
+    );
+  } else out(`${JSON.stringify(report)}\n`);
   return 0;
 };

@@ -16,9 +16,9 @@
  * `resolveCredential` refuses it as `usage`. ADR-0022 §1 scopes ADR-0012 §5's
  * sentence accordingly — this command's exit surface is 0 and 2, never 1.
  *
- * `--pretty` renders the same fields as human text (ADR-0012 §5) and is not
- * built yet: ADR-0022 §3 assigns it to the `--pretty` ticket, which owns the
- * aligned renderer, the flag's registration and the never-invoke instruction.
+ * `--pretty` renders the same fields as human text (ADR-0012 §5) through the
+ * shared aligned renderer. ADR-0022 §3 assigns the flag registration and the
+ * never-invoke instruction to that output path.
  *
  * Output is **one JSON object**, not an NDJSON stream — the same exception
  * ADR-0009 §7 grants `pd manifest`, on the same grounds: it is not a record

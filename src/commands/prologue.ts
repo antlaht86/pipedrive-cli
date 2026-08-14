@@ -142,6 +142,9 @@ export const begin = <T>({
 }: PrologueInput<T>): Result<Started<T>, number> => {
 	const startedAt = clock.now();
 	const refused = refusesToken(argv);
+	// Output mode must survive a parse failure: `--pretty --unknown` still has no
+	// machine-readable error object (ADR-0002).
+	const pretty = argv.includes("--pretty");
 	const parsed = parseArguments({ command, flags: allowed, positional, argv });
 	const flags = parsed.isOk() ? parsed.value.flags : undefined;
 
@@ -155,6 +158,7 @@ export const begin = <T>({
 		...(stderr === undefined ? {} : { sink: stderr }),
 		...(isTty === undefined ? {} : { isTty }),
 		verbose: flags?.verbose === true,
+		pretty,
 		clock,
 		startedAt,
 		requests: () => pending.guarded?.dispatches() ?? 0,
@@ -193,6 +197,14 @@ export const begin = <T>({
 		// who passed `--limit` has already said how much output it wants.
 		bounded: flags?.limit !== undefined,
 		resolved: flags?.resolve === true ? "full" : "off",
+		pretty,
+		...(flags?.fields === undefined
+			? {}
+			: {
+					prettyFields: [
+						...new Set(flags.fields.flatMap((value) => value.split(","))),
+					],
+				}),
 		...(rename === undefined ? {} : { rename }),
 		...(sink === undefined ? {} : { sink }),
 		...(stderr === undefined ? {} : { stderr }),

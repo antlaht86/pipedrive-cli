@@ -311,7 +311,7 @@ describe("--limit does not exist on a non-list command", () => {
 		]);
 
 		expect(last["message"]).toBe(
-			"pd deals get does not accept --limit. It takes --token-file, --max-requests, --resolve-budget, --no-cache, --resolve, --verbose and --fields and no other flag.",
+			"pd deals get does not accept --limit. It takes --pretty, --token-file, --max-requests, --resolve-budget, --no-cache, --resolve, --verbose and --fields and no other flag.",
 		);
 	});
 });

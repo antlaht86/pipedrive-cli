@@ -115,8 +115,13 @@ const unrecognised = (argv: readonly string[], known: boolean): PdError => {
  * The refusal, written straight rather than through `NdjsonWriter`: the writer
  * is constructed around a `record_type`, and an unrecognised command has none.
  */
-const refuse = (error: PdError, sink: Sink, stderr: Sink): number => {
-	sink(`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`);
+const refuse = (
+	error: PdError,
+	sink: Sink,
+	stderr: Sink,
+	pretty: boolean,
+): number => {
+	if (!pretty) sink(`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`);
 	stderr(`pd: ${error.message}\n`);
 	return error.exit_code;
 };
@@ -140,6 +145,7 @@ export const route = async ({
 	// and the commands behind them take different flags (ADR-0005 §1).
 	const cached = noun === undefined ? undefined : cachedResourceNamed(noun);
 	const verb = argv[1];
+	const pretty = argv.includes("--pretty");
 
 	const common = {
 		argv: argv.slice(2),
@@ -161,12 +167,18 @@ export const route = async ({
 			),
 			sink,
 			stderr,
+			pretty,
 		);
 	}
 
 	if (verb === "search") {
 		if (search === undefined || noun === undefined) {
-			return refuse(unrecognised(argv, resource !== undefined), sink, stderr);
+			return refuse(
+				unrecognised(argv, resource !== undefined),
+				sink,
+				stderr,
+				pretty,
+			);
 		}
 		return resourceCommand({ search, name: noun, verb, ...common });
 	}
@@ -178,5 +190,5 @@ export const route = async ({
 	}
 
 	// A verb `pd` knows on a noun it does not: `pd frobnicate list`.
-	return refuse(unrecognised(argv, false), sink, stderr);
+	return refuse(unrecognised(argv, false), sink, stderr, pretty);
 };

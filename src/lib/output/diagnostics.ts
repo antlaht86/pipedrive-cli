@@ -81,6 +81,8 @@ export type RunDiagnosticsOptions = {
 	/** The sole TTY seam. Production checks stderr's descriptor, not stdout's. */
 	isTty?: () => boolean;
 	verbose?: boolean;
+	/** ADR-0015: names the otherwise-silent buffering phase. */
+	pretty?: boolean;
 	clock?: Clock;
 	startedAt?: number;
 	requests: () => number;
@@ -98,6 +100,7 @@ export class RunDiagnostics {
 	readonly #pacing: () => PacingDiagnostic | undefined;
 	readonly #maxRequests: number | undefined;
 	readonly #verbose: boolean;
+	readonly #pretty: boolean;
 	readonly #enabled: boolean;
 	readonly #startedAt: number;
 	readonly #timer: ReturnType<typeof setInterval> | undefined;
@@ -109,6 +112,7 @@ export class RunDiagnostics {
 		sink = defaultSink,
 		isTty = stderrIsTty,
 		verbose = false,
+		pretty = false,
 		clock = systemClock,
 		startedAt,
 		requests,
@@ -121,6 +125,7 @@ export class RunDiagnostics {
 		this.#pacing = pacing;
 		this.#maxRequests = maxRequests;
 		this.#verbose = verbose;
+		this.#pretty = pretty;
 		this.#enabled = verbose || isTty();
 		this.#startedAt = startedAt ?? clock.now();
 		if (this.#enabled) {
@@ -140,7 +145,8 @@ export class RunDiagnostics {
 			pacing === undefined
 				? ""
 				: `, gate ${pacing.defaultLimit}/${pacing.searchLimit} per 2s, concurrency ${pacing.concurrency}`;
-		const status = `pd: ${this.#records} records, ${this.#requests()} requests, ${this.#elapsed()}${pacingText}`;
+		const phase = this.#pretty ? "records collected (buffering)" : "records";
+		const status = `pd: ${this.#records} ${phase}, ${this.#requests()} requests, ${this.#elapsed()}${pacingText}`;
 		const padding = " ".repeat(
 			Math.max(0, this.#lastStatusWidth - status.length),
 		);
@@ -179,9 +185,13 @@ export class RunDiagnostics {
 		);
 	}
 
-	sizeWarning(message: string): void {
+	warning(message: string): void {
 		if (this.#enabled) this.anomaly(message);
 		else this.#sink(`pd: ${message}\n`);
+	}
+
+	sizeWarning(message: string): void {
+		this.warning(message);
 	}
 
 	error(message: string): void {
@@ -200,8 +210,9 @@ export class RunDiagnostics {
 		this.#clearStatus();
 		const ceiling =
 			this.#maxRequests === undefined ? "" : `, ceiling ${this.#maxRequests}`;
+		const noun = this.#pretty ? "records collected" : "records";
 		this.#sink(
-			`pd: finished: ${this.#records} records, ${this.#requests()} requests, ${this.#elapsed()}${ceiling}\n`,
+			`pd: finished: ${this.#records} ${noun}, ${this.#requests()} requests, ${this.#elapsed()}${ceiling}\n`,
 		);
 	}
 

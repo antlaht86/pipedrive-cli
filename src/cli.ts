@@ -32,6 +32,7 @@ import {
 	failWith,
 	ZERO_COUNTERS,
 } from "./lib/output/ndjson-writer.ts";
+import { renderObjectTable } from "./lib/output/pretty.ts";
 
 /** Stamped by the build through `define` (see `scripts/build.ts`). */
 declare const PD_VERSION: string | undefined;
@@ -66,9 +67,14 @@ const docs = (): ResultAsync<string, PdError> =>
  * commands ADR-0009 §8 puts outside the grammar are not record streams, so
  * there is nothing for a trailer to say about one.
  */
-const fail = (error: PdError): number => failWith(error);
+const fail = (error: PdError, pretty = false): number => {
+	if (!pretty) return failWith(error);
+	process.stderr.write(`pd: ${error.message}\n`);
+	return error.exit_code;
+};
 
 const runAuthStatus = (argv: readonly string[]): number => {
+	const pretty = argv.includes("--pretty");
 	const definition = otherCommandNamed("pd auth status");
 	if (definition === undefined) {
 		return fail(
@@ -76,9 +82,10 @@ const runAuthStatus = (argv: readonly string[]): number => {
 				code: "internal",
 				message: "pd auth status is missing from the command table.",
 			}),
+			pretty,
 		);
 	}
-	if (refusesToken(argv)) return fail(TOKEN_REFUSAL);
+	if (refusesToken(argv)) return fail(TOKEN_REFUSAL, pretty);
 
 	const parsed = parseArguments({
 		command: definition.name,
@@ -86,7 +93,7 @@ const runAuthStatus = (argv: readonly string[]): number => {
 		positional: "none",
 		argv,
 	});
-	if (parsed.isErr()) return fail(parsed.error);
+	if (parsed.isErr()) return fail(parsed.error, pretty);
 
 	const tokenFile = parsed.value.flags["token-file"];
 	const status = authStatus({
@@ -96,13 +103,26 @@ const runAuthStatus = (argv: readonly string[]): number => {
 		...(tokenFile === undefined ? {} : { tokenFile }),
 	});
 
-	if (status.isErr()) return fail(status.error);
+	if (status.isErr()) return fail(status.error, pretty);
 
-	process.stdout.write(`${JSON.stringify(status.value)}\n`);
+	if (pretty) {
+		process.stdout.write(
+			renderObjectTable(status.value, [
+				"found",
+				"tier",
+				"path",
+				"fingerprint",
+				"cache_dir_exists",
+				"credential_is_write_capable",
+				"warnings",
+			]),
+		);
+	} else process.stdout.write(`${JSON.stringify(status.value)}\n`);
 	return 0;
 };
 
 const main = async (argv: readonly string[]): Promise<number> => {
+	const pretty = argv.includes("--pretty");
 	if (argv.includes("--help")) {
 		const help = renderHelp(argv);
 		if (help !== "") {
@@ -123,7 +143,7 @@ const main = async (argv: readonly string[]): Promise<number> => {
 
 	if (argv.length === 1 && argv[0] === "docs") {
 		const text = await docs();
-		if (text.isErr()) return fail(text.error);
+		if (text.isErr()) return fail(text.error, pretty);
 		process.stdout.write(text.value);
 		return 0;
 	}
@@ -145,6 +165,7 @@ const main = async (argv: readonly string[]): Promise<number> => {
 						`pd cache takes one of: ${CACHE_VERBS.join(", ")}. ` +
 						"Both are local and make no request to Pipedrive.",
 				}),
+				pretty,
 			);
 		}
 		return cacheCommand({
@@ -211,9 +232,11 @@ running.then(
 					message: `pd ended without writing a trailer: ${String(cause)}`,
 				});
 		if (error.details?.["trailer_already_written"] !== true) {
-			process.stdout.write(
-				`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`,
-			);
+			if (!process.argv.slice(2).includes("--pretty")) {
+				process.stdout.write(
+					`${JSON.stringify(errorLine(error, ZERO_COUNTERS))}\n`,
+				);
+			}
 			process.stderr.write(`pd: ${error.message}\n`);
 		}
 		process.exitCode = error.exit_code;

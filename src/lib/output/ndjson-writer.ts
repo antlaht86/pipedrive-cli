@@ -38,6 +38,7 @@ import { causeOf, isRecordRejected } from "../warnings.ts";
 import type { RunDiagnostics } from "./diagnostics.ts";
 import type { PdWarning } from "../warnings.ts";
 import type { Bound, Page } from "../pipedrive/walk.ts";
+import { renderTable } from "./pretty.ts";
 
 /** ADR-0008: `off` on a run without `--resolve`. ADR-0009 §10's `none` is a mis-citation. */
 export type Resolved = "off" | "partial" | "full";
@@ -93,6 +94,10 @@ export type NdjsonWriterOptions = {
 	 * and does not suppress the warning.
 	 */
 	bounded?: boolean;
+	/** ADR-0002's buffered, unstable human-only output path. */
+	pretty?: boolean;
+	/** Output selector order; meaningful only when `pretty` is true. */
+	prettyFields?: readonly string[];
 	sink?: Sink;
 	/**
 	 * ADR-0001 sends a human one-line summary of every error to stderr beside the
@@ -296,6 +301,9 @@ export class NdjsonWriter {
 	#resolved: Resolved;
 	readonly #rename: Readonly<Record<string, string>>;
 	readonly #bounded: boolean;
+	readonly #pretty: boolean;
+	readonly #prettyFields: readonly string[] | undefined;
+	readonly #prettyRecords: Record<string, unknown>[] = [];
 	readonly #causes = new Set<string>();
 
 	#emitted = 0;
@@ -310,6 +318,8 @@ export class NdjsonWriter {
 		resolved = "off",
 		rename = {},
 		bounded = false,
+		pretty = false,
+		prettyFields,
 		sink = stdoutSink,
 		stderr = stderrSink,
 		diagnostics,
@@ -320,6 +330,8 @@ export class NdjsonWriter {
 		this.#resolved = resolved;
 		this.#rename = rename;
 		this.#bounded = bounded;
+		this.#pretty = pretty;
+		this.#prettyFields = prettyFields;
 		this.#sink = sink;
 		this.#stderr = stderr;
 		this.#diagnostics = diagnostics;
@@ -357,7 +369,8 @@ export class NdjsonWriter {
 			if (this.#causes.has(cause)) continue;
 			if (this.#causes.size >= MAX_WARNING_CAUSES) continue;
 			this.#causes.add(cause);
-			this.#line({ type: "warning", ...warning });
+			if (this.#pretty) this.#humanWarning(warning.message);
+			else this.#line({ type: "warning", ...warning });
 		}
 
 		this.#duplicates += page.duplicates;
@@ -407,11 +420,15 @@ export class NdjsonWriter {
 			}
 			this.#emitted += 1;
 			this.#diagnostics?.record();
-			this.#line({
-				type: "record",
-				record_type: recordType,
-				...present(body, this.#rename),
-			});
+			const output = present(body, this.#rename);
+			if (this.#pretty) this.#prettyRecords.push(output);
+			else {
+				this.#line({
+					type: "record",
+					record_type: recordType,
+					...output,
+				});
+			}
 			this.#warnOnSize();
 		}
 	}
@@ -431,10 +448,16 @@ export class NdjsonWriter {
 	/** A `warning` that did not come from a rejected record — a cache skip, say. */
 	warn(warning: PdWarning): void {
 		this.#refuseAfterTrailer("warn");
-		this.#line({ type: "warning", ...warning });
-		if (warning.kind === "cache_entry_skipped") {
+		if (this.#pretty) this.#humanWarning(warning.message);
+		else this.#line({ type: "warning", ...warning });
+		if (!this.#pretty && warning.kind === "cache_entry_skipped") {
 			this.#diagnostics?.anomaly(warning.message);
 		}
+	}
+
+	#humanWarning(message: string): void {
+		if (this.#diagnostics !== undefined) this.#diagnostics.warning(message);
+		else this.#stderr(`pd: ${message}\n`);
 	}
 
 	/** A permanent human diagnostic; silent in machine mode. */
@@ -456,13 +479,24 @@ export class NdjsonWriter {
 	finish(bound: Bound | null): number {
 		this.#refuseAfterTrailer("finish");
 		this.#finished = true;
-		this.#line({
-			type: "summary",
-			complete: bound === null,
-			...this.#counters(),
-			...(bound === null ? {} : { reason: bound }),
-		});
-		this.#diagnostics?.finish();
+		if (this.#pretty) {
+			this.#diagnostics?.finish();
+			this.#sink(
+				renderTable(
+					this.#prettyRecords,
+					this.#prettyFields,
+					this.#resolved !== "off",
+				),
+			);
+		} else {
+			this.#line({
+				type: "summary",
+				complete: bound === null,
+				...this.#counters(),
+				...(bound === null ? {} : { reason: bound }),
+			});
+			this.#diagnostics?.finish();
+		}
 		return 0;
 	}
 
@@ -476,9 +510,18 @@ export class NdjsonWriter {
 	error(error: PdError): number {
 		this.#refuseAfterTrailer("error");
 		this.#finished = true;
-		this.#line(errorLine(error, this.#counters()));
+		if (!this.#pretty) this.#line(errorLine(error, this.#counters()));
 		if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
 		else this.#stderr(`pd: ${error.message}\n`);
+		if (this.#pretty && this.#prettyRecords.length > 0) {
+			this.#sink(
+				renderTable(
+					this.#prettyRecords,
+					this.#prettyFields,
+					this.#resolved !== "off",
+				),
+			);
+		}
 		return error.exit_code;
 	}
 

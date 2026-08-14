@@ -25,6 +25,7 @@ type FlagDefinition = {
 /** One registry for parser names, manifest metadata and help spellings. */
 const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
 	{
+		parser: "pretty",
 		name: "--pretty",
 		group: "global",
 		applies_to: "data commands and supported single-object commands",
@@ -196,6 +197,7 @@ const FLAG_NAMES = Object.fromEntries(
 ) as Record<Flag, string>;
 
 const dataFlags = (includeLimit: boolean): readonly Flag[] => [
+	"pretty",
 	"token-file",
 	...(includeLimit ? (["limit"] as const) : []),
 	"max-requests",
@@ -303,7 +305,7 @@ const command = ({
 	name,
 	description,
 	arguments: args,
-	flags: [...parserFlags.map((flag) => FLAG_NAMES[flag]), "--pretty"],
+	flags: parserFlags.map((flag) => FLAG_NAMES[flag]),
 	...(flagValues === undefined ? {} : { flag_values: flagValues }),
 	delivery: "streams",
 	...(selectableFields === undefined
@@ -453,26 +455,26 @@ export const COMMAND_TABLE: CommandTable = {
 			name: "pd cache info",
 			description: "Describe local cache entries and blocked sentinels.",
 			arguments: [],
-			flags: [],
+			flags: [FLAG_NAMES.pretty],
 			delivery: "collects",
-			parserFlags: [],
+			parserFlags: ["pretty"],
 		},
 		{
 			name: "pd cache clear",
 			description:
 				"Delete local cache entries while preserving blocked sentinels.",
 			arguments: [],
-			flags: [],
+			flags: [FLAG_NAMES.pretty],
 			delivery: "collects",
-			parserFlags: [],
+			parserFlags: ["pretty"],
 		},
 		{
 			name: "pd auth status",
 			description: "Report credential discovery without making a request.",
 			arguments: [],
-			flags: [FLAG_NAMES["token-file"]],
+			flags: [FLAG_NAMES["token-file"], FLAG_NAMES.pretty],
 			delivery: "collects",
-			parserFlags: ["token-file"],
+			parserFlags: ["token-file", "pretty"],
 		},
 		{
 			name: "pd docs",
@@ -550,8 +552,8 @@ export const createManifest = (
 		})),
 		other: table.other.map(manifestOther),
 	},
-	global_flags: table.globalFlags,
-	command_flags: table.commandFlags,
+	global_flags: table.globalFlags.map((flag) => ({ ...flag })),
+	command_flags: table.commandFlags.map((flag) => ({ ...flag })),
 	vocabularies: {
 		line_types: ["record", "warning", "summary", "error"] as const,
 		warning_kinds: WARNING_KINDS,
@@ -603,7 +605,12 @@ const selectableFieldsHelp = (
 const flagHelpLine = (
 	definition: CommandDefinition | OtherDefinition,
 	flag: string,
+	table: CommandTable,
 ): string => {
+	const instruction = table.globalFlags.find(
+		(candidate) => candidate.name === flag,
+	)?.instruction;
+	if (instruction !== undefined) return `  ${flag}\n      ${instruction}`;
 	if (!("flag_values" in definition)) return `  ${flag}`;
 	const values = definition.flag_values?.[flag];
 	return values === undefined
@@ -613,6 +620,7 @@ const flagHelpLine = (
 
 const commandHelp = (
 	definition: CommandDefinition | OtherDefinition,
+	table: CommandTable,
 ): string => {
 	const positional = definition.arguments
 		.flatMap((argument) =>
@@ -624,7 +632,7 @@ const commandHelp = (
 		definition.flags.length === 0
 			? ""
 			: `\n\nFLAGS\n${definition.flags
-					.map((flag) => flagHelpLine(definition, flag))
+					.map((flag) => flagHelpLine(definition, flag, table))
 					.join("\n")}`;
 	return `USAGE\n  ${usage}\n\n${definition.description}${flags}${selectableFieldsHelp(definition)}\n`;
 };
@@ -656,9 +664,9 @@ export const renderHelp = (
 
 	const exact = `pd ${words.join(" ")}`;
 	const data = commandNamed(exact, table);
-	if (data !== undefined) return commandHelp(data);
+	if (data !== undefined) return commandHelp(data, table);
 	const other = table.other.find((candidate) => candidate.name === exact);
-	if (other !== undefined) return commandHelp(other);
+	if (other !== undefined) return commandHelp(other, table);
 
 	if (words.length === 1) {
 		const resource = table.resources.find(

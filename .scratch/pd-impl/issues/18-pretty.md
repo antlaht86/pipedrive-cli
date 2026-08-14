@@ -4,7 +4,7 @@
 
 **Blocked by:** 17
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0002 §pretty (output format), ADR-0016 §key order, ADR-0005 §cache warnings.
 

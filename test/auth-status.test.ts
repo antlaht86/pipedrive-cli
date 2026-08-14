@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { Result } from "neverthrow";
 import {
 	chmodSync,
 	mkdirSync,
@@ -55,7 +56,9 @@ const parse = (stdout: string): Record<string, unknown> => {
 	const lines = stdout.trimEnd().split("\n");
 	// One JSON object, not an NDJSON stream — ADR-0012 §5.
 	expect(lines).toHaveLength(1);
-	return JSON.parse(lines[0] as string) as Record<string, unknown>;
+	const parsed = Result.fromThrowable(JSON.parse)(lines[0] as string);
+	expect(parsed.isOk()).toBe(true);
+	return parsed.unwrapOr({}) as Record<string, unknown>;
 };
 
 describe("with no credential", () => {
@@ -135,7 +138,7 @@ describe("the refusals", () => {
 		);
 		expect(unknown.exitCode).toBe(2);
 		expect(parse(unknown.stdout)["message"]).toContain(
-			"It takes --token-file and no other flag.",
+			"It takes --token-file and --pretty and no other flag.",
 		);
 	});
 

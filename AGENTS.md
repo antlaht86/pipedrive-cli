@@ -2,6 +2,8 @@
 
 `pd` is read-only and emits NDJSON. List commands fetch the complete result by default, so pass `--limit` unless you know the result is small.
 
+Never invoke `--pretty` from an agent. It emits an unstable human table with no machine-readable error object; its wording, columns, and alignment may change in any release.
+
 Entity search is a distinct verb: `pd deals search Acme`. Search lines are tagged as hits (for example, `deal_search_hit`), not full records. A bounded search returns the best matches, so `--limit 20` is usually useful. `--search-in` chooses where Pipedrive searches; `--fields` chooses what `pd` emits.
 
 ## Fetching related records

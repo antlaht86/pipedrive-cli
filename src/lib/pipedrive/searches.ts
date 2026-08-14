@@ -260,6 +260,7 @@ const defineSearch = <T extends Record<string, unknown> & { id: number }>({
 });
 
 const BASE_FLAGS = [
+	"pretty",
 	"token-file",
 	"limit",
 	"max-requests",

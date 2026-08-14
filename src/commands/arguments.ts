@@ -178,6 +178,8 @@ export const Arguments = z.object({
 	"max-requests": positiveInteger("max-requests").optional(),
 	/** ADR-0008 §9: implicit relation requests, defaulted by the resolver. */
 	"resolve-budget": positiveInteger("resolve-budget").optional(),
+	/** ADR-0002: unstable human table, never a machine-readable stream. */
+	pretty: z.boolean().optional(),
 	/** ADR-0005 §8: skips the cached **read** and still writes the fresh answer. */
 	"no-cache": z.boolean().optional(),
 	/** ADR-0008: one additive switch for every id-to-name resolution. */
@@ -238,6 +240,7 @@ export type Flag = keyof Arguments;
  * `--no-cache=false` is a spelling nobody should have to guess the meaning of.
  */
 const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
+	pretty: "boolean",
 	"token-file": "string",
 	limit: "string",
 	"max-requests": "string",
