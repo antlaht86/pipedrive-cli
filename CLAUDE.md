@@ -1,3 +1,9 @@
+# Project instructions
+
+## Agent-facing `pd` documentation
+
+For the installed CLI's command and output contract, read [AGENTS.md](AGENTS.md). It is the canonical harness-agnostic documentation and is embedded by `bun run build` for `pd docs`.
+
 ## Libraries
 
 - Use `neverthrow` for error handling. Return `Result`/`ResultAsync` instead of throwing. Do not use `try`/`catch` in application code — wrap third-party throws at the boundary with `fromThrowable` / `fromPromise`.

@@ -167,6 +167,9 @@ test("root and command help are generated from the table", () => {
 			"pd is read-only. It issues GET requests only. It cannot create, update or delete anything in Pipedrive.\n",
 		),
 	).toBe(true);
+	expect(root).toContain("administrator's token");
+	expect(root).toContain("fully privileged credential");
+	expect(root).toContain("safety rests on its own correctness");
 	expect(root).toContain("\nRESOURCES\n");
 	expect(root).toContain("\nOTHER\n");
 	const dealsHelp = renderHelp(["deals", "list"]);

@@ -645,7 +645,7 @@ export const renderHelp = (
 	if (words.length === 0) {
 		return (
 			"pd is read-only. It issues GET requests only. It cannot create, update or delete anything in Pipedrive.\n" +
-			"API tokens can authorise writes; pd's code refuses them. Use a restricted Pipedrive permission set for account-level protection.\n\n" +
+			"A Pipedrive API token is write-capable. Handing pd an administrator's token gives a fully privileged credential to a program whose safety rests on its own correctness. pd's code refuses writes; use a restricted Pipedrive permission set for account-level protection.\n\n" +
 			"USAGE\n  pd <resource> <verb> [argument] [flags]\n\n" +
 			"GLOBAL FLAGS\n" +
 			table.globalFlags

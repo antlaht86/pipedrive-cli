@@ -4,7 +4,7 @@
 
 **Blocked by:** 16
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0021](../../../docs/adr/0021-distribution-build-from-source.md) §5 (`pd docs`, embedding), plus the twelve ADRs listing required content. This is deliverable 1 and 3 of design ticket 22.
 
@@ -54,3 +54,8 @@ paragraph saying the token is write-capable and that a Pipedrive permission set 
 only account-level restriction available. Add one line from
 [ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md) §1 beside it: a `--token-file`
 that does not resolve is a usage error, exit 2, and `pd` never silently falls back from it.
+
+**2026-08-14 — implementation.** Expanded the canonical `AGENTS.md`, added harness pointers and the
+missing glossary entries, made the administrator-token risk explicit in root help, and asserted the
+embedded documentation byte-for-byte against a copied compiled binary. `pd docs --fields x` is also
+covered as a usage refusal. The full 540-test suite, typecheck and lint pass.

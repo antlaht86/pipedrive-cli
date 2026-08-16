@@ -59,3 +59,15 @@ This file is built lazily, as terms actually get settled. The design effort that
 **Nested block** — an object or array of objects inside a record: `products.prices`, a person's `emails`, `phones`, `im` and `postal_address`, an organization's `address`, an activity's `location`, `participants` and `attendees`. [ADR-0020](docs/adr/0020-value-formatting-and-absence.md) §6's omission rule reaches inside all of them, at every depth. A block is selectable whole by its bare top-level name and no dotted path reaches inside it ([ADR-0016](docs/adr/0016-field-projection.md) §2). Absence removes object **keys**, never array **elements**.
 
 **Kind** — the discriminator on a `warning` line, read after `type`. Eight exist, enumerated by name in the spec and registered in `src/lib/warnings.ts`. `kind` is interface in the same sense `code` is; adding one is additive and non-breaking.
+
+**Hit** — one result from a Pipedrive search endpoint. A hit is a relevance-ranked, truncated projection of an entity, not the full entity record, and is emitted with a search-specific `record_type` such as `deal_search_hit`. Fetch the complete records in a second command with `--ids`. Settled in [ADR-0017](docs/adr/0017-search-and-list-filtering.md) and [ADR-0018](docs/adr/0018-related-entity-expansion.md).
+
+**Projection** — selecting which fields a `record` or hit line emits with `--fields`. Projection can remove fields but never records, always preserves `id`, and leaves warning, error and trailer lines untouched. It runs after validation and before resolution prefetch, so a narrower projection can also avoid enrichment work. Settled in [ADR-0016](docs/adr/0016-field-projection.md).
+
+**Push-down** — an invisible optimisation that asks Pipedrive to omit data the local projection would discard. Today it applies only to selected custom-field hashes. Output with and without the optimisation must be byte-identical; if push-down is unavailable, `pd` fetches the wider record and projects locally. Settled in [ADR-0016](docs/adr/0016-field-projection.md) §7.
+
+**Seam** — the one boundary where tests replace Pipedrive with deterministic fixture replay: `guardedFetch`. Everything above it is production code and everything below it is the network; no generated operation or hand-written request may bypass it. Settled in [ADR-0019](docs/adr/0019-testing-strategy.md) §2.
+
+**Anomaly line** — a permanent human-readable stderr line recording an event such as backoff, a burst pause or a raised gate. Unlike the temporary TTY status line, it is appended and never overwritten. It remains prose rather than a machine contract. Settled in [ADR-0015](docs/adr/0015-stderr-and-run-diagnostics.md).
+
+**Absence** — a missing value in Pipedrive data, represented by omitting the key rather than emitting `null`. The rule is recursive through nested objects and arrays of objects; it removes object keys, never array elements. A selected-but-absent field therefore produces a shorter record, not an error. Settled in [ADR-0020](docs/adr/0020-value-formatting-and-absence.md) and [ADR-0025](docs/adr/0025-the-shadowed-line-key-nested-absence-and-the-refusal-that-teaches.md).
