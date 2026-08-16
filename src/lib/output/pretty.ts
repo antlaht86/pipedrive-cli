@@ -85,7 +85,9 @@ const valueOf = (
 		);
 	}
 	const artifact = RESOLVED_BY_RAW[column];
-	return replaceResolved && artifact !== undefined && record[artifact] !== undefined
+	return replaceResolved &&
+		artifact !== undefined &&
+		record[artifact] !== undefined
 		? record[artifact]
 		: record[column];
 };

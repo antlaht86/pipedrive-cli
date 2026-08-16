@@ -36,15 +36,19 @@ import { readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
 import { fromThrowable } from "neverthrow";
 
 import { pdError, type PdError } from "../lib/errors.ts";
-import { cacheRootDir, joinerFor, type PathContext } from "../lib/auth/paths.ts";
 import {
-  CACHE_ENTRY_NAMES,
-  CACHE_SCHEMA_VERSION,
-  SENTINEL_FILE,
-  StoredEntry,
-  TTL_SECONDS,
-  entryFileName,
-  type CacheEntryName,
+	cacheRootDir,
+	joinerFor,
+	type PathContext,
+} from "../lib/auth/paths.ts";
+import {
+	CACHE_ENTRY_NAMES,
+	CACHE_SCHEMA_VERSION,
+	SENTINEL_FILE,
+	StoredEntry,
+	TTL_SECONDS,
+	entryFileName,
+	type CacheEntryName,
 } from "../lib/cache/entries.ts";
 import { readSentinel } from "../lib/cache/sentinel.ts";
 import { systemClock, type Clock } from "../lib/pipedrive/clock.ts";
@@ -57,49 +61,49 @@ export type CacheVerb = "info" | "clear";
 export const CACHE_VERBS: readonly CacheVerb[] = ["info", "clear"];
 
 export const isCacheVerb = (value: string | undefined): value is CacheVerb =>
-  value !== undefined && (CACHE_VERBS as readonly string[]).includes(value);
+	value !== undefined && (CACHE_VERBS as readonly string[]).includes(value);
 
 export type CacheCommandInput = {
-  verb: CacheVerb;
-  /** Everything after `pd cache <verb>`. */
-  argv: readonly string[];
-  platform: NodeJS.Platform;
-  env: Record<string, string | undefined>;
-  home: string;
-  clock?: Clock;
-  sink?: Sink;
-  stderr?: Sink;
+	verb: CacheVerb;
+	/** Everything after `pd cache <verb>`. */
+	argv: readonly string[];
+	platform: NodeJS.Platform;
+	env: Record<string, string | undefined>;
+	home: string;
+	clock?: Clock;
+	sink?: Sink;
+	stderr?: Sink;
 };
 
 const listDirectory = fromThrowable((path: string) =>
-  readdirSync(path, { withFileTypes: true }),
+	readdirSync(path, { withFileTypes: true }),
 );
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
 const removeFile = fromThrowable((path: string): void => {
-  unlinkSync(path);
+	unlinkSync(path);
 });
 const removeDirectory = fromThrowable((path: string): void => {
-  rmdirSync(path);
+	rmdirSync(path);
 });
 
 const seconds = (milliseconds: number): number =>
-  Math.max(0, Math.round(milliseconds / 1000));
+	Math.max(0, Math.round(milliseconds / 1000));
 
 const BY_FILE_NAME = new Map<string, CacheEntryName>(
-  CACHE_ENTRY_NAMES.map((name) => [entryFileName(name), name]),
+	CACHE_ENTRY_NAMES.map((name) => [entryFileName(name), name]),
 );
 
 type EntryReport = {
-  /** The token fingerprint, the same value `pd auth status` reports. */
-  credential: string;
-  entry: CacheEntryName;
-  ttl_seconds: number;
-  /** Absent when the entry could not be read — see `readable`. */
-  age_seconds?: number;
-  /** Absent when the age is unknown. */
-  stale?: boolean;
-  /** Present and `false` only for an entry `pd` would skip and refetch. */
-  readable?: false;
+	/** The token fingerprint, the same value `pd auth status` reports. */
+	credential: string;
+	entry: CacheEntryName;
+	ttl_seconds: number;
+	/** Absent when the entry could not be read — see `readable`. */
+	age_seconds?: number;
+	/** Absent when the age is unknown. */
+	stale?: boolean;
+	/** Present and `false` only for an entry `pd` would skip and refetch. */
+	readable?: false;
 };
 
 /**
@@ -108,13 +112,13 @@ type EntryReport = {
  * §7 requires the report because there is no other way to see the file.
  */
 type BlockedReport = {
-  credential: string;
-  /** Absent when the sentinel could not be read — see `readable`. */
-  age_seconds?: number;
-  /** `0` for a sentinel that is present but no longer stops anything. */
-  expires_in_seconds?: number;
-  /** Present and `false` only for a sentinel `pd` would treat as absent. */
-  readable?: false;
+	credential: string;
+	/** Absent when the sentinel could not be read — see `readable`. */
+	age_seconds?: number;
+	/** `0` for a sentinel that is present but no longer stops anything. */
+	expires_in_seconds?: number;
+	/** Present and `false` only for a sentinel `pd` would treat as absent. */
+	readable?: false;
 };
 
 const parseJson = fromThrowable(JSON.parse);
@@ -133,18 +137,18 @@ const parseJson = fromThrowable(JSON.parse);
  * machine that has not run a data command since the block ended.
  */
 const blockedReport = (
-  credential: string,
-  path: string,
-  now: number,
+	credential: string,
+	path: string,
+	now: number,
 ): BlockedReport => {
-  const reading = readSentinel(path, now);
-  if (reading === undefined) return { credential, readable: false };
+	const reading = readSentinel(path, now);
+	if (reading === undefined) return { credential, readable: false };
 
-  return {
-    credential,
-    age_seconds: seconds(reading.ageMs),
-    expires_in_seconds: seconds(reading.remainingMs),
-  };
+	return {
+		credential,
+		age_seconds: seconds(reading.ageMs),
+		expires_in_seconds: seconds(reading.remainingMs),
+	};
 };
 
 /**
@@ -154,82 +158,82 @@ const blockedReport = (
  * thing a human runs this command to learn.
  */
 const ageOf = (path: string, now: number): number | undefined => {
-  const body = readText(path).andThen(parseJson);
-  if (body.isErr()) return undefined;
-  // The same schema the store reads an entry with, so this command cannot
-  // report an age for a file `pd` itself would refuse.
-  const entry = StoredEntry.safeParse(body.value);
-  return entry.success && entry.data.version === CACHE_SCHEMA_VERSION
-    ? seconds(now - entry.data.fetched_at)
-    : undefined;
+	const body = readText(path).andThen(parseJson);
+	if (body.isErr()) return undefined;
+	// The same schema the store reads an entry with, so this command cannot
+	// report an age for a file `pd` itself would refuse.
+	const entry = StoredEntry.safeParse(body.value);
+	return entry.success && entry.data.version === CACHE_SCHEMA_VERSION
+		? seconds(now - entry.data.fetched_at)
+		: undefined;
 };
 
 const info = (
-  root: string,
-  join: (...parts: string[]) => string,
-  now: number,
+	root: string,
+	join: (...parts: string[]) => string,
+	now: number,
 ): Record<string, unknown> => {
-  const entries: EntryReport[] = [];
-  const blocked: BlockedReport[] = [];
+	const entries: EntryReport[] = [];
+	const blocked: BlockedReport[] = [];
 
-  for (const directory of listDirectory(root).unwrapOr([])) {
-    if (!directory.isDirectory()) continue;
-    const credential = directory.name;
-    const path = join(root, credential);
+	for (const directory of listDirectory(root).unwrapOr([])) {
+		if (!directory.isDirectory()) continue;
+		const credential = directory.name;
+		const path = join(root, credential);
 
-    for (const file of listDirectory(path).unwrapOr([])) {
-      if (!file.isFile()) continue;
+		for (const file of listDirectory(path).unwrapOr([])) {
+			if (!file.isFile()) continue;
 
-      if (file.name === SENTINEL_FILE) {
-        blocked.push(blockedReport(credential, join(path, file.name), now));
-        continue;
-      }
+			if (file.name === SENTINEL_FILE) {
+				blocked.push(blockedReport(credential, join(path, file.name), now));
+				continue;
+			}
 
-      const entry = BY_FILE_NAME.get(file.name);
-      if (entry === undefined) continue;
+			const entry = BY_FILE_NAME.get(file.name);
+			if (entry === undefined) continue;
 
-      const age = ageOf(join(path, file.name), now);
-      entries.push({
-        credential,
-        entry,
-        ttl_seconds: TTL_SECONDS[entry],
-        ...(age === undefined
-          ? { readable: false as const }
-          : { age_seconds: age, stale: age > TTL_SECONDS[entry] }),
-      });
-    }
-  }
+			const age = ageOf(join(path, file.name), now);
+			entries.push({
+				credential,
+				entry,
+				ttl_seconds: TTL_SECONDS[entry],
+				...(age === undefined
+					? { readable: false as const }
+					: { age_seconds: age, stale: age > TTL_SECONDS[entry] }),
+			});
+		}
+	}
 
-  return { path: root, entries, blocked };
+	return { path: root, entries, blocked };
 };
 
 const clear = (
-  root: string,
-  join: (...parts: string[]) => string,
+	root: string,
+	join: (...parts: string[]) => string,
 ): Record<string, unknown> => {
-  let removed = 0;
-  let preserved = 0;
+	let removed = 0;
+	let preserved = 0;
 
-  for (const directory of listDirectory(root).unwrapOr([])) {
-    if (!directory.isDirectory()) continue;
-    const path = join(root, directory.name);
+	for (const directory of listDirectory(root).unwrapOr([])) {
+		if (!directory.isDirectory()) continue;
+		const path = join(root, directory.name);
 
-    for (const file of listDirectory(path).unwrapOr([])) {
-      if (!file.isFile()) continue;
-      if (file.name === SENTINEL_FILE) {
-        preserved += 1;
-        continue;
-      }
-      if (removeFile(join(path, file.name)).isOk()) removed += 1;
-    }
+		for (const file of listDirectory(path).unwrapOr([])) {
+			if (!file.isFile()) continue;
+			if (file.name === SENTINEL_FILE) {
+				preserved += 1;
+				continue;
+			}
+			if (removeFile(join(path, file.name)).isOk()) removed += 1;
+		}
 
-    // An emptied directory is removed too; one holding the sentinel stays. The
-    // failure is ignored on purpose — a directory that will not go away is not
-    // a reason to report a cleared cache as an error.
-    removeDirectory(path);
-  }
+		// An emptied directory is removed too; one holding the sentinel stays. The
+		// failure is ignored on purpose — a directory that will not go away is not
+		// a reason to report a cleared cache as an error.
+		removeDirectory(path);
+	}
 
-  return { path: root, removed, preserved };
+	return { path: root, removed, preserved };
 };
 
 /**
@@ -238,56 +242,56 @@ const clear = (
  * is the sole exception; it cannot widen the deletion target.
  */
 const refusal = (command: string, argument: string): PdError =>
-  pdError({
-    code: "usage",
-    message:
-      `${command} takes no arguments and only --pretty; got ${argument}. Its target ` +
-      "is a constant: the whole pd cache directory.",
-  });
+	pdError({
+		code: "usage",
+		message:
+			`${command} takes no arguments and only --pretty; got ${argument}. Its target ` +
+			"is a constant: the whole pd cache directory.",
+	});
 
 export const cacheCommand = ({
-  verb,
-  argv,
-  platform,
-  env,
-  home,
-  clock = systemClock,
-  sink,
-  stderr,
+	verb,
+	argv,
+	platform,
+	env,
+	home,
+	clock = systemClock,
+	sink,
+	stderr,
 }: CacheCommandInput): number => {
-  const out = sink ?? ((line: string) => process.stdout.write(line));
-  const error = stderr ?? ((line: string) => process.stderr.write(line));
-  const command = `pd cache ${verb}`;
-  const pretty = argv.includes("--pretty");
-  const parsed = parseArguments({
-    command,
-    flags: ["pretty"],
-    positional: "none",
-    argv,
-  });
+	const out = sink ?? ((line: string) => process.stdout.write(line));
+	const error = stderr ?? ((line: string) => process.stderr.write(line));
+	const command = `pd cache ${verb}`;
+	const pretty = argv.includes("--pretty");
+	const parsed = parseArguments({
+		command,
+		flags: ["pretty"],
+		positional: "none",
+		argv,
+	});
 
-  if (parsed.isErr()) {
-    const failure = refusal(command, argv[0] ?? "that argument");
-    if (!pretty) return failWith(failure, out, error);
-    error(`pd: ${failure.message}\n`);
-    return failure.exit_code;
-  }
+	if (parsed.isErr()) {
+		const failure = refusal(command, argv[0] ?? "that argument");
+		if (!pretty) return failWith(failure, out, error);
+		error(`pd: ${failure.message}\n`);
+		return failure.exit_code;
+	}
 
-  const context: PathContext = { platform, env, home };
-  const root = cacheRootDir(context);
-  const join = joinerFor(platform);
+	const context: PathContext = { platform, env, home };
+	const root = cacheRootDir(context);
+	const join = joinerFor(platform);
 
-  const report =
-    verb === "info" ? info(root, join, clock.now()) : clear(root, join);
-  if (pretty) {
-    out(
-      renderObjectTable(
-        report,
-        verb === "info"
-          ? ["path", "entries", "blocked"]
-          : ["path", "removed", "preserved"],
-      ),
-    );
-  } else out(`${JSON.stringify(report)}\n`);
-  return 0;
+	const report =
+		verb === "info" ? info(root, join, clock.now()) : clear(root, join);
+	if (pretty) {
+		out(
+			renderObjectTable(
+				report,
+				verb === "info"
+					? ["path", "entries", "blocked"]
+					: ["path", "removed", "preserved"],
+			),
+		);
+	} else out(`${JSON.stringify(report)}\n`);
+	return 0;
 };

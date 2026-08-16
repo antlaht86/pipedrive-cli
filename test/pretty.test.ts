@@ -88,14 +88,10 @@ describe("--pretty data output", () => {
 				additional_data: { next_cursor: null },
 			},
 		};
-		const result = await run([fixture], [
-			"deals",
-			"search",
-			"Acme",
-			"--pretty",
-			"--fields",
-			"person_name",
-		]);
+		const result = await run(
+			[fixture],
+			["deals", "search", "Acme", "--pretty", "--fields", "person_name"],
+		);
 
 		expect(result.exit).toBe(0);
 		expect(result.stdout).toContain("person_name");
