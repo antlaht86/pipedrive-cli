@@ -73,3 +73,13 @@ embedded fixture, CWD `.env` refusal, platform credential path) all pass. `AGENT
 clone as a private repository. The live recorder is invoked only by `bun run live` and appears in no
 CI leg. Linux and Windows binary smoke are asserted by the two CI legs, not locally. Design ticket
 22 is already resolved. Checklist ticked.
+
+**2026-08-17 — CI and the tag.** The two boxes that rested on the workflow definition rather than on
+a run are now settled by one. Run 32023529179 on `develop` passed all three legs: the Bun suite with
+lint and gates, binary smoke on Linux, and binary smoke on Windows. `v1.0.0` moved from `f1838e4` to
+`13db553` and was pushed; the tag had never reached the remote, so no clone held the old one. A clean
+build at the tag prints `1.0.0` with no suffix, and `bun run gates dist/pd` passes against it.
+
+The tag was moved because the version it pointed at could not do the job the release claims: it
+predates [ADR-0029](../../../docs/adr/0029-the-record-interior-passes-through.md), so `pd deals list`
+against a real account ended in `invalid_response` on the first page of open deals.
