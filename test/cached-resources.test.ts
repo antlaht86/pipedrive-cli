@@ -704,10 +704,16 @@ describe("get filters the cached list", () => {
     expect(warnings(lines)).toHaveLength(0);
   });
 
+  /**
+   * ADR-0029 §2 keeps a real schema on `users` alone, so `users` is the only
+   * cached source where a record can match `get` and still be rejected. On the
+   * spec-derived sources the two are now the same question: matching *is*
+   * having the identity, and nothing else is read.
+   */
   test("a matched record the schema rejects is invalid_response", async () => {
     const { exit, last } = await runWith(
-      [cachedPage("pipelines", [pipeline(1), pipeline(2, { name: 42 })])],
-      ["pipelines", "get", "2"],
+      [usersFixture([user(11), { ...user(12), name: 42 }])],
+      ["users", "get", "12"],
     );
 
     expect(exit).toBe(1);
@@ -720,22 +726,41 @@ describe("get filters the cached list", () => {
     // would fail where the same `get` on a cold cache succeeds.
     mkdirSync(cacheDirectory(), { recursive: true });
     writeFileSync(
-      `${cacheDirectory()}/pipelines.json`,
+      `${cacheDirectory()}/users.json`,
       JSON.stringify({
         version: 1,
         fetched_at: clock.now(),
-        records: [{ id: 2, pipeline: "a shape a past schema accepted" }],
+        records: [{ id: 11, user: "a shape a past schema accepted" }],
       }),
     );
 
     const { exit, lines, last } = await runWith(
-      [cachedPage("pipelines", [pipeline(2)])],
+      [usersFixture([user(11)])],
+      ["users", "get", "11"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toMatchObject({
+      id: 11,
+      name: "Aino Virtanen 11",
+    });
+    expect(last).toMatchObject({ complete: true, emitted: 1, requests: 1 });
+  });
+
+  /**
+   * The spec-derived counterpart, kept because it is the shape the old test
+   * asserted: a pipeline whose declared `name` is the wrong type is now carried
+   * to stdout rather than refused (ADR-0029 §3).
+   */
+  test("a matched record with an unexpected field type is emitted, not refused", async () => {
+    const { exit, lines, last } = await runWith(
+      [cachedPage("pipelines", [pipeline(1), pipeline(2, { name: 42 })])],
       ["pipelines", "get", "2"],
     );
 
     expect(exit).toBe(0);
-    expect(records(lines)[0]).toMatchObject({ id: 2, name: "Sales 2" });
-    expect(last).toMatchObject({ complete: true, emitted: 1, requests: 1 });
+    expect(records(lines)[0]).toMatchObject({ id: 2, name: 42 });
+    expect(last).toMatchObject({ complete: true, emitted: 1 });
   });
 
   test("pd fields get without --entity is a usage error, exit 2", async () => {

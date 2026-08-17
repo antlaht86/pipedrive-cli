@@ -37,9 +37,9 @@ import type { PipedriveClient } from "./client.ts";
 export type Bound = "limit";
 
 export type Page<T> = {
-	/** Validated, deduplicated and bounded. Nothing downstream re-filters. */
+	/** Identified, deduplicated and bounded. Nothing downstream re-filters. */
 	records: T[];
-	/** One per record this page's record schema rejected, before deduplication. */
+	/** One per record this page's gate rejected, before deduplication. */
 	warnings: PdWarning[];
 	/** Records this page suppressed as already seen earlier in the run. */
 	duplicates: number;
@@ -63,6 +63,12 @@ export type FetchPage = (
 export type WalkOptions<T> = {
 	/** The `resource` field on a `record_rejected` warning — `"deal"`. */
 	resource: string;
+	/**
+	 * What a record must be to be emitted. On the live resources ADR-0029 §5
+	 * narrowed this to `IdentifiedRecord` — an object with an integer `id`, and
+	 * nothing about the interior. The search hits of ADR-0017 still pass a real
+	 * schema here, because `pd` reshapes a hit rather than carrying it.
+	 */
 	record: z.ZodType<T, unknown>;
 	fetchPage: FetchPage;
 	/**
@@ -129,7 +135,7 @@ export const noSurvivors = (resource: string, count: number): PdError =>
 		code: "invalid_response",
 		message:
 			`None of the ${count} ${resource} records on the first page matched pd's schema. ` +
-			"The schema does not describe this resource; retrying will not help.",
+			"pd cannot read an identity on this resource; retrying will not help.",
 		details: { resource, rejected: count },
 	});
 
@@ -219,8 +225,9 @@ export async function* walk<T>({
 			);
 		}
 
-		// ADR-0006 §4. Zero survivors out of one or more elements on the **first**
-		// page means the schema does not describe this resource at all. It fires
+		// ADR-0006 §4, as narrowed by ADR-0029 §5. Zero survivors out of one or
+		// more elements on the **first** page now means not one element carried a
+		// readable id, so `pd` cannot key this resource at all. It fires
 		// before any `record` line is written, so the error trailer's `emitted: 0`
 		// is true and nothing has to be retracted. No later page escalates, and
 		// there is no ratio threshold: under keyset-like cursors old records cluster

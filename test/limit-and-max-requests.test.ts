@@ -121,7 +121,7 @@ describe("--limit is a bound: exit 0 and a summary", () => {
 		// page two rather than stopping at the three survivors of page one.
 		const { exit, lines, last } = await run(
 			[
-				page([deal(1), deal(2, { person_id: "nope" }), deal(1), deal(3)], "c2"),
+				page([deal(1), { ...deal(2), id: "nope" }, deal(1), deal(3)], "c2"),
 				page(deals(4, 2), "c3", "c2"),
 			],
 			["--limit", "3"],

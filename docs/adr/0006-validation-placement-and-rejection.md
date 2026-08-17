@@ -1,7 +1,11 @@
 # ADR-0006: Where validation sits, and what a rejected response does
 
-Status: accepted
+Status: accepted, partly superseded
 Date: 2026-08-11
+Partly superseded by: [ADR-0029](0029-the-record-interior-passes-through.md) — §3 is reversed, and
+the **record** stage of §2, §4, §8 and §9 now applies only to a record's identity. §1's placement,
+§5's deduplication by cause, §6's line shape and §7's refusal of a `--no-validate` flag stand
+unchanged, as does everything this document says about the **envelope**.
 Deciding ticket: [Where zod validation sits, and what a rejected response does](../../.scratch/pd-cli-design/issues/13-grilling-zod-validation-placement.md)
 
 ## Context

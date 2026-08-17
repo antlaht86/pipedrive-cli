@@ -22,6 +22,10 @@ This file is built lazily, as terms actually get settled. The design effort that
 
 **Envelope schema** — the schema for the wrapper around a list response: `success`, `data` as an array of unknown, and `additional_data.next_cursor`. Contrast the **record schema**, which describes one element of `data`. They are separate because they fail differently. Settled in [ADR-0006](docs/adr/0006-validation-placement-and-rejection.md).
 
+**Field vocabulary** — the set of top-level names a resource is *known* to have, taken from the generated schema's shape. It is what `--fields` validates against offline and what the manifest publishes. It is **not** a gate: [ADR-0029](docs/adr/0029-the-record-interior-passes-through.md) made a record's interior pass through unread, so a resource may emit a key its vocabulary does not list.
+
+**Record identity** — the one thing `pd` reads out of a record's interior: an integer `id`, or a non-empty string `field_code` on the `fields` sources. Deduplication and `get` both key on it, and a record without it is the only kind a resource can now reject. Settled in [ADR-0029](docs/adr/0029-the-record-interior-passes-through.md).
+
 **Structural failure** — a validation failure of the envelope schema, or a body that is not JSON at all. It ends the walk as `invalid_response`. Contrast a **per-record failure**, which drops one record, emits a `warning` and increments `skipped` while the walk continues.
 
 **Resolution** — turning an id into the name it stands for: a custom field hash into its label, an option id into its option label, an owner id into a person's name. Always opt-in behind the single `--resolve` flag, and always **additive** — the raw value stays so output remains diffable and re-queryable. Settled for owner ids in [ADR-0007](docs/adr/0007-the-narrow-v1-users-client.md), and in full in [ADR-0008](docs/adr/0008-resolution-mechanics.md).

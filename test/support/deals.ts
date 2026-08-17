@@ -1,10 +1,13 @@
 /**
  * A v2 deal as the API actually returns one, and the list envelope around it.
  *
- * Every key the generated `zGetDealsItem` declares is present, because
- * `propertiesRequiredByDefault: true` (see `openapi-ts.config.ts`) flips
- * presence for the whole v2 spec — a fixture missing one field is a rejected
- * record, which is a different test than the one that omitted it meant to write.
+ * Every key the generated `zGetDealsItem` declares is present. That is no longer
+ * required of a fixture — ADR-0029 §3 stopped the generated schema gating a
+ * record, so a deal missing a field now emits — but it is kept, because a
+ * complete deal is what `--fields` and the projection tests want to select from.
+ * The one thing it must not be read as is a claim about the API: a real open
+ * deal carries no `won_time`, and the deals-list suite has its own fixtures that
+ * omit the three fields ticket 21 found.
  *
  * ADR-0019 §10 keeps real CRM data out of the fixture tree; these are invented
  * and hold no credential-shaped string.

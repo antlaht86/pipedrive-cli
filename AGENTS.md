@@ -45,6 +45,8 @@ pd fields list --entity deal
 
 Display names are not selectors because they can collide. With `--resolve`, selecting a raw id or custom field also emits its resolution artifact; the raw value remains.
 
+A record line carries whatever Pipedrive sent, so a field newer than this build may appear in full output and still be refused by `--fields`, exit 2. The selectable list is a floor, not a ceiling: read a record to learn what a resource actually holds, and `pd manifest` to learn what `--fields` accepts.
+
 **Never invoke `--pretty` from an agent.** It emits an unstable human table with no machine-readable error object; its wording, columns, and alignment may change in any release.
 
 ## Credentials and security

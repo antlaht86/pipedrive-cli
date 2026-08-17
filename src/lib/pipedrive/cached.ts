@@ -32,7 +32,7 @@ import type { z } from "zod";
 import { pdError, type PdError } from "../errors.ts";
 import type { CacheEntryName } from "../cache/entries.ts";
 import type { PipedriveClient } from "./client.ts";
-import type { ObjectSchema } from "./schema.ts";
+import { identifiedBy, type FieldVocabulary } from "./schema.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
 import { UserRecord, fetchUsers } from "./users.ts";
@@ -71,11 +71,14 @@ export type CachedSource = {
 	readonly entry: CacheEntryName;
 	/** The identity of an **unvalidated** record; `undefined` when unrecoverable. */
 	readonly key: (raw: unknown) => string | number | undefined;
-	/** Top-level names in the local record schema, in output order. */
+	/** Top-level names in this source's field vocabulary, in output order. */
 	readonly fields: readonly string[];
 	/** `field_code` for fields, `id` for every other cached resource. */
 	readonly identityField: string;
-	/** ADR-0006 §2's second stage, one record at a time. */
+	/**
+	 * ADR-0006 §2's second stage, one record at a time — narrowed by ADR-0029 §5
+	 * to "is this an object", except on `users`, whose interior `pd` reads.
+	 */
 	readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
 	/** Every record, all pages, exactly as Pipedrive returned them. */
 	readonly fetch: (
@@ -108,36 +111,42 @@ export type CachedResource = {
 	readonly source: (entity?: Entity) => CachedSource | undefined;
 };
 
-type SourceDefinition<T extends Record<string, unknown>> = {
+type SourceDefinition = {
 	entry: CacheEntryName;
-	record: ObjectSchema<T>;
+	/** ADR-0029 §3: read for its field names, and not used to gate a record. */
+	vocabulary: FieldVocabulary;
+	/**
+	 * The gate, where it is more than "is this an object". Present on `users`
+	 * alone: ADR-0029 §2 keeps the schemas `pd` reads the interior of, and
+	 * `UserRecord` is one `pd` wrote itself from an observed response.
+	 */
+	gate?: z.ZodType<Record<string, unknown>, unknown>;
 	identityField?: string;
 	key: (raw: unknown) => string | number | undefined;
 	fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
 };
 
-/**
- * The one place a concrete record type is known. `T` is constrained to an open
- * record, so the widening on the way out needs no cast and the four sources can
- * hold four different record shapes in one table.
- */
-const defineSource = <T extends Record<string, unknown>>({
+const defineSource = ({
 	entry,
-	record,
+	vocabulary,
+	gate,
 	identityField = "id",
 	key,
 	fetch,
-}: SourceDefinition<T>): CachedSource => ({
-	entry,
-	fields: Object.keys(record.shape),
-	identityField,
-	key,
-	fetch,
-	parse: (raw) => {
-		const parsed = record.safeParse(raw);
-		return parsed.success ? ok(parsed.data) : err(parsed.error);
-	},
-});
+}: SourceDefinition): CachedSource => {
+	const admits = gate ?? identifiedBy(key);
+	return {
+		entry,
+		fields: Object.keys(vocabulary.shape),
+		identityField,
+		key,
+		fetch,
+		parse: (raw) => {
+			const parsed = admits.safeParse(raw);
+			return parsed.success ? ok(parsed.data) : err(parsed.error);
+		},
+	};
+};
 
 /**
  * An id read out of a value nothing has validated yet. It is deliberately
@@ -208,16 +217,16 @@ const listQuery = (
  * their key, so they are one factory rather than six copies of a cursor loop
  * with one of them subtly wrong.
  */
-const v2Source = <T extends Record<string, unknown>>(
+const v2Source = (
 	entry: CacheEntryName,
-	record: ObjectSchema<T>,
+	vocabulary: FieldVocabulary,
 	operation: Parameters<PipedriveClient["v2"]>[0],
 	key: (raw: unknown) => string | number | undefined,
 	identityField?: string,
 ): CachedSource =>
 	defineSource({
 		entry,
-		record,
+		vocabulary,
 		...(identityField === undefined ? {} : { identityField }),
 		key,
 		fetch: collectPages(
@@ -227,11 +236,11 @@ const v2Source = <T extends Record<string, unknown>>(
 	});
 
 /** Every field source has the same string identity; only its schema and endpoint vary. */
-const v2FieldSource = <T extends Record<string, unknown>>(
+const v2FieldSource = (
 	entry: CacheEntryName,
-	record: ObjectSchema<T>,
+	vocabulary: FieldVocabulary,
 	operation: Parameters<PipedriveClient["v2"]>[0],
-): CachedSource => v2Source(entry, record, operation, codeKey, "field_code");
+): CachedSource => v2Source(entry, vocabulary, operation, codeKey, "field_code");
 
 /**
  * The five `*Fields` responses carry no response `title`, so the hoist in
@@ -273,7 +282,8 @@ const FIELD_SOURCES: Record<Entity, CachedSource> = {
 const FIXED_SOURCES = {
 	users: defineSource({
 		entry: "users",
-		record: UserRecord,
+		vocabulary: UserRecord,
+		gate: UserRecord,
 		key: numberKey,
 		fetch: fetchUsers,
 	}),

@@ -8,6 +8,7 @@ For the installed CLI's command and output contract, read [AGENTS.md](AGENTS.md)
 
 - Use `neverthrow` for error handling. Return `Result`/`ResultAsync` instead of throwing. Do not use `try`/`catch` in application code — wrap third-party throws at the boundary with `fromThrowable` / `fromPromise`.
 - Use `zod` for all runtime validation. Parse external input (API responses, CLI arguments, environment variables, files) at the boundary. Derive TypeScript types with `z.infer` instead of writing them twice.
+- For a Pipedrive response body the boundary is narrower than "every key on the wire": [ADR-0029](docs/adr/0029-the-record-interior-passes-through.md) validates what `pd` reads and passes through what `pd` only emits. Do not reintroduce a generated record schema as a gate.
 
 ## Documentation lookup
 

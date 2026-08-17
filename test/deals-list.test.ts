@@ -291,10 +291,76 @@ describe("structural failures end the walk", () => {
 	});
 });
 
-describe("per-record rejection", () => {
-	test("one bad record is one warning and skipped += 1; the page survives", async () => {
+/**
+ * ADR-0029 §1: the interior of a record is carried, never read, so nothing in
+ * it can reject the record. These are the cases the generated `zGetDealsItem`
+ * used to fail, and each one is a shape a real account returns.
+ */
+describe("the record interior passes through", () => {
+	test("an open deal with no won_time, lost_time or expected_close_date emits", async () => {
+		const open = deal(1);
+		delete open["won_time"];
+		delete open["lost_time"];
+		delete open["expected_close_date"];
+
+		const { exit, lines, last } = await run([page([open], null)]);
+
+		expect(exit).toBe(0);
+		expect(of(lines, "warning")).toEqual([]);
+		expect(last).toMatchObject({ complete: true, emitted: 1, skipped: 0 });
+	});
+
+	test("a field the vendored spec does not declare is emitted, not stripped", async () => {
+		const { lines } = await run([
+			page([deal(1, { a_field_pipedrive_shipped_last_week: "kept" })], null),
+		]);
+
+		expect(of(lines, "record")[0]).toMatchObject({
+			a_field_pipedrive_shipped_last_week: "kept",
+		});
+	});
+
+	test("a value of the wrong declared type is carried rather than rejected", async () => {
 		const { exit, lines, last } = await run([
-			page([deal(1), deal(2, { person_id: "nope" }), deal(3)], null),
+			page([deal(1, { person_id: "nope", title: 42 })], null),
+		]);
+
+		expect(exit).toBe(0);
+		expect(of(lines, "warning")).toEqual([]);
+		expect(of(lines, "record")[0]).toMatchObject({
+			person_id: "nope",
+			title: 42,
+		});
+		expect(last).toMatchObject({ emitted: 1, skipped: 0 });
+	});
+
+	test("no absent field is materialised from a spec default", async () => {
+		const bare = { id: 7, title: "Bare" };
+		const { lines } = await run([page([bare], null)]);
+
+		const record = of(lines, "record")[0] as Line;
+		expect(record).toEqual({ type: "record", record_type: "deal", ...bare });
+	});
+
+	test("key order on the line is key order on the wire", async () => {
+		const { stdout } = await run([
+			page([{ zulu: 1, alpha: 2, id: 3, mike: 4 }], null),
+		]);
+
+		const record = stdout.split("\n").find((line) => line.includes('"zulu"'));
+		expect(record).toContain('"zulu":1,"alpha":2,"id":3,"mike":4');
+	});
+});
+
+describe("per-record rejection", () => {
+	/**
+	 * ADR-0029 §5 narrowed the trigger to "not an object with a usable
+	 * identity". A record with no integer `id` cannot be deduplicated, which is
+	 * the one thing the walk needs from a record's interior.
+	 */
+	test("one record with no usable id is one warning and skipped += 1; the page survives", async () => {
+		const { exit, lines, last } = await run([
+			page([deal(1), { ...deal(2), id: "nope" }, deal(3)], null),
 		]);
 
 		expect(exit).toBe(0);
@@ -304,12 +370,11 @@ describe("per-record rejection", () => {
 				type: "warning",
 				kind: "record_rejected",
 				resource: "deal",
-				id: 2,
-				path: "person_id",
-				issue: "invalid_type",
+				path: "",
+				issue: "custom",
 				// `message` is human prose and may change freely; `kind`, `resource`,
 				// `path` and `issue` are the interface.
-				message: "Invalid input: expected number, received string",
+				message: "The record is not an object with an integer id.",
 			},
 		]);
 		expect(last).toMatchObject({ complete: true, emitted: 2, skipped: 1 });
@@ -323,39 +388,26 @@ describe("per-record rejection", () => {
 	});
 
 	test("warnings deduplicate by cause while skipped counts every record", async () => {
-		const broken = [2, 3, 4, 5].map((id) => deal(id, { person_id: "nope" }));
+		const broken = [2, 3, 4, 5].map((id) => ({ ...deal(id), id: `x${id}` }));
 		const { lines, last } = await run([page([deal(1), ...broken], null)]);
 
 		expect(of(lines, "warning")).toHaveLength(1);
 		expect(last).toMatchObject({ emitted: 1, skipped: 4 });
 	});
 
-	test("two different causes are two warnings", async () => {
-		const { lines, last } = await run([
-			page(
-				[
-					deal(1),
-					deal(2, { person_id: "nope" }),
-					deal(3, { title: 42 }),
-					deal(4, { person_id: "nope" }),
-				],
-				null,
-			),
+	test("a record that is not an object at all is rejected", async () => {
+		const { exit, lines, last } = await run([
+			page([deal(1), "not a record", null, 42], null),
 		]);
 
-		expect(of(lines, "warning").map((line) => line["path"])).toEqual([
-			"person_id",
-			"title",
-		]);
-		expect(last).toMatchObject({ skipped: 3 });
+		expect(exit).toBe(0);
+		expect(of(lines, "warning")).toHaveLength(1);
+		expect(last).toMatchObject({ complete: true, emitted: 1, skipped: 3 });
 	});
 
 	test("a first page whose non-empty data yields zero survivors is invalid_response", async () => {
 		const { exit, lines, last } = await run([
-			page(
-				[deal(1, { person_id: "nope" }), deal(2, { person_id: "nope" })],
-				"c2",
-			),
+			page([{ id: "nope" }, { id: "also-nope" }], "c2"),
 		]);
 
 		expect(exit).toBe(1);
@@ -372,11 +424,7 @@ describe("per-record rejection", () => {
 	test("a wholly rejected later page is survivable, not an escalation", async () => {
 		const { exit, last } = await run([
 			page([deal(1)], "c2"),
-			page(
-				[deal(2, { person_id: "nope" }), deal(3, { person_id: "nope" })],
-				null,
-				"c2",
-			),
+			page([{ id: "nope" }, { id: "also-nope" }], null, "c2"),
 		]);
 
 		expect(exit).toBe(0);

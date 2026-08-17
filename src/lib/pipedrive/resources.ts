@@ -15,7 +15,7 @@
  * is search-only and arrives with tickets 14–15. The five below are the ones
  * that fetch live on every invocation.
  *
- * ## One record schema serves both verbs
+ * ## One field vocabulary serves both verbs
  *
  * Pipedrive titles the by-id response differently from the list response —
  * `UpsertDealResponse` against `GetDealsResponse` — so the hoist in
@@ -23,6 +23,10 @@
  * on all five, and `resources.test.ts` fails the build if a regeneration ever
  * makes them disagree. Until then a caller reads one shape from `list` and
  * `get` alike, which is the contract worth having.
+ *
+ * ADR-0029 §3 then narrowed what those schemas do. They are the **vocabulary**
+ * `--fields` validates against and the manifest publishes; they no longer gate
+ * a record. `IdentifiedRecord` does that, and asks only for an integer `id`.
  */
 
 import type { Result } from "neverthrow";
@@ -32,7 +36,7 @@ import type { Projection } from "../output/projection.ts";
 import type { Entity } from "./cached.ts";
 import type { PipedriveClient } from "./client.ts";
 import type { ListFilterFlag, ListFilters, SortField } from "./list-filters.ts";
-import type { ObjectSchema } from "./schema.ts";
+import { IdentifiedRecord, type FieldVocabulary } from "./schema.ts";
 import { searchNamed, type Search } from "./searches.ts";
 import { LIST_PAGE_SIZE, walk, type Page } from "./walk.ts";
 import { single } from "./single.ts";
@@ -98,12 +102,13 @@ export type Resource = {
 
 type Fetch = (client: PipedriveClient) => ReturnType<PipedriveClient["v2"]>;
 
-type Definition<T> = {
+type Definition = {
 	name: string;
 	recordType: string;
 	entity: Entity;
 	rename?: Readonly<Record<string, string>>;
-	record: ObjectSchema<T>;
+	/** ADR-0029 §3: the generated schema, read for its field names alone. */
+	vocabulary: FieldVocabulary;
 	/** Whether each endpoint offers ADR-0016's subtractive custom_fields parameter. */
 	pushdown: { list: boolean; get: boolean };
 	filterFlags: readonly ListFilterFlag[];
@@ -118,34 +123,33 @@ type Definition<T> = {
 	one: (id: number, customFields?: string) => Fetch;
 };
 
-/**
- * The one place the concrete record type is known. `keyOf` reads `record.id`
- * without a cast because `T` is still in scope here, and the widening to the
- * open record happens on the way out — which is what lets the table hold five
- * differently-typed resources without an `as` anywhere.
- */
 const optionalSearch = (name: string): Pick<Resource, "search"> => {
 	const search = searchNamed(name);
 	return search === undefined ? {} : { search };
 };
 
-const define = <T extends Record<string, unknown> & { id: number }>({
+/**
+ * `IdentifiedRecord` types its output as the open record plus an integer `id`,
+ * so `keyOf` reads `record.id` without a cast and the five resources share one
+ * record type rather than five generated ones (ADR-0029 §4).
+ */
+const define = ({
 	name,
 	recordType,
 	entity,
 	rename = {},
-	record,
+	vocabulary,
 	pushdown,
 	filterFlags,
 	sortFields,
 	page,
 	one,
-}: Definition<T>): Resource => ({
+}: Definition): Resource => ({
 	name,
 	recordType,
 	entity,
 	rename,
-	fields: Object.keys(record.shape),
+	fields: Object.keys(vocabulary.shape),
 	filterFlags,
 	sortFields,
 	...optionalSearch(name),
@@ -173,9 +177,9 @@ const define = <T extends Record<string, unknown> & { id: number }>({
 		};
 		const serverSorted =
 			filters.sortBy !== undefined || filters.sortDirection !== undefined;
-		return walk<T>({
+		return walk({
 			resource: recordType,
-			record,
+			record: IdentifiedRecord,
 			keyOf: (parsed) => parsed.id,
 			fetchPage: (cursor, segment) =>
 				page(cursor, pushdown.list ? projection?.pushdown : undefined, {
@@ -189,9 +193,9 @@ const define = <T extends Record<string, unknown> & { id: number }>({
 		});
 	},
 	get: (client, id, projection) =>
-		single<T>({
+		single({
 			resource: recordType,
-			record,
+			record: IdentifiedRecord,
 			id,
 			fetch: () =>
 				one(id, pushdown.get ? projection?.pushdown : undefined)(client),
@@ -272,7 +276,7 @@ const RESOURCES: readonly Resource[] = [
 		name: "deals",
 		recordType: "deal",
 		entity: "deal",
-		record: zGetDealsItem,
+		vocabulary: zGetDealsItem,
 		pushdown: { list: true, get: true },
 		filterFlags: [
 			"ids",
@@ -314,7 +318,7 @@ const RESOURCES: readonly Resource[] = [
 		name: "persons",
 		recordType: "person",
 		entity: "person",
-		record: zGetPersonsItem,
+		vocabulary: zGetPersonsItem,
 		pushdown: { list: true, get: true },
 		filterFlags: [
 			"ids",
@@ -344,7 +348,7 @@ const RESOURCES: readonly Resource[] = [
 		name: "organizations",
 		recordType: "organization",
 		entity: "organization",
-		record: zGetOrganizationsItem,
+		vocabulary: zGetOrganizationsItem,
 		pushdown: { list: true, get: true },
 		filterFlags: [
 			"ids",
@@ -380,7 +384,7 @@ const RESOURCES: readonly Resource[] = [
 		// line stays flat for all ten resources, and the manifest documents the
 		// name (ADR-0025 §1).
 		rename: { type: "activity_type" },
-		record: zGetActivitiesItem,
+		vocabulary: zGetActivitiesItem,
 		pushdown: { list: false, get: false },
 		filterFlags: [
 			"ids",
@@ -416,7 +420,7 @@ const RESOURCES: readonly Resource[] = [
 		name: "products",
 		recordType: "product",
 		entity: "product",
-		record: zGetProductsItem,
+		vocabulary: zGetProductsItem,
 		pushdown: { list: true, get: false },
 		filterFlags: [
 			"ids",

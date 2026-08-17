@@ -126,11 +126,19 @@ describe("--ids", () => {
 		expect(last).toMatchObject({ emitted: 3, requests: 1 });
 	});
 
-	test("a returned but rejected record is not reported as an unmatched id", async () => {
+	/**
+	 * ADR-0029 §5 collapsed two questions into one. A record is rejected when its
+	 * id cannot be read, and an id that cannot be read is also the id `--ids`
+	 * never saw come back — so a rejected record is now always an unmatched id
+	 * too, and both warnings are true at once. Before the narrowing a record
+	 * could fail on `name` while its id read cleanly, and the pair could
+	 * disagree.
+	 */
+	test("a record whose id cannot be read is both rejected and unmatched", async () => {
 		const fixture = idsFixture([7, 9]);
 		fixture.body = {
 			success: true,
-			data: [organization(7, { name: null }), organization(9)],
+			data: [{ ...organization(7), id: "7" }, organization(9)],
 			additional_data: { next_cursor: null },
 		};
 		const { lines, last } = await run(
@@ -141,8 +149,24 @@ describe("--ids", () => {
 			.filter((line) => line["type"] === "warning")
 			.map((line) => line["kind"]);
 
-		expect(warningKinds).toEqual(["record_rejected"]);
-		expect(last).toMatchObject({ complete: true, skipped: 1 });
+		expect(warningKinds).toEqual(["record_rejected", "unmatched_ids"]);
+		expect(last).toMatchObject({ complete: true, emitted: 1, skipped: 1 });
+	});
+
+	test("a record with an unexpected field type still matches its requested id", async () => {
+		const fixture = idsFixture([7, 9]);
+		fixture.body = {
+			success: true,
+			data: [organization(7, { name: null }), organization(9)],
+			additional_data: { next_cursor: null },
+		};
+		const { lines, last } = await run(
+			[fixture],
+			["organizations", "list", "--ids", "7,9"],
+		);
+
+		expect(lines.filter((line) => line["type"] === "warning")).toEqual([]);
+		expect(last).toMatchObject({ complete: true, emitted: 2, skipped: 0 });
 	});
 
 	test("omitted ids produce one unmatched_ids warning without making the run partial", async () => {

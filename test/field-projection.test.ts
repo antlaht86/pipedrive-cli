@@ -44,6 +44,29 @@ describe("--fields projection", () => {
     }]);
   });
 
+  /**
+   * ADR-0016 §9's property, re-asserted after ADR-0029 changed what it rests
+   * on. Projection iterates the record rather than the selectors, so the order
+   * it emits used to be the generated schema's and is now the wire's. What the
+   * ADR actually promises — two callers selecting the same fields in different
+   * orders get byte-identical records — survives the change, and this is the
+   * test that says so.
+   */
+  test("selector order does not reach the output, whatever order the wire used", async () => {
+    const wire = { value: 13554, id: 42, title: "Acme Oy", org_id: 902 };
+    const one = await run([listPage(LIVE[0]!, [wire], null)], [
+      "deals", "list", "--fields", "title,org_id,value",
+    ]);
+    const other = await run([listPage(LIVE[0]!, [wire], null)], [
+      "deals", "list", "--fields", "value,title,org_id",
+    ]);
+
+    expect(one.stdout).toBe(other.stdout);
+    expect(one.stdout.split("\n")[0]).toBe(
+      '{"type":"record","record_type":"deal","value":13554,"id":42,"title":"Acme Oy","org_id":902}',
+    );
+  });
+
   test("unknown and artifact selectors are refused offline with a correction", async () => {
     const unknown = await run(undefined, ["deals", "list", "--fields", "titel"]);
     expect(unknown.exit).toBe(2);

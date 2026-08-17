@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** superseded
 
 Normative: [ADR-0006](../../../docs/adr/0006-validation-placement-and-rejection.md) §9 (schema corrections are made on the spec, never on the generated output), §4 (a first page with no survivors), [ADR-0019](../../../docs/adr/0019-testing-strategy.md) §9 (the live suite).
 
@@ -37,3 +37,32 @@ Notes for the implementer:
 - [ ] Every correction is a `parser.patch` entry; no generated file is hand-edited
 - [ ] The nine first-surface resources are each covered by an observed response, not by inference from the spec
 - [ ] `pd deals list` against a live account emits deals and exits 0
+
+## Comments
+
+**2026-08-17 — superseded, not done.** The ticket's premise held: `pd deals list` did fail on the
+first page of a real account, and the three fields named above are the reason. Its method did not.
+The evidence ADR-0006 §9 demands is a recorded response per resource, ADR-0019 §9's recorder writes
+those into this repository as versioned fixtures, and the project's owner declined to commit real CRM
+data under any of the arrangements ADR-0021 §9 considered. That removes the only admissible evidence,
+and reading the spec instead is the one method ADR-0006 §9 forbids.
+
+[ADR-0029](../../../docs/adr/0029-the-record-interior-passes-through.md) answers the fault at the
+level above the patch list: `pd` validates what it reads and passes through what it only emits, so
+the generated record schemas stop gating records and become the `--fields` vocabulary alone. Every
+schema that still runs is one `pd` wrote itself from an observed response.
+
+All five acceptance criteria are answered, none of them the way this ticket proposed:
+
+- An open deal with no `won_time`, `lost_time` or `expected_close_date` emits — `test/deals-list.test.ts`,
+  "the record interior passes through". No recorded fixture was needed, because no interior is read.
+- Nullability versus absence is no longer a distinction `pd` has to get right. An absent key stays
+  absent, a `null` stays `null`.
+- No new `parser.patch` entry exists, and no generated file is hand-edited. `openapi-ts.config.ts` is
+  untouched.
+- The nine first-surface resources are covered by one rule rather than by nine observations.
+- `pd deals list` against a live account is expected to emit and exit 0. That remains unverified here:
+  nothing in this repository calls the real API, which is the same constraint that closed the ticket.
+
+The third fault the ticket recorded — `zGetProductsItem`'s `tax: z.number().default(0)` materialising
+a value Pipedrive never sent, against ADR-0020 §6 — closes with it, for the same reason.

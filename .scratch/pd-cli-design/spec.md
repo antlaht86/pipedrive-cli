@@ -446,7 +446,11 @@ line always carries `complete` and `emitted`**, whatever its type.
   the records it holds, because half of a sorted list is a wrong answer rather than a partial one. No
   command uses it yet; any that does is marked `delivery: "collects"` in the manifest.
 
-### 7. Validation placement — [ADR-0006](../../docs/adr/0006-validation-placement-and-rejection.md)
+### 7. Validation placement — [ADR-0006](../../docs/adr/0006-validation-placement-and-rejection.md), [ADR-0029](../../docs/adr/0029-the-record-interior-passes-through.md)
+
+**Amended 2026-08-17.** ADR-0029 narrowed the second stage to a record's *identity* and reversed the
+stripping rule. Where this section and that ADR disagree, the ADR governs; the differences are marked
+below. Everything about the **envelope** stands as written.
 
 Two stages, failing differently:
 
@@ -455,13 +459,16 @@ Two stages, failing differently:
 | Body is not JSON | structural | `Err(invalid_response)`, walk ends |
 | `data` absent or not an array | structural | `Err(invalid_response)`, walk ends |
 | `next_cursor` present with a wrong type | structural | `Err(invalid_response)`, walk ends |
-| An element of `data` fails the record schema | per-record | `warning`, `skipped += 1`, walk continues |
+| An element of `data` carries no readable identity | per-record | `warning`, `skipped += 1`, walk continues |
 
-- **Unknown keys are stripped.** A `record` line's shape is a function of `pd`'s version, not
-  Pipedrive's release schedule. `pd` cannot surface a new Pipedrive field without a release; such a
-  report is a patch-list task, not a bug.
-- **One protected exception**: `custom_fields` is `z.record(z.string(), z.unknown())` and no patch may
-  close it, or stripping would delete exactly the data `--resolve` exists to read.
+- *(ADR-0029 §5)* The per-record row above read "fails the record schema". A record's interior is now
+  carried, never read, so only a missing identity — an integer `id`, or a string `field_code` on the
+  `fields` sources — can reject one.
+- *(ADR-0029 §6, reversing this rule)* **Unknown keys are emitted.** A `record` line carries whatever
+  Pipedrive sent, so a new Pipedrive field appears with no release. The cost is that a key can be
+  emitted and still not be `--fields`-selectable, because the vocabulary comes from the vendored spec.
+- **One protected exception**, now moot but still true: `custom_fields` is
+  `z.record(z.string(), z.unknown())` and no patch may close it.
 - **A first page whose non-empty `data` yields zero survivors is `invalid_response`**, exit 1. No
   later page ever escalates, and there is no ratio threshold — old records cluster on early pages
   under keyset-like cursors, so a wholly rejected later page is the survivable case.
@@ -471,8 +478,8 @@ Two stages, failing differently:
 - `path` on a warning is record-relative (`person_id`, never `data.7.person_id`), because an index
   would leak the page and would make identical causes look distinct.
 - `id` on a warning is best-effort and **omitted** when unrecoverable, never `null`.
-- Cached data is validated on read in the same two stages, against the **same** record schema, so
-  `--no-cache` cannot change what `pd` accepts.
+- Cached data is validated on read in the same two stages, against the **same** gate the network path
+  uses, so `--no-cache` cannot change what `pd` accepts.
 - There is no `--no-validate`.
 
 ### 8. Command surface — [ADR-0009](../../docs/adr/0009-command-surface-and-manifest.md), [ADR-0017](../../docs/adr/0017-search-and-list-filtering.md)
@@ -584,7 +591,9 @@ relations. Always **additive**: raw values survive byte-identical.
   emits as `{"type":"record","record_type":"deal","id":42}`.
 - An unknown top-level name is exit 2 **offline**, listing the valid names. A syntactically valid
   hash matching zero records across the whole run is one `unmatched_field_selector` warning.
-- Key order in machine mode is `pd`'s schema order; under `--pretty` it is selector order.
+- Key order in machine mode is the order Pipedrive sent (ADR-0029 §8 — it was `pd`'s schema order
+  until a record stopped being reconstructed); under `--pretty` it is selector order. Either way the
+  selectors' own order never reaches the output.
 - **Push-down**: the upstream `custom_fields` query parameter (max 15 keys, available on deals,
   persons, organizations and products) is sent when every condition holds — the endpoint offers it,
   every custom-field selector is a hash, bare `custom_fields` was not selected, and the count is ≤ 15.
