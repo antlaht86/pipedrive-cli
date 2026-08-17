@@ -374,7 +374,7 @@ describe("per-record rejection", () => {
 				issue: "custom",
 				// `message` is human prose and may change freely; `kind`, `resource`,
 				// `path` and `issue` are the interface.
-				message: "The record is not an object with an integer id.",
+				message: "The record carries no identity pd can read.",
 			},
 		]);
 		expect(last).toMatchObject({ complete: true, emitted: 2, skipped: 1 });

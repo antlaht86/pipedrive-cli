@@ -32,7 +32,7 @@ import type { z } from "zod";
 import { pdError, type PdError } from "../errors.ts";
 import type { CacheEntryName } from "../cache/entries.ts";
 import type { PipedriveClient } from "./client.ts";
-import { identifiedBy, type FieldVocabulary } from "./schema.ts";
+import { identifiedBy, integerId, type FieldVocabulary } from "./schema.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
 import { UserRecord, fetchUsers } from "./users.ts";
@@ -77,7 +77,8 @@ export type CachedSource = {
 	readonly identityField: string;
 	/**
 	 * ADR-0006 §2's second stage, one record at a time — narrowed by ADR-0029 §5
-	 * to "is this an object", except on `users`, whose interior `pd` reads.
+	 * to "does this record carry an identity", except on `users`, whose interior
+	 * `pd` reads.
 	 */
 	readonly parse: (raw: unknown) => Result<Record<string, unknown>, z.ZodError>;
 	/** Every record, all pages, exactly as Pipedrive returned them. */
@@ -116,9 +117,9 @@ type SourceDefinition = {
 	/** ADR-0029 §3: read for its field names, and not used to gate a record. */
 	vocabulary: FieldVocabulary;
 	/**
-	 * The gate, where it is more than "is this an object". Present on `users`
-	 * alone: ADR-0029 §2 keeps the schemas `pd` reads the interior of, and
-	 * `UserRecord` is one `pd` wrote itself from an observed response.
+	 * The gate, where it asks more than `key` does. Present on `users` alone:
+	 * ADR-0029 §2 keeps the schemas `pd` reads the interior of, and `UserRecord`
+	 * is one `pd` wrote itself from an observed response.
 	 */
 	gate?: z.ZodType<Record<string, unknown>, unknown>;
 	identityField?: string;
@@ -146,19 +147,6 @@ const defineSource = ({
 			return parsed.success ? ok(parsed.data) : err(parsed.error);
 		},
 	};
-};
-
-/**
- * An id read out of a value nothing has validated yet. It is deliberately
- * narrow: anything that is not an object with the right primitive under the
- * right key is "no key", and a record with no key can never be matched by
- * `get` — which is the correct answer for a record the schema would reject too.
- */
-const numberKey = (raw: unknown): number | undefined => {
-	const value = (raw as Record<string, unknown> | null)?.["id"];
-	return typeof value === "number" && Number.isInteger(value)
-		? value
-		: undefined;
 };
 
 const codeKey = (raw: unknown): string | undefined => {
@@ -284,11 +272,11 @@ const FIXED_SOURCES = {
 		entry: "users",
 		vocabulary: UserRecord,
 		gate: UserRecord,
-		key: numberKey,
+		key: integerId,
 		fetch: fetchUsers,
 	}),
-	pipelines: v2Source("pipelines", zGetPipelinesItem, getPipelines, numberKey),
-	stages: v2Source("stages", zGetStagesItem, getStages, numberKey),
+	pipelines: v2Source("pipelines", zGetPipelinesItem, getPipelines, integerId),
+	stages: v2Source("stages", zGetStagesItem, getStages, integerId),
 } as const;
 
 export type FixedSourceName = keyof typeof FIXED_SOURCES;

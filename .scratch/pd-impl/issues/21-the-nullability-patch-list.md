@@ -56,8 +56,9 @@ All five acceptance criteria are answered, none of them the way this ticket prop
 
 - An open deal with no `won_time`, `lost_time` or `expected_close_date` emits — `test/deals-list.test.ts`,
   "the record interior passes through". No recorded fixture was needed, because no interior is read.
-- Nullability versus absence is no longer a distinction `pd` has to get right. An absent key stays
-  absent, a `null` stays `null`.
+- Nullability versus absence is no longer a distinction `pd` has to get right, because nothing parses
+  the interior to get it wrong. What ADR-0020 §6 then does with either — the writer omits both from
+  the line — is unchanged.
 - No new `parser.patch` entry exists, and no generated file is hand-edited. `openapi-ts.config.ts` is
   untouched.
 - The nine first-surface resources are covered by one rule rather than by nine observations.

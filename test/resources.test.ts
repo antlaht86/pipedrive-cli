@@ -519,6 +519,56 @@ describe("a record field never shadows a line key", () => {
 		expect(record["activity_type"]).toBe("meeting");
 	});
 
+	/**
+	 * ADR-0029 §6 let the wire's key set through, which turned this check from a
+	 * detector of `pd`'s own bugs into something Pipedrive can trigger. A field
+	 * literally named `type` on a resource with no rename for it must cost that
+	 * one record, not the run: a vendor naming a field is not a reason for `pd`
+	 * to stop.
+	 */
+	test("a wire field that would shadow a line key costs that record, not the run", async () => {
+		const { exit, lines, last } = await runWith(
+			[
+				listPage(
+					LIVE[0] as never,
+					[LIVE[0]!.record(1, { type: "shipped-by-pipedrive" }), LIVE[0]!.record(2)],
+					null,
+				),
+			],
+			["deals", "list"],
+		);
+
+		expect(exit).toBe(0);
+		expect(records(lines).map((line) => line["id"])).toEqual([2]);
+		expect(lines.filter((line) => line["type"] === "warning")).toMatchObject([
+			{ kind: "record_rejected", resource: "deal", path: "type", issue: "shadowed" },
+		]);
+		expect(last).toMatchObject({ complete: true, emitted: 1, skipped: 1 });
+	});
+
+	/**
+	 * The other half of `shadowed` is still `pd`'s own bug: a rename in the
+	 * resource table landing on a name the record already carries. ADR-0025 §1
+	 * keeps that a run-ending refusal, and the writer raises it after its own
+	 * truthful trailer.
+	 */
+	test("a rename that would overwrite a field pd already has is still internal", async () => {
+		const attempt = runWith(
+			[
+				listPage(
+					LIVE[3] as never,
+					[LIVE[3]!.record(1, { activity_type: "already here" })],
+					null,
+				),
+			],
+			["activities", "list"],
+		);
+
+		expect(attempt).rejects.toMatchObject({
+			error: { code: "internal", details: { trailer_already_written: true } },
+		});
+	});
+
 	test("the rename keeps the field in its place in the record", async () => {
 		const { lines } = await runWith(
 			[listPage(LIVE[3] as never, [LIVE[3]!.record(1)], null)],

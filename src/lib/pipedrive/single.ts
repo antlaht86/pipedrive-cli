@@ -20,8 +20,12 @@
  * `get`, the rejected record **is** the answer. Reporting `emitted: 0` with
  * `complete: true` would say the record does not exist, which is what
  * `not_found` means and is not what happened. ADR-0006 §4's reading is the one
- * that fits: the schema does not describe this resource, so the run ends as
+ * that fits: `pd` cannot read this record at all, so the run ends as
  * `invalid_response`, exit 1.
+ *
+ * ADR-0029 §5 narrowed what can get here. On the five live resources a record is
+ * rejected only for carrying no readable `id`, so this path now answers "the
+ * body under `data` is not an identifiable record" and nothing finer.
  *
  * `not_found` is left to the 404 the wrapper seam already maps (ADR-0024), so
  * "no such record" and "a record pd cannot read" never share a code.
@@ -36,7 +40,7 @@ import { structural, type Page } from "./walk.ts";
 
 /**
  * `data` is `unknown` for the same reason the list envelope's array elements
- * are: the record schema is applied separately, one stage later.
+ * are: the record gate is applied separately, one stage later.
  */
 export const RecordEnvelope = z.object({
   success: z.boolean(),
@@ -67,7 +71,7 @@ export const rejectedRecord = (
   return pdError({
     code: "invalid_response",
     message:
-      `The ${resource} Pipedrive returned for id ${id} did not match pd's schema. ` +
+      `The ${resource} Pipedrive returned for id ${id} is not one pd can read. ` +
       "Retrying will not help.",
     details: {
       resource,

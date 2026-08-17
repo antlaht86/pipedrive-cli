@@ -31,6 +31,7 @@ import { z } from "zod";
 import { pdError, type PdError } from "../errors.ts";
 import type { PdWarning, RecordRejected } from "../warnings.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
+import { integerId } from "./schema.ts";
 import type { PipedriveClient } from "./client.ts";
 
 /** ADR-0003: the value set of `reason` on a bounded `summary`, today one value. */
@@ -88,15 +89,18 @@ export type WalkOptions<T> = {
 
 /**
  * `id` is best-effort (ADR-0006 §6): the record failed validation, so its `id`
- * is untrustworthy by assumption and is recovered by its own parse. The field is
+ * is untrustworthy by assumption and is recovered on its own. The field is
  * **omitted** rather than `null` when that also fails, so a consumer never has
  * to tell "no id" from "id was null".
+ *
+ * Since ADR-0029 §5 the recovery and the gate ask the same question, so on the
+ * live resources a rejected record never has an `id` to report and this is
+ * `undefined` every time. The path stays because `walk` also drives the search
+ * hits, whose schemas still reject a record whose `id` reads cleanly.
  */
-const IdOnly = z.object({ id: z.int() });
-
 const idOf = (raw: unknown): number | undefined => {
-	const parsed = IdOnly.safeParse(raw);
-	return parsed.success ? parsed.data.id : undefined;
+	const id = integerId(raw);
+	return typeof id === "number" ? id : undefined;
 };
 
 /**
@@ -108,8 +112,9 @@ const idOf = (raw: unknown): number | undefined => {
  * `path` is record-relative because each element is parsed on its own, so it can
  * never carry the element's index within its page — which locked point 5 keeps
  * internal, and which would make one cause look like many. A failure of the
- * record as a whole (an element that is not an object) has an empty path and is
- * reported as `""`.
+ * record as a whole has an empty path and is reported as `""`; since ADR-0029 §5
+ * that is every rejection on a live resource, and a non-empty path can now only
+ * come from a search hit's schema.
  *
  * Key order here is the key order on the wire; the writer does not reorder.
  */
@@ -134,8 +139,8 @@ export const noSurvivors = (resource: string, count: number): PdError =>
 	pdError({
 		code: "invalid_response",
 		message:
-			`None of the ${count} ${resource} records on the first page matched pd's schema. ` +
-			"pd cannot read an identity on this resource; retrying will not help.",
+			`None of the ${count} ${resource} records on the first page were ones pd could read. ` +
+			"pd cannot recover an identity on this resource; retrying will not help.",
 		details: { resource, rejected: count },
 	});
 

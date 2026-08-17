@@ -263,9 +263,10 @@ export const cachedCommand = async ({
 			checked = validate(resource, source, fresh.value.records);
 		}
 
-		// ADR-0006 §4, as `walk.ts` applies it to a first page: zero survivors out
-		// of one or more records means the schema does not describe this resource
-		// at all, and it fires before any `record` line is written.
+		// ADR-0006 §4, as `walk.ts` applies it to a first page and ADR-0029 §5
+		// narrowed it: zero survivors out of one or more records means not one
+		// carried an identity `pd` can read, and it fires before any `record` line
+		// is written.
 		if (checked.rejected > 0 && checked.records.length === 0) {
 			return writer.error(noSurvivors(resource.recordType, checked.rejected));
 		}

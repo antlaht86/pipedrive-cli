@@ -1,7 +1,11 @@
 # ADR-0016: Field projection, and what it is allowed to remove
 
-Status: accepted
+Status: accepted, partly superseded
 Date: 2026-08-12
+Partly superseded by: [ADR-0029](0029-the-record-interior-passes-through.md) — records are no longer
+stripped, so the selector set below is a floor rather than the whole of what a record can hold, and
+§9's "`pd`'s schema order" is now the wire's order. §9's actual promise — selector order never reaches
+the output — is unchanged, and everything else here stands.
 Deciding ticket: [Field projection: shrinking output against an agent's context budget](../../.scratch/pd-cli-design/issues/25-grilling-field-projection.md)
 Extends: [ADR-0009](0009-command-surface-and-manifest.md) — adds a ninth global flag, `--fields`, and one per-command section to the manifest
 Extends: [ADR-0015](0015-stderr-and-run-diagnostics.md) §6 — adds `custom_fields` to the query-value allowlist

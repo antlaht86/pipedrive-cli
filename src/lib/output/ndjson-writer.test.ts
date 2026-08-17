@@ -347,17 +347,55 @@ describe("a record field never shadows a line key", () => {
     });
   });
 
-  test("a collision the table did not cover is internal, not a silent shadow", () => {
-    // The guard exists for the regeneration nobody reviews: a new field named
-    // `record_type` would otherwise overwrite the line's own and ship.
-    const cause = shadow({ id: 1, record_type: "sneaky" });
+  test("a rename landing on a field the record already has is internal", () => {
+    // The guard exists for the regeneration nobody reviews: renaming `type` onto
+    // an `activity_type` the record grew would overwrite it and ship.
+    const cause = shadow({ id: 1, type: "call", activity_type: "already here" });
 
     expect(isPdFailure(cause)).toBe(true);
     expect((cause as { error: PdError }).error).toMatchObject({
       code: "internal",
       exit_code: 1,
-      details: { field: "record_type" },
+      details: { field: "type", renamed_to: "activity_type" },
     });
+  });
+
+  /**
+   * ADR-0029 §6: a reserved name that came off the wire is Pipedrive's doing,
+   * not `pd`'s, so it costs one record rather than the run.
+   */
+  test("a bare reserved name off the wire is one rejection, not a throw", () => {
+    const out = capture();
+    const writer = new NdjsonWriter({
+      recordType: "activity",
+      requests: () => 1,
+      sink: out.sink,
+      stderr: out.stderr,
+    });
+
+    writer.records([{ id: 1 }, { id: 2, record_type: "sneaky" }, { id: 3 }]);
+    writer.finish(null);
+
+    expect(out.lines().filter((line) => line["type"] === "record")).toHaveLength(
+      2,
+    );
+    expect(out.lines().at(-1)).toMatchObject({ emitted: 2, skipped: 1 });
+    // The warning is raised where the record was met, so unlike `hold`'s it sits
+    // between two `record` lines rather than ahead of them. Both are on stdout
+    // before the trailer, which is what ADR-0002 actually promises.
+    expect(out.lines().filter((line) => line["type"] === "warning")).toEqual([
+      {
+        type: "warning",
+        kind: "record_rejected",
+        resource: "activity",
+        path: "record_type",
+        issue: "shadowed",
+        message:
+          "This activity record carries a field named 'record_type', which " +
+          "would shadow the line's own key. The record is skipped; pd cannot " +
+          "emit it without losing a field.",
+      },
+    ]);
   });
 
   test("the trailer it writes carries the records that really went out", () => {
@@ -374,7 +412,11 @@ describe("a record field never shadows a line key", () => {
 
     const raised = ((): unknown => {
       try {
-        writer.records([{ id: 1 }, { id: 2 }, { id: 3, record_type: "no" }]);
+        writer.records([
+          { id: 1 },
+          { id: 2 },
+          { id: 3, type: "call", activity_type: "no" },
+        ]);
         return undefined;
       } catch (cause) {
         return cause;

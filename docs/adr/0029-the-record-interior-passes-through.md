@@ -121,12 +121,33 @@ full output and is rejected offline, exit 2, by `--fields`. Regenerating the cli
 accepted rather than repaired: the alternative is a vocabulary read from the first response, which
 would make an offline refusal depend on a network call.
 
+**A reserved name off the wire costs one record, not the run.** ADR-0025 §1 refuses to emit a record
+carrying a field that would shadow `type` or `record_type`, because the line would be
+unclassifiable — and it ends the run, on the reasoning that a closed key set makes such a field
+`pd`'s own bug, a resource missing a rename. Under §3 the key set is Pipedrive's, so a field it
+happens to name `type` would kill every run of a resource with no rename for it. That is the exact
+fragility this ADR exists to remove.
+
+The refusal therefore splits by fault. `pd`'s rename table landing on a reserved name, or on a field
+the record already has, stays a run-ending `internal` — that is still a bug in `pd`. A bare reserved
+name that arrived on the wire becomes one `record_rejected` warning with `issue: "shadowed"`, one
+`skipped`, and a walk that continues. No new `kind` is minted: the record was rejected, and
+deduplication by cause (ADR-0006 §5) then reports one warning however many records share the field.
+
+Unlike the walk's rejections this one is raised where the record is written, so its warning sits
+between `record` lines rather than ahead of them. ADR-0004's "every warning precedes every record" was
+a statement about the collected path; what ADR-0002 promises is that both precede the trailer, and
+they do.
+
 ### 7. Three faults close as a side effect
 
 - **The nullability patch list is unnecessary.** No interior is parsed, so no interior can be wrong
   about nullability. Ticket 21 closes as superseded rather than done.
-- **Absence versus nullability disappears as a question.** An absent key stays absent and a `null`
-  stays `null`, which is what ADR-0020 §6 asked for in the first place.
+- **Absence versus nullability disappears as a question.** Nothing parses the interior, so nothing
+  turns an absent key into a `null` or a `null` into a default. What ADR-0020 §6 does with the two
+  afterwards is unchanged and is not this ADR's business: the writer omits both, so a caller still
+  cannot tell an absent field from a null one — it simply is no longer `pd`'s *schema* that decides
+  which arrives.
 - **`.default()` no longer materialises data.** `zGetProductsItem` types `tax` as
   `z.number().default(0)`, so an absent `tax` used to be emitted as `0` and a caller could not tell it
   from a tax Pipedrive reported. Nothing parses the interior now, so nothing invents a value.

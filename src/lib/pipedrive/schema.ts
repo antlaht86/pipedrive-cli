@@ -9,11 +9,6 @@
 
 import { z } from "zod";
 
-/** A zod object whose output is known while its ordered shape remains inspectable. */
-export type ObjectSchema<T> = z.ZodType<T, unknown> & {
-	readonly shape: z.ZodRawShape;
-};
-
 /**
  * A generated schema used for its field names alone — ADR-0029 §3.
  *
@@ -30,6 +25,26 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
+ * A record's identity, read out of a value nothing has validated yet.
+ *
+ * It is deliberately narrow: anything that is not an object carrying the right
+ * primitive under the right key has no identity, and a record with no identity
+ * is the only kind ADR-0029 §5 still rejects. Deduplication keys on it, `get`
+ * matches on it, and a rejected record's best-effort `id` is recovered through
+ * it — so it is written once here rather than three times with one of them
+ * subtly different.
+ */
+export type Identity = (raw: unknown) => string | number | undefined;
+
+/** Every resource but `fields`, whose id is a string (ADR-0009 §3). */
+export const integerId: Identity = (raw) => {
+	const value = isObject(raw) ? raw["id"] : undefined;
+	return typeof value === "number" && Number.isInteger(value)
+		? value
+		: undefined;
+};
+
+/**
  * `z.custom` rather than `z.looseObject` — ADR-0029 §4.
  *
  * A zod **object** parse reconstructs its value, and reconstruction can reorder
@@ -41,21 +56,20 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
  * copied, nothing is reordered, nothing is dropped, and no spec `default`
  * fires.
  */
-export const IdentifiedRecord = z.custom<Record<string, unknown> & { id: number }>(
-	(value) => isObject(value) && Number.isInteger(value["id"]),
-	"The record is not an object with an integer id.",
-);
-
-/**
- * The same gate for a cached source, whose identity is not always an integer
- * `id`: `fields` keys on a string `field_code` (ADR-0009 §3). The source already
- * owns a `key` that recovers identity from an unvalidated record, so the gate is
- * built from it rather than duplicating the rule.
- */
 export const identifiedBy = (
-	key: (raw: unknown) => string | number | undefined,
+	key: Identity,
 ): z.ZodType<Record<string, unknown>, unknown> =>
 	z.custom<Record<string, unknown>>(
-		(value) => isObject(value) && key(value) !== undefined,
-		"The record is not an object with a usable identity.",
+		(value) => key(value) !== undefined,
+		"The record carries no identity pd can read.",
 	);
+
+/**
+ * The gate the five live resources walk behind. The assertion is the one place
+ * the identity rule and the type stating it meet: `integerId` looked at `id`,
+ * and no signature can tell TypeScript that it did.
+ */
+export const IdentifiedRecord = identifiedBy(integerId) as z.ZodType<
+	Record<string, unknown> & { id: number },
+	unknown
+>;

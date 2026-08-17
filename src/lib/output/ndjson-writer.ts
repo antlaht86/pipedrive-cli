@@ -161,37 +161,62 @@ const withoutAbsent = (
 };
 
 /**
- * The two ways a record can lose a field on the way out, as a value rather than
- * a throw: the caller writes the trailer before it raises, so the counters on
+ * The two ways a record can lose a field on the way out — and, since ADR-0029
+ * §6, two different faults rather than one.
+ *
+ * When `pd`'s **rename table** is what would lose the field, the resource table
+ * is wrong and that is `pd`'s bug: it ends the run, as a value rather than a
+ * throw, so the caller writes the trailer before it raises and the counters on
  * it are the true ones (ADR-0025 §1).
+ *
+ * When the **wire** is what carries a reserved name, nothing is `pd`'s bug.
+ * Records used to arrive through a generated schema that stripped any key it did
+ * not declare, so a bare `type` could only mean the resource table had forgotten
+ * a rename. Now the key set is Pipedrive's, and a field it happens to name `type`
+ * would end every run of a resource with no rename for it. That is the fragility
+ * ADR-0029 exists to remove, so it costs the one record instead: a
+ * `record_rejected` warning and `skipped += 1`, deduplicated by cause like any
+ * other, and the walk continues.
  */
+type Shadowing =
+	| { readonly fault: "pd"; readonly error: PdError }
+	| { readonly fault: "wire"; readonly field: string };
+
 const shadowed = (
 	record: Record<string, unknown>,
 	rename: Readonly<Record<string, string>>,
-): PdError | undefined => {
+): Shadowing | undefined => {
 	for (const key of Object.keys(record)) {
 		const name = rename[key] ?? key;
 		if (RESERVED.has(name)) {
-			return pdError({
-				code: "internal",
-				message:
-					`A record field named '${name}' would shadow the line's own '${name}' ` +
-					"key. This is a bug in pd: the resource needs an output rename.",
-				details: { field: name },
-			});
+			return name === key
+				? { fault: "wire", field: name }
+				: {
+						fault: "pd",
+						error: pdError({
+							code: "internal",
+							message:
+								`Renaming '${key}' to '${name}' would shadow the line's own ` +
+								`'${name}' key. This is a bug in pd: the rename needs a free name.`,
+							details: { field: key, renamed_to: name },
+						}),
+					};
 		}
 		// The rename must not land on a field the record already has. Renaming
 		// `type` to `activity_type` on a resource that grows its own
 		// `activity_type` would overwrite it, which is the same silent loss the
 		// reserved check exists to prevent, one step further along.
 		if (name !== key && name in record) {
-			return pdError({
-				code: "internal",
-				message:
-					`Renaming '${key}' to '${name}' would overwrite a field the record ` +
-					"already has. This is a bug in pd: the rename needs a free name.",
-				details: { field: key, renamed_to: name },
-			});
+			return {
+				fault: "pd",
+				error: pdError({
+					code: "internal",
+					message:
+						`Renaming '${key}' to '${name}' would overwrite a field the record ` +
+						"already has. This is a bug in pd: the rename needs a free name.",
+					details: { field: key, renamed_to: name },
+				}),
+			};
 		}
 	}
 	return undefined;
@@ -361,32 +386,62 @@ export class NdjsonWriter {
 	hold(page: Page<Record<string, unknown>>): Record<string, unknown>[] {
 		this.#refuseAfterTrailer("page");
 
-		for (const warning of page.warnings) {
-			// Only a rejected record moves `skipped`; run-level warnings such as an
-			// unmatched projection selector describe no removed record.
-			if (isRecordRejected(warning)) this.#skipped += 1;
-			const cause = causeOf(warning);
-			if (this.#causes.has(cause)) continue;
-			if (this.#causes.size >= MAX_WARNING_CAUSES) continue;
-			this.#causes.add(cause);
-			if (this.#pretty) this.#humanWarning(warning.message);
-			else this.#line({ type: "warning", ...warning });
-		}
+		for (const warning of page.warnings) this.#deduplicated(warning);
 
 		this.#duplicates += page.duplicates;
 		return page.records;
 	}
 
 	/**
+	 * One `warning` per distinct cause, `skipped` counting every record behind it
+	 * — ADR-0006 §5. Shared by `hold`, which receives a page's warnings, and by
+	 * the shadowed-key rejection below, which mints one of its own after the page
+	 * has already passed through.
+	 */
+	#deduplicated(warning: PdWarning): void {
+		// Only a rejected record moves `skipped`; run-level warnings such as an
+		// unmatched projection selector describe no removed record.
+		if (isRecordRejected(warning)) this.#skipped += 1;
+		const cause = causeOf(warning);
+		if (this.#causes.has(cause)) return;
+		if (this.#causes.size >= MAX_WARNING_CAUSES) return;
+		this.#causes.add(cause);
+		if (this.#pretty) this.#humanWarning(warning.message);
+		else this.#line({ type: "warning", ...warning });
+	}
+
+	/**
+	 * ADR-0029 §6. The record reached the writer whole, so unlike the walk's
+	 * rejections its `id` is trustworthy — but it is left off all the same, so
+	 * that one cause reads the same however it was raised. `path` is the offending
+	 * key, which is what makes two different shadowed names two causes.
+	 */
+	#reject(resource: string, field: string): void {
+		this.#deduplicated({
+			kind: "record_rejected",
+			resource,
+			path: field,
+			issue: "shadowed",
+			message:
+				`This ${resource} record carries a field named '${field}', which ` +
+				"would shadow the line's own key. The record is skipped; pd cannot " +
+				"emit it without losing a field.",
+		});
+	}
+
+	/**
 	 * Writes `record` lines and moves `emitted`. The two always happen together.
 	 *
-	 * A field that would shadow a line key ends the run here rather than shipping
-	 * an unclassifiable line (ADR-0025 §1). The **trailer is written first**, so
-	 * the counters on it are the true ones: the records already on stdout are
-	 * real, and a bug is precisely when a counter must not lie. The throw that
-	 * follows carries `trailer_already_written`, which is the same marker
-	 * `#refuseAfterTrailer` uses and which tells `cli.ts` the whole trailer —
-	 * stdout line and stderr line both — is already out.
+	 * A field `pd`'s own rename would shadow ends the run here rather than
+	 * shipping an unclassifiable line (ADR-0025 §1). The **trailer is written
+	 * first**, so the counters on it are the true ones: the records already on
+	 * stdout are real, and a bug is precisely when a counter must not lie. The
+	 * throw that follows carries `trailer_already_written`, which is the same
+	 * marker `#refuseAfterTrailer` uses and which tells `cli.ts` the whole
+	 * trailer — stdout line and stderr line both — is already out.
+	 *
+	 * A reserved name that came off the wire is not a bug and costs one record
+	 * (ADR-0029 §6); `shadowed` tells the two apart.
 	 */
 	records(records: readonly Record<string, unknown>[]): void {
 		this.#refuseAfterTrailer("page");
@@ -407,7 +462,14 @@ export class NdjsonWriter {
 					});
 				}
 			}
-			collision ??= shadowed(body, this.#rename);
+			if (collision === undefined) {
+				const shadowing = shadowed(body, this.#rename);
+				if (shadowing?.fault === "wire") {
+					this.#reject(recordType, shadowing.field);
+					continue;
+				}
+				collision = shadowing?.error;
+			}
 			if (collision !== undefined) {
 				this.error(collision);
 				throw new PdFailure(

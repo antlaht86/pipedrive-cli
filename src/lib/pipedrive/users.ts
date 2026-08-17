@@ -31,7 +31,13 @@ import { getUsers } from "./v1/generated/sdk.gen.ts";
  * `id` and `name` are required — without them the record cannot do the one job
  * it exists for. `email`, `active_flag`, `is_deleted` and `timezone_name` are
  * kept because they are the fields a human asks about a user; every other field
- * the v1 response carries is stripped by ADR-0006's unknown-key rule.
+ * the v1 response carries is dropped, because this is a `z.object` and zod
+ * strips what a shape does not declare.
+ *
+ * That makes `users` the one resource whose output is still closed. ADR-0029 §6
+ * opened the other nine by taking their generated schemas out of the record
+ * path; this one is hand-written, `pd` reads `id` and `name` out of it to
+ * resolve owners, and ADR-0029 §2 keeps it for exactly that reason.
  */
 export const UserRecord = z.object({
   id: z.int(),
