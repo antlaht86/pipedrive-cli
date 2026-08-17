@@ -14,7 +14,13 @@ import { tmpdir } from "node:os";
 
 import { route } from "../src/router.ts";
 import { createReplayTransport, type Fixture } from "./support/replay.ts";
-import { DEALS_PATH, deal, dealsPage, dealsQuery } from "./support/deals.ts";
+import {
+	DEALS_PATH,
+	deal,
+	dealsPage,
+	dealsQuery,
+	sparseCustomFields,
+} from "./support/deals.ts";
 import { capture, type Line } from "./support/ndjson.ts";
 
 type Run = {
@@ -509,17 +515,76 @@ describe("value formatting and absence", () => {
 		expect(record["id"]).toBe(1);
 	});
 
-	test("custom_fields passes through byte-identically and is {} when empty", async () => {
+	/**
+	 * ADR-0030 §1 and §3. The block obeys ADR-0020 §6's absence rule now: an
+	 * unfilled custom field is an absent key, and the block itself survives as
+	 * `{}` because it is a block rather than a value.
+	 */
+	test("a null custom field is absent, and the block is {} when nothing is filled", async () => {
 		const hash = "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3";
-		const custom = { [hash]: { value: 500, currency: "USD" }, other: null };
+		const other = "1f2e3d4c5b6a798877665544332211aabbccddee";
 		const { lines } = await run([
-			page([deal(1, { custom_fields: custom }), deal(2)], null),
+			page(
+				[
+					deal(1, { custom_fields: { [hash]: 500, [other]: null } }),
+					deal(2, { custom_fields: { [hash]: null } }),
+					deal(3),
+				],
+				null,
+			),
 		]);
 
-		const [first, second] = of(lines, "record") as [Line, Line];
-		expect(first["custom_fields"]).toEqual(custom);
-		expect(JSON.stringify(first["custom_fields"])).toBe(JSON.stringify(custom));
+		const [first, second, third] = of(lines, "record") as [Line, Line, Line];
+		expect(first["custom_fields"]).toEqual({ [hash]: 500 });
 		expect(second["custom_fields"]).toEqual({});
+		expect(third["custom_fields"]).toEqual({});
+	});
+
+	/**
+	 * ADR-0030 §2. The drop stops at the hash: a custom-field value's shape is
+	 * Pipedrive's, and a monetary value with no `currency` is a worse output than
+	 * one with a null currency. This is the one place the absence rule declines to
+	 * cross a boundary it could cross.
+	 */
+	test("a custom field value's interior passes through with its nulls intact", async () => {
+		const hash = "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3";
+		const value = { value: 500, currency: null };
+		const { lines } = await run([
+			page([deal(1, { custom_fields: { [hash]: value } })], null),
+		]);
+
+		const record = of(lines, "record")[0] as Line;
+		expect(record["custom_fields"]).toEqual({ [hash]: value });
+		expect(JSON.stringify(record["custom_fields"])).toBe(
+			JSON.stringify({ [hash]: value }),
+		);
+	});
+
+	/**
+	 * ADR-0029 again: a `custom_fields` the wire sent as something other than an
+	 * object is a wire anomaly, and rewriting it to `{}` would destroy the only
+	 * evidence of what arrived. The drop applies to a block; this is not one.
+	 */
+	test("a custom_fields that is not an object travels verbatim", async () => {
+		const { lines } = await run([
+			page([deal(1, { custom_fields: "unexpected" })], null),
+		]);
+
+		expect((of(lines, "record")[0] as Line)["custom_fields"]).toBe("unexpected");
+	});
+
+	/** Ticket 22's measurement, as a regression: 87 defined, four filled. */
+	test("the measured deal emits four of its eighty-seven custom fields", async () => {
+		const custom = sparseCustomFields();
+		const { lines } = await run([
+			page([deal(1, { custom_fields: custom })], null),
+		]);
+
+		const record = of(lines, "record")[0] as Line;
+		const emitted = record["custom_fields"] as Record<string, unknown>;
+		expect(Object.keys(custom)).toHaveLength(87);
+		expect(Object.keys(emitted)).toHaveLength(4);
+		expect(Object.values(emitted)).toEqual([35, [10, 11], "2021-11-04", "2021-11-09"]);
 	});
 
 	test("money is a JSON number with currency as a flat sibling", async () => {

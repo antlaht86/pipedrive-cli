@@ -51,6 +51,31 @@ export const deal = (id: number, overrides: DealOverrides = {}): Record<string, 
   ...overrides,
 });
 
+/**
+ * The shape ticket 22 measured on a real account (deal 1856): 87 custom fields
+ * defined on the company, four of them filled on this deal. The counts and the
+ * four value shapes are the real ones; the hashes are invented, because ADR-0019
+ * §10 keeps real identifiers out of the fixture tree.
+ *
+ * It is the regression case for ADR-0030 §1 — 4259 bytes of record, 275 of it
+ * data — and the only fixture here that says the block is mostly null in
+ * practice.
+ */
+export const sparseCustomFields = (): Record<string, unknown> => {
+  const hash = (index: number) => index.toString(16).padStart(2, "0").repeat(20);
+  const filled = new Map<number, unknown>([
+    [31, 35],
+    [33, [10, 11]],
+    [44, "2021-11-04"],
+    [46, "2021-11-09"],
+  ]);
+  const out: Record<string, unknown> = {};
+  for (let index = 0; index < 87; index += 1) {
+    out[hash(index)] = filled.has(index) ? filled.get(index) : null;
+  }
+  return out;
+};
+
 export const dealsPage = (
   data: unknown[],
   nextCursor: string | null = null,

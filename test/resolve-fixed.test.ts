@@ -193,6 +193,103 @@ describe("--resolve fixed-cost enrichment", () => {
 		expect(last).toMatchObject({ resolved: "full", requests: 5 });
 	});
 
+	/**
+	 * ADR-0030 §4. Resolution is an additive decoration of a raw value, so a hash
+	 * the drop removed has nothing to decorate. Keeping it would hand back under a
+	 * second name every byte §1 saved, and would make `--resolve` a field-schema
+	 * lookup — which is `pd fields list`'s job.
+	 */
+	test("a dropped null hash appears in neither the raw nor the resolved block", async () => {
+		const fields = [
+			field(HASH_TEXT, {
+				field_name: "Shared name",
+				field_type: "varchar",
+				options: null,
+			}),
+			field(HASH_MONEY, {
+				field_name: "Budget",
+				field_type: "monetary",
+				options: null,
+			}),
+		];
+		const raw = deal(1, {
+			custom_fields: { [HASH_TEXT]: "kept", [HASH_MONEY]: null },
+		});
+		const { exit, lines } = await run(
+			[...lookupFixtures(fields), dealFixture([raw])],
+			["--fields", "custom_fields"],
+		);
+
+		expect(exit).toBe(0);
+		const record = records(lines)[0] as Line;
+		expect(record.custom_fields).toEqual({ [HASH_TEXT]: "kept" });
+		expect(record.custom_fields_resolved).toEqual({
+			[HASH_TEXT]: { name: "Shared name" },
+		});
+	});
+
+	/**
+	 * ADR-0008 §1, re-asserted after ADR-0030 narrowed the block: the drop happens
+	 * in both modes, so `custom_fields` is still byte-identical with and without
+	 * `--resolve`. The old test asserted this over a block that kept its nulls.
+	 */
+	test("the narrowed block stays byte-identical with and without --resolve", async () => {
+		const custom = { [HASH_TEXT]: "kept", [HASH_MONEY]: null };
+		const fields = [
+			field(HASH_TEXT, {
+				field_name: "Shared name",
+				field_type: "varchar",
+				options: null,
+			}),
+		];
+		const resolved = await run(
+			[...lookupFixtures(fields), dealFixture([deal(1, { custom_fields: custom })])],
+			["--fields", "custom_fields"],
+		);
+
+		const plain = capture();
+		const exit = await route({
+			argv: ["deals", "list", "--fields", "custom_fields"],
+			platform: "linux",
+			env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
+			home,
+			transport: createReplayTransport([
+				dealFixture([deal(1, { custom_fields: custom })]),
+			]),
+			sink: plain.sink,
+			stderr: plain.stderr,
+		});
+
+		expect(exit).toBe(0);
+		const withResolve = records(resolved.lines)[0] as Line;
+		const without = plain.of("record")[0] as Line;
+		expect(JSON.stringify(withResolve.custom_fields)).toBe(
+			JSON.stringify(without.custom_fields),
+		);
+		expect(without.custom_fields).toEqual({ [HASH_TEXT]: "kept" });
+	});
+
+	/** With nothing left to resolve, the additive sibling does not appear at all. */
+	test("a record whose every hash is null grows no resolved block", async () => {
+		const fields = [
+			field(HASH_TEXT, {
+				field_name: "Shared name",
+				field_type: "varchar",
+				options: null,
+			}),
+		];
+		const raw = deal(1, { custom_fields: { [HASH_TEXT]: null } });
+		const { exit, lines } = await run(
+			[...lookupFixtures(fields), dealFixture([raw])],
+			["--fields", "custom_fields"],
+		);
+
+		expect(exit).toBe(0);
+		const record = records(lines)[0] as Line;
+		expect(record.custom_fields).toEqual({});
+		expect("custom_fields_resolved" in record).toBe(false);
+	});
+
 	test("omits sibling names for ids absent from otherwise available lists", async () => {
 		const { lines, last } = await run(
 			[
@@ -323,6 +420,42 @@ describe("--resolve fixed-cost enrichment", () => {
 			out.of("warning").filter((line) => line.kind === "unknown_custom_field"),
 		).toHaveLength(1);
 		expect(out.last()).toMatchObject({ resolved: "partial", requests: 5 });
+	});
+
+	/**
+	 * ADR-0030 §1 makes a null hash absent, and an absent key cannot be an
+	 * unrecognised one. Counting it would spend a schema refresh, mark the run
+	 * `partial` and warn that a key was "emitted raw" when nothing was emitted —
+	 * so a run whose only unknown hashes are empty stays `full` and quiet.
+	 */
+	test("a null hash outside the schema costs no refresh and no warning", async () => {
+		const seen: string[] = [];
+		const replay = createReplayTransport([
+			...lookupFixtures([field(HASH_TEXT)]),
+			dealFixture([
+				deal(1, { custom_fields: { [HASH_TEXT]: "kept", [HASH_SET]: null } }),
+			]),
+		]);
+		const out = capture();
+		const exit = await route({
+			argv: ["deals", "list", "--resolve", "--fields", "custom_fields"],
+			platform: "linux",
+			env: { PD_API_TOKEN: "test-token", XDG_CACHE_HOME: `${home}/cache` },
+			home,
+			transport: (request) => {
+				seen.push(URL.parse(request.url)?.pathname ?? "<invalid url>");
+				return replay(request);
+			},
+			sink: out.sink,
+			stderr: out.stderr,
+		});
+
+		expect(exit).toBe(0);
+		expect(seen.filter((path) => path === "/api/v2/dealFields")).toHaveLength(1);
+		expect(
+			out.of("warning").filter((line) => line.kind === "unknown_custom_field"),
+		).toHaveLength(0);
+		expect(out.last()).toMatchObject({ resolved: "full" });
 	});
 
 	test("never sends include_option_labels", async () => {

@@ -1,7 +1,11 @@
 # ADR-0020: Money, time, and what absence looks like in a raw record
 
-Status: accepted
+Status: accepted, partly superseded
 Date: 2026-08-13
+Partly superseded by: [ADR-0030](0030-the-null-custom-field-drops.md) — §6's `custom_fields`
+exemption is withdrawn, so a `null`-valued hash key is now dropped like any other absent value. The
+exemption survives one level down: a custom-field **value**'s interior is untouched. Everything else
+in §6, and every other section, stands unchanged.
 Deciding ticket: [Value formatting: money, currency and time in machine output](../../.scratch/pd-cli-design/issues/29-grilling-value-formatting.md)
 Extends: [ADR-0006](0006-validation-placement-and-rejection.md) — the record schema it made `pd`'s own now has a stated serialisation rule for empty values
 Corrects: [ADR-0016](0016-field-projection.md) §2 and [ADR-0018](0018-related-entity-expansion.md) Consequences — one nested block does exist, `products.prices`

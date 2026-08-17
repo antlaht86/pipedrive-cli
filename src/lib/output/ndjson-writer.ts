@@ -115,11 +115,10 @@ export type NdjsonWriterOptions = {
  * a serialisation rule rather than a filter, which is why it lives here and not
  * in the walk: "nothing downstream re-filters" is about records, not fields.
  *
- * `custom_fields` is the protected exception (ADR-0008 §1, ADR-0020 §6): it is
- * passthrough data rather than `pd` schema, is byte-identical with and without
- * `--resolve`, and is emitted as `{}` when empty because it is a block, not a
- * value. `id` is never absent (ADR-0016 §1) and the schema never admits it as
- * `null`, so it needs no special case.
+ * `custom_fields` was the one exemption, and ADR-0030 withdrew it: the block now
+ * obeys the rule at the hash and no deeper, in `filledCustomFields` below. `id`
+ * is never absent (ADR-0016 §1) and the schema never admits it as `null`, so it
+ * needs no special case.
  *
  * ## The rule reaches nested blocks, and there are more than one
  *
@@ -147,6 +146,37 @@ const shrink = (value: unknown): unknown => {
 	return value !== null && typeof value === "object"
 		? withoutAbsent(value as Record<string, unknown>)
 		: value;
+};
+
+/**
+ * ADR-0030. An unfilled custom field is an absent key like any other: the
+ * measured account defines 87 deal custom fields and an ordinary deal fills
+ * four, so the withdrawn exemption spent 93.5% of a record on `null`.
+ *
+ * **The drop stops at the hash** (§2). A custom-field value's shape is
+ * Pipedrive's rather than `pd`'s — ADR-0029 — so `shrink` is deliberately not
+ * called on it: a monetary value with no `currency` is a worse output than one
+ * with a null currency, and reaching inside would be `pd` interpreting a shape
+ * it does not own. The asymmetry against a person's native `postal_address`,
+ * which `shrink` does walk, is accepted and named in the ADR.
+ *
+ * The block itself survives as `{}` when everything drops (§3), because it is a
+ * block rather than a value, and it stays byte-identical with and without
+ * `--resolve` (ADR-0008 §1) because the drop happens in both modes.
+ */
+const filledCustomFields = (value: unknown): unknown => {
+	if (value === null || value === undefined) return {};
+	// A `custom_fields` the wire sent as something other than an object is a wire
+	// anomaly, and ADR-0029 keeps `pd` out of the business of interpreting one: it
+	// travels verbatim rather than being rewritten to `{}`, which would destroy
+	// the only evidence of what arrived.
+	if (typeof value !== "object" || Array.isArray(value)) return value;
+	const out: Record<string, unknown> = {};
+	for (const [hash, field] of Object.entries(value as Record<string, unknown>)) {
+		if (field === null || field === undefined) continue;
+		out[hash] = field;
+	}
+	return out;
 };
 
 const withoutAbsent = (
@@ -236,7 +266,7 @@ const present = (
 	for (const [key, value] of Object.entries(record)) {
 		const name = rename[key] ?? key;
 		if (key === "custom_fields") {
-			out[name] = value ?? {};
+			out[name] = filledCustomFields(value);
 			continue;
 		}
 		if (value === null || value === undefined) continue;

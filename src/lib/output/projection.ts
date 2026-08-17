@@ -176,6 +176,12 @@ export const createProjection = (
 				const selected: Record<string, unknown> = {};
 				for (const hash of sortedHashes) {
 					if (!Object.hasOwn(source, hash)) continue;
+					// ADR-0030 §5. "Matched" means survived into the output, so a hash
+					// that is null everywhere reads as unmatched and earns the warning —
+					// which is the empty-field case ADR-0016 §6 named when it chose a
+					// warning over an error. The record still emits, with `{}` for the
+					// block (ADR-0016 §5).
+					if (source[hash] === null || source[hash] === undefined) continue;
 					matched.add(hash);
 					selected[hash] = source[hash];
 				}

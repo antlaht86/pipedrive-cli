@@ -362,6 +362,12 @@ export const createResolution = async ({
 			for (const [hash, value] of Object.entries(
 				custom as Record<string, unknown>,
 			)) {
+				// ADR-0030 §4. The writer drops a null-valued hash from the raw block,
+				// and resolution is an additive decoration of a raw value — so a hash
+				// with no value has nothing to decorate and gets no artifact. Skipping
+				// it here rather than in the writer keeps the two blocks in step
+				// whatever order the stages run in.
+				if (value === null || value === undefined) continue;
 				const definition = fields.get(hash);
 				if (definition === undefined) continue;
 				const label = customLabel(definition, value, lookups);
@@ -407,7 +413,14 @@ export const createResolution = async ({
 						Array.isArray(custom)
 					)
 						continue;
-					for (const hash of Object.keys(custom)) {
+					for (const [hash, value] of Object.entries(
+						custom as Record<string, unknown>,
+					)) {
+						// ADR-0030 §1 makes a null-valued hash absent, and an absent key
+						// cannot be an unrecognised one: counting it here would spend a
+						// schema-refresh request, mark the run `partial` and warn that a key
+						// was "emitted raw" when nothing was emitted at all.
+						if (value === null || value === undefined) continue;
 						if (HASH.test(hash) && !fields.has(hash)) unknown.add(hash);
 					}
 				}

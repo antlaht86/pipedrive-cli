@@ -153,6 +153,39 @@ describe("--fields projection", () => {
     expect(lines.at(-1)).toMatchObject({ emitted: 2, skipped: 0 });
   });
 
+  /**
+   * ADR-0030 §5. "Matched" means survived into the output, so a hash nobody has
+   * filled reads as unmatched — which is the case ADR-0016 §6 already named when
+   * it chose a warning over an error. ADR-0016 §5 keeps the record itself.
+   */
+  test("a hash that is null in every record warns and leaves the block empty", async () => {
+    const fixture = listPage(LIVE[0]!, [
+      deal(1, { custom_fields: { [HASH_A]: null } }),
+      deal(2, { custom_fields: { [HASH_A]: null } }),
+    ], null);
+    fixture.query = { ...fixture.query, custom_fields: HASH_A };
+    const { lines } = await run([fixture], ["deals", "list", "--fields", `custom_fields.${HASH_A}`]);
+
+    expect(records(lines)).toEqual([
+      { type: "record", record_type: "deal", id: 1, custom_fields: {} },
+      { type: "record", record_type: "deal", id: 2, custom_fields: {} },
+    ]);
+    expect(lines.filter((line) => line["kind"] === "unmatched_field_selector")).toHaveLength(1);
+    expect(lines.at(-1)).toMatchObject({ emitted: 2, skipped: 0 });
+  });
+
+  test("a hash filled in one record of the walk does not warn", async () => {
+    const fixture = listPage(LIVE[0]!, [
+      deal(1, { custom_fields: { [HASH_A]: null } }),
+      deal(2, { custom_fields: { [HASH_A]: "kept" } }),
+    ], null);
+    fixture.query = { ...fixture.query, custom_fields: HASH_A };
+    const { lines } = await run([fixture], ["deals", "list", "--fields", `custom_fields.${HASH_A}`]);
+
+    expect(records(lines)[1]).toMatchObject({ custom_fields: { [HASH_A]: "kept" } });
+    expect(lines.filter((line) => line["kind"] === "unmatched_field_selector")).toHaveLength(0);
+  });
+
   test("an unmatched hash still warns when --limit ends generator consumption", async () => {
     const fixture = listPage(LIVE[0]!, [deal(1), deal(2)], "not-consumed");
     fixture.query = { ...fixture.query, custom_fields: HASH_A };

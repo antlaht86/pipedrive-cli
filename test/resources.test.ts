@@ -78,6 +78,33 @@ describe("every live resource lists on the ticket-05 contract", () => {
 			});
 		});
 
+		/**
+		 * ADR-0030 §1 is a serialisation rule in the writer, so it reaches every
+		 * resource that carries the block rather than `deals` alone. This is the
+		 * test that says so for the other four.
+		 */
+		test(`pd ${resource.name} list drops a null custom field`, async () => {
+			const hash = "8a1b3c9d2e4f5061728394a5b6c7d8e9f0a1b2c3";
+			const empty = "1f2e3d4c5b6a798877665544332211aabbccddee";
+			const { exit, lines } = await runWith(
+				[
+					listPage(
+						resource,
+						[
+							resource.record(1, {
+								custom_fields: { [hash]: "kept", [empty]: null },
+							}),
+						],
+						null,
+					),
+				],
+				[resource.name, "list"],
+			);
+
+			expect(exit).toBe(0);
+			expect(records(lines)[0]?.["custom_fields"]).toEqual({ [hash]: "kept" });
+		});
+
 		test(`pd ${resource.name} list with no matches is an empty success`, async () => {
 			const { exit, lines, last } = await runWith(
 				[listPage(resource, [], null)],

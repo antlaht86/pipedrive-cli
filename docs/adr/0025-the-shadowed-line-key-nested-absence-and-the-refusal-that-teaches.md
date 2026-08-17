@@ -7,6 +7,10 @@ refusal below assumed a closed key set, where a reserved field name could only b
 rename. Records now carry Pipedrive's key set, so the refusal splits: a rename of `pd`'s that would
 shadow or overwrite is still a run-ending `internal`, while a bare reserved name off the wire costs
 one record and a `record_rejected` warning.
+Partly superseded by: [ADR-0030](0030-the-null-custom-field-drops.md) — the nested-absence section
+below repeats ADR-0020 §6's `custom_fields` exemption, and the exemption is withdrawn: a
+`null`-valued hash key is dropped. Only the sentence "nothing recurses into it" survives, and it now
+means the custom-field **value**'s interior rather than the block.
 Deciding ticket: [Remaining live resources and the `get` verb](../../.scratch/pd-impl/issues/07-remaining-resources-and-the-get-verb.md)
 Extends: [ADR-0002](0002-output-format.md) §"Every line carries a `type` tag" — the tag is now protected against the record beneath it
 Corrects: [ADR-0020](0020-value-formatting-and-absence.md) §7 — `products.prices` is **not** the only nested block, and §6's omission rule is general
