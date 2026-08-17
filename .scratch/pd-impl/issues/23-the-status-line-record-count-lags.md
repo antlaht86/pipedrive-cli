@@ -2,7 +2,7 @@
 
 **What to build:** a status line whose record count matches what the run has emitted.
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 Normative: [ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md) (the temporary TTY status
 line, overwritten in place, distinct from the permanent anomaly line).
