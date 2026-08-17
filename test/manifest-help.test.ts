@@ -100,6 +100,41 @@ describe("the command table generates the manifest contract", () => {
 		expect(JSON.stringify(manifest)).not.toMatch(/[0-9a-f]{40}/i);
 	});
 
+	/**
+	 * Two things ticket 16 requires the manifest **not** to carry. Both would be
+	 * added in good faith — a request cost looks like exactly the thing an agent
+	 * wants to plan against, and a hash looks like a selectable field — so they
+	 * are asserted over the serialised whole rather than at the one key someone
+	 * would think to check.
+	 *
+	 * A per-command cost would be a lie on a warm cache: `pd users get 42` costs
+	 * zero requests there and one when the entry expires. A custom-field hash is
+	 * per-account, so publishing one in a binary shared between accounts would
+	 * make the manifest wrong for every account but the one it was built beside;
+	 * `pd fields list` is how a caller learns them.
+	 */
+	test("carries no per-command request cost and no custom-field hash", () => {
+		const manifest = createManifest("1.0.0+gabc123");
+		const serialised = JSON.stringify(manifest);
+
+		expect(serialised).not.toMatch(/[0-9a-f]{40}/i);
+
+		const costKeys: string[] = [];
+		const walk = (node: unknown, path: string): void => {
+			if (Array.isArray(node)) {
+				node.forEach((item, index) => walk(item, `${path}[${index}]`));
+				return;
+			}
+			if (node === null || typeof node !== "object") return;
+			for (const [key, value] of Object.entries(node)) {
+				if (/cost|requests/i.test(key)) costKeys.push(`${path}.${key}`);
+				walk(value, `${path}.${key}`);
+			}
+		};
+		walk(manifest, "$");
+		expect(costKeys).toEqual([]);
+	});
+
 	test("selectable fields are taken from the same runtime schemas", () => {
 		for (const name of [
 			"deals",

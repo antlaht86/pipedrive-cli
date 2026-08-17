@@ -6,7 +6,7 @@ The manifest and every `--help` text are generated from **one in-code command ta
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: ADR-0009 §10 (command surface and manifest), ADR-0016 §8 (selectable fields), ADR-0001 (the code union).
 
@@ -33,18 +33,18 @@ Notes for the implementer:
 - **Counts drift; enumerate instead.** Several ADRs state ordinals that are now stale. State no total that is not also a list, in the manifest, in help text and in code.
 - Semver MAJOR is defined against the agent-visible contract — a line shape, a `type` tag, a trailer field, an exit code, a `code` string, or a command changing or disappearing — and `manifest_version` moves **in lockstep**. A new field on an existing line is MINOR.
 
-- [ ] `pd manifest` emits exactly one JSON object that `JSON.parse` accepts whole
-- [ ] It carries `manifest_version`, `pd_version`, `read_only`, `read_only_scope`, the command split, the nine global flags, the four vocabularies, the six trailer fields, and the global NDJSON declaration
-- [ ] Per-command `--fields` selectable lists are present and match what the projection layer accepts
-- [ ] `--pretty` is marked `machine_readable: false` with the never-invoke instruction
-- [ ] `--filter-id` is marked `"enumerable": false`
-- [ ] `resolved` lists `off` / `partial` / `full`
-- [ ] The `code` union lists all thirteen variants with their exit codes and `retry` values, and does not contain `unknown_command`
-- [ ] No per-command request cost appears anywhere in the manifest
-- [ ] No custom-field hash appears in the manifest
-- [ ] Manifest and every `--help` text are generated from one in-code table, asserted by a test that changing the table changes both
-- [ ] Root `--help` opens with the read-only statement and splits into `RESOURCES` and `OTHER`
-- [ ] `pd --version` and the manifest's `pd_version` agree, asserted against the **built bundle**
+- [x] `pd manifest` emits exactly one JSON object that `JSON.parse` accepts whole
+- [x] It carries `manifest_version`, `pd_version`, `read_only`, `read_only_scope`, the command split, the nine global flags, the four vocabularies, the six trailer fields, and the global NDJSON declaration
+- [x] Per-command `--fields` selectable lists are present and match what the projection layer accepts
+- [x] `--pretty` is marked `machine_readable: false` with the never-invoke instruction
+- [x] `--filter-id` is marked `"enumerable": false`
+- [x] `resolved` lists `off` / `partial` / `full`
+- [x] The `code` union lists all thirteen variants with their exit codes and `retry` values, and does not contain `unknown_command`
+- [x] No per-command request cost appears anywhere in the manifest
+- [x] No custom-field hash appears in the manifest
+- [x] Manifest and every `--help` text are generated from one in-code table, asserted by a test that changing the table changes both
+- [x] Root `--help` opens with the read-only statement and splits into `RESOURCES` and `OTHER`
+- [x] `pd --version` and the manifest's `pd_version` agree, asserted against the **built bundle**
 
 ## Comments
 
@@ -56,3 +56,40 @@ and the `usage` refusal of a `--token-file` that does not resolve
 ([ADR-0022](../../../docs/adr/0022-credential-resolution-edge-cases.md) §1). No new error `code` is
 involved — `usage` and `auth` already exist and ADR-0001's union is unchanged. Zod on argv is
 deferred to this ticket too, so the schema is written once against the real table.
+
+**2026-08-17 — verification.** The work landed in `75e036a`, `9ed4176` and `33f65e0`. Checked box by
+box against `test/manifest-help.test.ts`, `test/binary-smoke.test.ts` and the built `dist/pd`.
+
+| Box | Evidence |
+| --- | --- |
+| One JSON object `JSON.parse` accepts whole | `test/binary-smoke.test.ts` runs `pd manifest` on the built binary and parses it with Zod; the run emits one line |
+| Carries the named members | "enumerates commands, fields, flags and branching vocabularies" asserts each by name, not by count |
+| Per-command `--fields` lists match the projection layer | "selectable fields are taken from the same runtime schemas" |
+| `--pretty` marked `machine_readable: false` with the instruction | same test, plus the rendered help |
+| `--filter-id` marked `enumerable: false` | same test |
+| `resolved` is `off` / `partial` / `full` | same test |
+| The `code` union with exit codes and `retry`, no `unknown_command` | same test, built from `ERROR_CODES` so a new variant cannot be published without appearing here |
+| No per-command request cost | "carries no per-command request cost and no custom-field hash" |
+| No custom-field hash | same |
+| Manifest and help from one table | "changing one table entry changes both manifest and help" |
+| Root help opens read-only, splits `RESOURCES` / `OTHER` | "root and command help are generated from the table" |
+| `pd --version` agrees with `pd_version`, against the built bundle | `test/binary-smoke.test.ts`, and the `binaryGate` in `scripts/release-gates.ts` that CI runs on Linux and Windows |
+
+Two boxes were true but unasserted, and now are: the manifest carries no per-command cost and no
+custom-field hash. Both would be added in good faith by someone helpful — a cost looks like what an
+agent wants to plan against, a hash looks like a selectable field — so the new test walks the whole
+serialised object rather than checking the one key a reader would think of.
+
+**Two counts in this list are stale, and the ticket says so itself.** Line 33: *"Counts drift;
+enumerate instead. Several ADRs state ordinals that are now stale. State no total that is not also a
+list."*
+
+- "the four vocabularies" — there are **five**, and the ticket body enumerates all five one paragraph
+  earlier: line kinds, warning kinds, `resolved`, exit codes, and the `code` union. The manifest
+  carries exactly that enumeration.
+- "all thirteen variants" — the union is **twelve**: ADR-0001's eleven plus `write_blocked` from
+  ADR-0013. `src/lib/errors.ts` defines twelve, the manifest publishes twelve, and the test builds
+  the list from the source of truth so the two cannot disagree.
+
+Both boxes are ticked against the enumeration rather than the number. Neither count was changed in
+this list, because the ticket is a record of what was asked.

@@ -108,4 +108,24 @@ describe("run diagnostics", () => {
 			expect(text).not.toContain(secret);
 		}
 	});
+
+	/**
+	 * ADR-0015 §6 makes two refusals unconditional rather than allowlist
+	 * membership: `term` is company data and `x-api-token` is the credential.
+	 * Both are enforced by an explicit second guard, on top of the allowlists —
+	 * and neither guard can be reached by a crafted request, because neither name
+	 * is in an allowlist for it to override. The test above therefore passes with
+	 * both guards deleted.
+	 *
+	 * So the guards are asserted against the source, the way
+	 * `test/generated-read-only.test.ts` asserts the read-only property: what is
+	 * being protected is a defence that a refactor would otherwise remove as dead
+	 * code, and its whole purpose is to survive the edit that makes it live.
+	 */
+	test("the term and credential refusals do not rest on the allowlists", async () => {
+		const source = await Bun.file("src/lib/output/diagnostics.ts").text();
+
+		expect(source).toContain('name !== "term"');
+		expect(source).toContain('name === "x-api-token"');
+	});
 });

@@ -373,6 +373,9 @@ describe("the search verb", () => {
 			const result = await run(argv);
 			expect(result.exit).toBe(2);
 			expect(result.dispatches).toBe(0);
+			// The code is asserted alongside the exit: ticket 15 asks for `usage`,
+			// and exit 2 alone would also be satisfied by a different refusal.
+			expect(result.lines.at(-1)?.["code"]).toBe("usage");
 		}
 	});
 
@@ -420,6 +423,11 @@ describe("the search verb", () => {
 			[fixture(entry, items)],
 		);
 
+		// ADR-0003: reaching `--limit` is a successful, bounded answer. The exit
+		// code is asserted because "and exits 0" is half of what ticket 14 asked
+		// for, and a bounded run is the case most likely to acquire an exit code
+		// by accident.
+		expect(result.exit).toBe(0);
 		expect(records(result.lines).map((line) => line["id"])).toEqual(
 			Array.from({ length: 20 }, (_, index) => index + 1),
 		);
@@ -430,6 +438,30 @@ describe("the search verb", () => {
 			reason: "limit",
 			requests: 1,
 		});
+	});
+
+	/**
+	 * ADR-0017 gives `/itemSearch/field` no command. Unlike `/leads/search` and
+	 * `search_for_related_items`, which have a spelling a caller can try and be
+	 * refused, this one has no CLI surface at all — so the only thing to assert
+	 * is that the generated operation is never reached. A command for it would
+	 * have to import the operation first.
+	 */
+	test("the /itemSearch/field operation is generated and never imported", async () => {
+		const sdk = await Bun.file(
+			"src/lib/pipedrive/v2/generated/sdk.gen.ts",
+		).text();
+		expect(sdk).toContain("export const searchItemByField");
+
+		const sources = new Bun.Glob("src/**/*.ts");
+		const importers: string[] = [];
+		for await (const path of sources.scan(".")) {
+			if (path.includes("generated")) continue;
+			if ((await Bun.file(path).text()).includes("searchItemByField")) {
+				importers.push(path);
+			}
+		}
+		expect(importers).toEqual([]);
 	});
 
 	test("--resolve never dispatches metadata when the owner cache is cold", async () => {

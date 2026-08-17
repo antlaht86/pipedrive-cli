@@ -141,6 +141,24 @@ describe("the walk", () => {
 			expect(result.exit).toBe(2);
 			expect(result.last["code"]).toBe("usage");
 		}
+
+		// ADR-0015 bans the environment variable too, and that half cannot be
+		// caught by a refusal: a variable `pd` honoured would simply work. So the
+		// names a harness is likeliest to set by habit are set, and both channels
+		// are compared against a run without them.
+		const fixture = page([deal(1)], null);
+		const plain = await run([fixture], ["--limit", "1"]);
+		const noisy = await runWith([fixture], ["--limit", "1"], {
+			PD_API_TOKEN: "test-token",
+			PD_VERBOSE: "1",
+			PD_LOG_LEVEL: "debug",
+			PD_LOG_FORMAT: "json",
+			DEBUG: "*",
+			VERBOSE: "1",
+		});
+
+		expect(noisy.stdout).toBe(plain.stdout);
+		expect(noisy.stderr).toEqual([]);
 	});
 
 	test("walks every page to a null cursor and emits one record line per deal", async () => {
