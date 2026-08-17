@@ -1,16 +1,10 @@
 # Three legs — ADR-0021 §8, ADR-0019 §7.
 #
-#   1. the Bun suite plus lint, typecheck and the gates
+#   1. the Bun suite plus lint, typecheck and the hard-failing gates
 #   2. the binary smoke leg on Linux
 #   3. the same leg on Windows, whose whole purpose is the
 #      %LOCALAPPDATA% / %APPDATA% resolution that is the only
 #      Windows-specific code in pd
-#
-# The CWD `.env` gate (ADR-0021 §3) runs in every leg. Leg 1 covers both halves
-# against binaries compiled by the same `buildBinary` as `dist/pd`; legs 2 and 3
-# run the normative `.env` form — `pd auth status` beside a `.env` that sets
-# `PD_API_TOKEN` must not report the `env` tier — against `dist/pd` itself, on
-# both platforms.
 name: ci
 
 on:
@@ -18,88 +12,48 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   suite:
     name: bun suite, lint and gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
+      # Includes the generated-operation, restricted-import and stderr gates.
       - run: bun test
+      # Separate command: fixture credential leakage is a gate, not a warning.
+      - run: bun run gates
 
   binary-linux:
     name: binary smoke (linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - name: pd --version prints the stamped version
-        run: |
-          set -euo pipefail
-          version="$(./dist/pd --version)"
-          echo "$version"
-          # The three shapes of ADR-0021 §6, and nothing else — in particular
-          # not the source-mode fallback, which means the build failed to stamp.
-          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\+g[0-9a-f]+(\.dirty)?)?$'
-      - name: pd auth status beside a .env does not report the env tier
-        run: |
-          set -euo pipefail
-          pd="$PWD/dist/pd"
-          workdir="$(mktemp -d)"
-          home="$(mktemp -d)"
-          echo 'PD_API_TOKEN=leaked-from-dotenv' > "$workdir/.env"
-          # An empty home, so the config-file tier cannot answer either: the only
-          # credential on offer is the one the `.env` would leak (ADR-0021 §3).
-          status="$(cd "$workdir" && env -u PD_API_TOKEN \
-            HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_CACHE_HOME="$home/cache" \
-            "$pd" auth status)"
-          echo "$status"
-          echo "$status" | grep -q '"found":false'
-          ! echo "$status" | grep -q '"tier"'
+      # Version agreement, docs, fixture exclusion and CWD .env refusal.
+      - run: bun run gates dist/pd
 
   binary-windows:
     name: binary smoke (windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - name: pd --version prints the stamped version
-        shell: pwsh
-        run: |
-          $version = & .\dist\pd.exe --version
-          Write-Host $version
-          # The three shapes of ADR-0021 §6, and nothing else — in particular
-          # not the source-mode fallback, which means the build failed to stamp.
-          if ($version -notmatch '^\d+\.\d+\.\d+(\+g[0-9a-f]+(\.dirty)?)?$') { exit 1 }
-      - name: pd auth status beside a .env does not report the env tier
-        shell: pwsh
-        run: |
-          $pd = Join-Path $PWD 'dist\pd.exe'
-          $workdir = Join-Path $env:RUNNER_TEMP 'dotenv-gate'
-          $home2 = Join-Path $env:RUNNER_TEMP 'empty-home'
-          New-Item -ItemType Directory -Force -Path $workdir, $home2 | Out-Null
-          Set-Content -Path (Join-Path $workdir '.env') -Value 'PD_API_TOKEN=leaked-from-dotenv'
-          # An empty %APPDATA%, so the config-file tier cannot answer either: the
-          # only credential on offer is the one the `.env` would leak.
-          $env:APPDATA = Join-Path $home2 'Roaming'
-          $env:LOCALAPPDATA = Join-Path $home2 'Local'
-          Remove-Item Env:PD_API_TOKEN -ErrorAction SilentlyContinue
-          Push-Location $workdir
-          $status = & $pd auth status
-          Pop-Location
-          Write-Host $status
-          if ($status -notmatch '"found":false') { exit 1 }
-          if ($status -match '"tier"') { exit 1 }
+      # Also drives auth status through the Windows path mapping.
+      - run: bun run gates dist/pd.exe

@@ -89,10 +89,13 @@ A **locked design spec** for `pd` — every open design decision argued, decided
 
 - [Value formatting: money, currency and time in machine output](issues/29-grilling-value-formatting.md) — money is a JSON number with `currency` as a flat sibling, because folding the pair into an object would create a block ADR-0016 §2's grammar cannot name; time passes through byte-for-byte and is never parsed, since the v2 spec declares those fields as bare `type: string` with no `format` and a normalising `pd` would be the component that is silently wrong about time; the account timezone is never read and date-only fields are declared account-local wall clock. **User's decision**: a field with no value is an absent key, so the agent's context budget beats a fixed record shape — with `[]`, `""` and `0` staying values, `custom_fields` exempt under ADR-0008 §1, and `--fields` on an empty field yielding a shorter line rather than a warning. **Kills the ticket's own premise**: `weighted_value` is not a v2 field at all. **Found and corrected**: one nested block does exist, `products.prices`, falsifying ADR-0016 §2's stated premise and ADR-0018's Consequences claim — both decisions survive, because `prices` is selectable only whole. Net agent-visible surface: zero. Full detail in [ADR-0020](../../docs/adr/0020-value-formatting-and-absence.md).
 
+- [Assemble the locked spec](issues/22-task-assemble-the-spec.md) — the design artifact, ADR set,
+  domain glossary and canonical agent documentation are complete; implementation tickets 19 and 20
+  close the remaining documentation and release-artifact assertions.
+
 ## Not yet specified
 
 <!-- empty: the last fog patch graduated into ticket 29 -->
-
 
 ## Out of scope
 

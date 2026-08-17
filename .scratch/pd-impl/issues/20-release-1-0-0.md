@@ -4,7 +4,7 @@
 
 **Blocked by:** 09, 11, 12, 15, 18, 19
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0021](../../../docs/adr/0021-distribution-build-from-source.md) (distribution), ADR-0019 §10 (fixtures and gates), ADR-0013 (read-only gates).
 
@@ -55,3 +55,13 @@ A separate suite and a separate command. **Never in CI, never on a schedule, nev
 - [ ] `1.0.0` is tagged, and a clean checkout at the tag builds a binary printing `1.0.0` with no suffix
 - [ ] A clone-and-build from scratch yields a working `pd` on macOS, Linux and Windows
 - [ ] Design ticket 22 in `.scratch/pd-cli-design/issues/` is resolved once this and ticket 19 are done
+
+## Comments
+
+**2026-08-14 — implementation.** Added the hard-failing fixture credential and binary-exclusion
+checks, consolidated all artifact-only assertions into one cross-platform gate, and wired that gate
+to the Linux and Windows binary legs. The hand-invoked live recorder uses the production guarded
+transport, writes no request headers, enforces one 30-request ceiling across its command set, stops
+before retry-provoking responses, rewrites the versioned live fixture document and prints its git
+diff. The offline suite, lint, typecheck, gate command, compiled-binary gate and clean-checkout build
+all pass. Release tag: `v1.0.0`.

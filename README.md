@@ -33,10 +33,23 @@ does not re-sign it.
 ## Develop
 
 ```bash
-bun test           # the suite and the CI gates; costs zero Pipedrive requests
+bun test           # offline suite; costs zero Pipedrive requests
+bun run gates      # fixture credential gate (CI also runs artifact gates)
 bun run typecheck
 bun run lint
 ```
+
+The live suite is deliberately separate and hand-invoked only:
+
+```bash
+bun run live [search-term]
+```
+
+It uses the normal credential chain, enforces a 30-request ceiling, rewrites
+`fixtures/live/responses.json`, and prints its git diff. It never runs in CI or as
+part of `bun test`, and stops rather than exercising a retry, 429, or Cloudflare
+block path. Recorded response bodies contain real company CRM data; the private
+repository is their access boundary. Request headers are never recorded.
 
 ### Regenerating the Pipedrive clients
 

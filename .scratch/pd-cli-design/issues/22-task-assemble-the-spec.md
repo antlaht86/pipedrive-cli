@@ -1,7 +1,7 @@
 # Assemble the locked spec
 
 Type: task
-Status: open
+Status: resolved
 
 Blocked by: 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29
 
@@ -22,3 +22,13 @@ Every decision is made and recorded on its own ticket. Consolidate them into the
   `duplicates` to the trailer line. The sample files under `prototypes/10-output-format/` predate
   them and no longer match the normative shape. Under ADR-0002 those samples are the only guard
   against format drift, so regenerate them as part of assembling the spec.
+
+## Answer
+
+The locked design is assembled in [`../spec.md`](../spec.md), its decisions are recorded in
+`docs/adr/`, and its ubiquitous language is in `CONTEXT.md`. `AGENTS.md` is the canonical
+agent-facing contract and is embedded in the compiled binary. Implementation tickets 19 and 20 now
+assert that documentation and the release artifact itself: exact embedded docs, version agreement,
+fixture exclusion, CWD `.env` refusal, the read-only gates, stderr redaction and fixture credential
+stripping. The map's Not yet specified section is empty, and both safety properties trace to named
+mechanisms rather than remaining introductory claims.

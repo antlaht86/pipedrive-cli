@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "bun run scripts/build.ts",
+    "gates": "bun run scripts/release-gates.ts",
+    "live": "bun run scripts/live.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
