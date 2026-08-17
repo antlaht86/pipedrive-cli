@@ -385,8 +385,8 @@ const positionals = (
 	}
 
 	if (positional === "code-id") {
-		// ADR-0009 §3: a field's id is its `field_code` — a hex hash for a custom
-		// field, a plain name for a standard one. Whether it exists is a question
+		// ADR-0009 §3: a field's id is its `field_code` — the hex field key for a
+		// custom field, a plain name for a standard one. Whether it exists is a question
 		// for the cached list rather than for a pattern here.
 		return id === ""
 			? err(

@@ -37,7 +37,9 @@ List commands fetch the complete result by default. Pass `--limit` unless you kn
 
 An unbounded list writes a human warning to stderr at every 10,000 emitted records, but that warning may never arrive at an agent: a harness may discard stderr. Do not use it as a bound. Pass `--limit` instead.
 
-`--fields <name>[,<name>…]` narrows record width. `id` is always emitted. Select top-level names directly; select one custom field as `custom_fields.<hash>`. Learn hashes and display names together with:
+`--fields <name>[,<name>…]` narrows record width. `id` is always emitted. Select top-level names directly; select one custom field as `custom_fields.<key>`.
+
+A **field key** is the 40-character hex identifier of a custom field. It is the key inside `custom_fields`, and `pd fields list` emits the same value as `field_code`. Learn the keys and their display names together with:
 
 ```sh
 pd fields list --entity deal
@@ -45,7 +47,7 @@ pd fields list --entity deal
 
 Display names are not selectors because they can collide. With `--resolve`, selecting a raw id or custom field also emits its resolution artifact; the raw value remains.
 
-A custom field with no value is absent from `custom_fields`, so the block holds only the fields this record fills. An account defines many more than a record uses. Read `pd fields list --entity <entity>` to learn every custom field the account has. A selected hash that is empty in every record of the run produces `"custom_fields":{}` and one warning with `kind: "unmatched_field_selector"`.
+A custom field with no value is absent from `custom_fields`, so the block holds only the fields this record fills. An account defines many more than a record uses. Read `pd fields list --entity <entity>` to learn every custom field the account has. A selected key that is empty in every record of the run produces `"custom_fields":{}` and one warning with `kind: "unmatched_field_selector"`.
 
 A record line carries whatever Pipedrive sent, so a field newer than this build may appear in full output and still be refused by `--fields`, exit 2. The selectable list is a floor, not a ceiling: read a record to learn what a resource actually holds, and `pd manifest` to learn what `--fields` accepts.
 

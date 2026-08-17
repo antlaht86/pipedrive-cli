@@ -39,10 +39,10 @@ const unresolvedIds = (
 		const custom = record.custom_fields;
 		if (custom === null || typeof custom !== "object" || Array.isArray(custom))
 			continue;
-		for (const [hash, value] of Object.entries(
+		for (const [fieldKey, value] of Object.entries(
 			custom as Record<string, unknown>,
 		)) {
-			const fieldType = fields.get(hash)?.field_type;
+			const fieldType = fields.get(fieldKey)?.field_type;
 			if (
 				fieldType === undefined ||
 				relationOfFieldType(fieldType) !== relation

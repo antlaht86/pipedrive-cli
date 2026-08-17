@@ -46,11 +46,11 @@ export type Resolved = "off" | "partial" | "full";
 export type Sink = (line: string) => void;
 
 export const stdoutSink: Sink = (line) => {
-	process.stdout.write(line);
+  process.stdout.write(line);
 };
 
 export const stderrSink: Sink = (line) => {
-	process.stderr.write(line);
+  process.stderr.write(line);
 };
 
 /**
@@ -75,38 +75,38 @@ const MAX_WARNING_CAUSES = 50;
 const SIZE_WARNING_EVERY = 10_000;
 
 export type NdjsonWriterOptions = {
-	/** ADR-0009: singular — `"deal"` for `pd deals list`. */
-	recordType: string;
-	/** ADR-0017: mixed item-search records carry their own validated type. */
-	mixedRecordTypes?: boolean;
-	/** ADR-0011 §9's dispatch counter, read once when the trailer is written. */
-	requests: () => number;
-	resolved?: Resolved;
-	/**
-	 * Output names for record fields that would shadow a line key — the resource
-	 * table supplies it, and it is empty for every resource but `activities`.
-	 */
-	rename?: Readonly<Record<string, string>>;
-	/**
-	 * True when the caller passed `--limit`. A bounded run gets no size warning:
-	 * it already said how much output it wants, and telling it that it received
-	 * what it asked for is noise. `--max-requests` is a guard rather than a bound
-	 * and does not suppress the warning.
-	 */
-	bounded?: boolean;
-	/** ADR-0002's buffered, unstable human-only output path. */
-	pretty?: boolean;
-	/** Output selector order; meaningful only when `pretty` is true. */
-	prettyFields?: readonly string[];
-	sink?: Sink;
-	/**
-	 * ADR-0001 sends a human one-line summary of every error to stderr beside the
-	 * machine object on stdout. Both channels are written from `error()` below, so
-	 * the pair cannot come apart and no caller has to remember the second half.
-	 */
-	stderr?: Sink;
-	/** ADR-0015's sole human diagnostics writer for data commands. */
-	diagnostics?: RunDiagnostics;
+  /** ADR-0009: singular — `"deal"` for `pd deals list`. */
+  recordType: string;
+  /** ADR-0017: mixed item-search records carry their own validated type. */
+  mixedRecordTypes?: boolean;
+  /** ADR-0011 §9's dispatch counter, read once when the trailer is written. */
+  requests: () => number;
+  resolved?: Resolved;
+  /**
+   * Output names for record fields that would shadow a line key — the resource
+   * table supplies it, and it is empty for every resource but `activities`.
+   */
+  rename?: Readonly<Record<string, string>>;
+  /**
+   * True when the caller passed `--limit`. A bounded run gets no size warning:
+   * it already said how much output it wants, and telling it that it received
+   * what it asked for is noise. `--max-requests` is a guard rather than a bound
+   * and does not suppress the warning.
+   */
+  bounded?: boolean;
+  /** ADR-0002's buffered, unstable human-only output path. */
+  pretty?: boolean;
+  /** Output selector order; meaningful only when `pretty` is true. */
+  prettyFields?: readonly string[];
+  sink?: Sink;
+  /**
+   * ADR-0001 sends a human one-line summary of every error to stderr beside the
+   * machine object on stdout. Both channels are written from `error()` below, so
+   * the pair cannot come apart and no caller has to remember the second half.
+   */
+  stderr?: Sink;
+  /** ADR-0015's sole human diagnostics writer for data commands. */
+  diagnostics?: RunDiagnostics;
 };
 
 /**
@@ -116,7 +116,7 @@ export type NdjsonWriterOptions = {
  * in the walk: "nothing downstream re-filters" is about records, not fields.
  *
  * `custom_fields` was the one exemption, and ADR-0030 withdrew it: the block now
- * obeys the rule at the hash and no deeper, in `filledCustomFields` below. `id`
+ * obeys the rule at the field key and no deeper, in `filledCustomFields` below. `id`
  * is never absent (ADR-0016 §1) and the schema never admits it as `null`, so it
  * needs no special case.
  *
@@ -142,10 +142,10 @@ export type NdjsonWriterOptions = {
 const RESERVED = new Set(["type", "record_type"]);
 
 const shrink = (value: unknown): unknown => {
-	if (Array.isArray(value)) return value.map(shrink);
-	return value !== null && typeof value === "object"
-		? withoutAbsent(value as Record<string, unknown>)
-		: value;
+  if (Array.isArray(value)) return value.map(shrink);
+  return value !== null && typeof value === "object"
+    ? withoutAbsent(value as Record<string, unknown>)
+    : value;
 };
 
 /**
@@ -153,7 +153,7 @@ const shrink = (value: unknown): unknown => {
  * measured account defines 87 deal custom fields and an ordinary deal fills
  * four, so the withdrawn exemption spent 93.5% of a record on `null`.
  *
- * **The drop stops at the hash** (§2). A custom-field value's shape is
+ * **The drop stops at the field key** (§2). A custom-field value's shape is
  * Pipedrive's rather than `pd`'s — ADR-0029 — so `shrink` is deliberately not
  * called on it: a monetary value with no `currency` is a worse output than one
  * with a null currency, and reaching inside would be `pd` interpreting a shape
@@ -165,29 +165,31 @@ const shrink = (value: unknown): unknown => {
  * `--resolve` (ADR-0008 §1) because the drop happens in both modes.
  */
 const filledCustomFields = (value: unknown): unknown => {
-	if (value === null || value === undefined) return {};
-	// A `custom_fields` the wire sent as something other than an object is a wire
-	// anomaly, and ADR-0029 keeps `pd` out of the business of interpreting one: it
-	// travels verbatim rather than being rewritten to `{}`, which would destroy
-	// the only evidence of what arrived.
-	if (typeof value !== "object" || Array.isArray(value)) return value;
-	const out: Record<string, unknown> = {};
-	for (const [hash, field] of Object.entries(value as Record<string, unknown>)) {
-		if (field === null || field === undefined) continue;
-		out[hash] = field;
-	}
-	return out;
+  if (value === null || value === undefined) return {};
+  // A `custom_fields` the wire sent as something other than an object is a wire
+  // anomaly, and ADR-0029 keeps `pd` out of the business of interpreting one: it
+  // travels verbatim rather than being rewritten to `{}`, which would destroy
+  // the only evidence of what arrived.
+  if (typeof value !== "object" || Array.isArray(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [fieldKey, field] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    if (field === null || field === undefined) continue;
+    out[fieldKey] = field;
+  }
+  return out;
 };
 
 const withoutAbsent = (
-	record: Record<string, unknown>,
+  record: Record<string, unknown>,
 ): Record<string, unknown> => {
-	const out: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(record)) {
-		if (value === null || value === undefined) continue;
-		out[key] = shrink(value);
-	}
-	return out;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (value === null || value === undefined) continue;
+    out[key] = shrink(value);
+  }
+  return out;
 };
 
 /**
@@ -209,47 +211,47 @@ const withoutAbsent = (
  * other, and the walk continues.
  */
 type Shadowing =
-	| { readonly fault: "pd"; readonly error: PdError }
-	| { readonly fault: "wire"; readonly field: string };
+  | { readonly fault: "pd"; readonly error: PdError }
+  | { readonly fault: "wire"; readonly field: string };
 
 const shadowed = (
-	record: Record<string, unknown>,
-	rename: Readonly<Record<string, string>>,
+  record: Record<string, unknown>,
+  rename: Readonly<Record<string, string>>,
 ): Shadowing | undefined => {
-	for (const key of Object.keys(record)) {
-		const name = rename[key] ?? key;
-		if (RESERVED.has(name)) {
-			return name === key
-				? { fault: "wire", field: name }
-				: {
-						fault: "pd",
-						error: pdError({
-							code: "internal",
-							message:
-								`Renaming '${key}' to '${name}' would shadow the line's own ` +
-								`'${name}' key. This is a bug in pd: the rename needs a free name.`,
-							details: { field: key, renamed_to: name },
-						}),
-					};
-		}
-		// The rename must not land on a field the record already has. Renaming
-		// `type` to `activity_type` on a resource that grows its own
-		// `activity_type` would overwrite it, which is the same silent loss the
-		// reserved check exists to prevent, one step further along.
-		if (name !== key && name in record) {
-			return {
-				fault: "pd",
-				error: pdError({
-					code: "internal",
-					message:
-						`Renaming '${key}' to '${name}' would overwrite a field the record ` +
-						"already has. This is a bug in pd: the rename needs a free name.",
-					details: { field: key, renamed_to: name },
-				}),
-			};
-		}
-	}
-	return undefined;
+  for (const key of Object.keys(record)) {
+    const name = rename[key] ?? key;
+    if (RESERVED.has(name)) {
+      return name === key
+        ? { fault: "wire", field: name }
+        : {
+            fault: "pd",
+            error: pdError({
+              code: "internal",
+              message:
+                `Renaming '${key}' to '${name}' would shadow the line's own ` +
+                `'${name}' key. This is a bug in pd: the rename needs a free name.`,
+              details: { field: key, renamed_to: name },
+            }),
+          };
+    }
+    // The rename must not land on a field the record already has. Renaming
+    // `type` to `activity_type` on a resource that grows its own
+    // `activity_type` would overwrite it, which is the same silent loss the
+    // reserved check exists to prevent, one step further along.
+    if (name !== key && name in record) {
+      return {
+        fault: "pd",
+        error: pdError({
+          code: "internal",
+          message:
+            `Renaming '${key}' to '${name}' would overwrite a field the record ` +
+            "already has. This is a bug in pd: the rename needs a free name.",
+          details: { field: key, renamed_to: name },
+        }),
+      };
+    }
+  }
+  return undefined;
 };
 
 /**
@@ -259,37 +261,37 @@ const shadowed = (
  * the end. `shadowed` above has already refused anything this would lose.
  */
 const present = (
-	record: Record<string, unknown>,
-	rename: Readonly<Record<string, string>>,
+  record: Record<string, unknown>,
+  rename: Readonly<Record<string, string>>,
 ): Record<string, unknown> => {
-	const out: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(record)) {
-		const name = rename[key] ?? key;
-		if (key === "custom_fields") {
-			out[name] = filledCustomFields(value);
-			continue;
-		}
-		if (value === null || value === undefined) continue;
-		out[name] = shrink(value);
-	}
-	return out;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const name = rename[key] ?? key;
+    if (key === "custom_fields") {
+      out[name] = filledCustomFields(value);
+      continue;
+    }
+    if (value === null || value === undefined) continue;
+    out[name] = shrink(value);
+  }
+  return out;
 };
 
 /** The four counters and the two run facts that ride on every trailer. */
 export type TrailerCounters = {
-	emitted: number;
-	skipped: number;
-	duplicates: number;
-	resolved: Resolved;
-	requests: number;
+  emitted: number;
+  skipped: number;
+  duplicates: number;
+  resolved: Resolved;
+  requests: number;
 };
 
 export const ZERO_COUNTERS: TrailerCounters = {
-	emitted: 0,
-	skipped: 0,
-	duplicates: 0,
-	resolved: "off",
-	requests: 0,
+  emitted: 0,
+  skipped: 0,
+  duplicates: 0,
+  resolved: "off",
+  requests: 0,
 };
 
 /**
@@ -299,8 +301,8 @@ export const ZERO_COUNTERS: TrailerCounters = {
  * `complete`, `emitted` or `requests` to say about one.
  */
 const bareErrorLine = (error: PdError): Record<string, unknown> => ({
-	type: "error",
-	...error,
+  type: "error",
+  ...error,
 });
 
 /**
@@ -311,13 +313,13 @@ const bareErrorLine = (error: PdError): Record<string, unknown> => ({
  * no stream and therefore no counters.
  */
 export const failWith = (
-	error: PdError,
-	sink: Sink = stdoutSink,
-	stderr: Sink = stderrSink,
+  error: PdError,
+  sink: Sink = stdoutSink,
+  stderr: Sink = stderrSink,
 ): number => {
-	sink(`${JSON.stringify(bareErrorLine(error))}\n`);
-	stderr(`pd: ${error.message}\n`);
-	return error.exit_code;
+  sink(`${JSON.stringify(bareErrorLine(error))}\n`);
+  stderr(`pd: ${error.message}\n`);
+  return error.exit_code;
 };
 
 /**
@@ -330,324 +332,324 @@ export const failWith = (
  * comes and goes is a field a consumer has to test for.
  */
 export const errorLine = (
-	error: PdError,
-	counters: TrailerCounters,
+  error: PdError,
+  counters: TrailerCounters,
 ): Record<string, unknown> => ({
-	type: "error",
-	code: error.code,
-	message: error.message,
-	exit_code: error.exit_code,
-	retry: error.retry,
-	...(error.retry_after_seconds === undefined
-		? {}
-		: { retry_after_seconds: error.retry_after_seconds }),
-	complete: false,
-	...counters,
-	details: error.details ?? {},
+  type: "error",
+  code: error.code,
+  message: error.message,
+  exit_code: error.exit_code,
+  retry: error.retry,
+  ...(error.retry_after_seconds === undefined
+    ? {}
+    : { retry_after_seconds: error.retry_after_seconds }),
+  complete: false,
+  ...counters,
+  details: error.details ?? {},
 });
 
 export class NdjsonWriter {
-	readonly #sink: Sink;
-	readonly #stderr: Sink;
-	readonly #diagnostics: RunDiagnostics | undefined;
-	readonly #recordType: string;
-	readonly #mixedRecordTypes: boolean;
-	readonly #requests: () => number;
-	#resolved: Resolved;
-	readonly #rename: Readonly<Record<string, string>>;
-	readonly #bounded: boolean;
-	readonly #pretty: boolean;
-	readonly #prettyFields: readonly string[] | undefined;
-	readonly #prettyRecords: Record<string, unknown>[] = [];
-	readonly #causes = new Set<string>();
+  readonly #sink: Sink;
+  readonly #stderr: Sink;
+  readonly #diagnostics: RunDiagnostics | undefined;
+  readonly #recordType: string;
+  readonly #mixedRecordTypes: boolean;
+  readonly #requests: () => number;
+  #resolved: Resolved;
+  readonly #rename: Readonly<Record<string, string>>;
+  readonly #bounded: boolean;
+  readonly #pretty: boolean;
+  readonly #prettyFields: readonly string[] | undefined;
+  readonly #prettyRecords: Record<string, unknown>[] = [];
+  readonly #causes = new Set<string>();
 
-	#emitted = 0;
-	#skipped = 0;
-	#duplicates = 0;
-	#finished = false;
+  #emitted = 0;
+  #skipped = 0;
+  #duplicates = 0;
+  #finished = false;
 
-	constructor({
-		recordType,
-		mixedRecordTypes = false,
-		requests,
-		resolved = "off",
-		rename = {},
-		bounded = false,
-		pretty = false,
-		prettyFields,
-		sink = stdoutSink,
-		stderr = stderrSink,
-		diagnostics,
-	}: NdjsonWriterOptions) {
-		this.#recordType = recordType;
-		this.#mixedRecordTypes = mixedRecordTypes;
-		this.#requests = requests;
-		this.#resolved = resolved;
-		this.#rename = rename;
-		this.#bounded = bounded;
-		this.#pretty = pretty;
-		this.#prettyFields = prettyFields;
-		this.#sink = sink;
-		this.#stderr = stderr;
-		this.#diagnostics = diagnostics;
-	}
+  constructor({
+    recordType,
+    mixedRecordTypes = false,
+    requests,
+    resolved = "off",
+    rename = {},
+    bounded = false,
+    pretty = false,
+    prettyFields,
+    sink = stdoutSink,
+    stderr = stderrSink,
+    diagnostics,
+  }: NdjsonWriterOptions) {
+    this.#recordType = recordType;
+    this.#mixedRecordTypes = mixedRecordTypes;
+    this.#requests = requests;
+    this.#resolved = resolved;
+    this.#rename = rename;
+    this.#bounded = bounded;
+    this.#pretty = pretty;
+    this.#prettyFields = prettyFields;
+    this.#sink = sink;
+    this.#stderr = stderr;
+    this.#diagnostics = diagnostics;
+  }
 
-	#line(value: unknown): void {
-		this.#sink(`${JSON.stringify(value)}\n`);
-	}
+  #line(value: unknown): void {
+    this.#sink(`${JSON.stringify(value)}\n`);
+  }
 
-	/**
-	 * Warnings first, then records. A page's warnings describe records that will
-	 * never appear, so emitting them ahead of the page's survivors keeps the
-	 * explanation next to the gap rather than after it.
-	 */
-	page(page: Page<Record<string, unknown>>): void {
-		this.records(this.hold(page));
-	}
+  /**
+   * Warnings first, then records. A page's warnings describe records that will
+   * never appear, so emitting them ahead of the page's survivors keeps the
+   * explanation next to the gap rather than after it.
+   */
+  page(page: Page<Record<string, unknown>>): void {
+    this.records(this.hold(page));
+  }
 
-	/**
-	 * The collected path's half of `page`: the page's warnings and its duplicate
-	 * count are taken now, and its records are handed back for the caller to hold.
-	 * ADR-0004 requires exactly this split — `warning` lines are written as pages
-	 * arrive rather than held back, so `skipped` and `duplicates` are true on an
-	 * error trailer that reports `emitted: 0`. Its stated consequence is that in
-	 * the collected path every `warning` line precedes every `record` line.
-	 */
-	hold(page: Page<Record<string, unknown>>): Record<string, unknown>[] {
-		this.#refuseAfterTrailer("page");
+  /**
+   * The collected path's half of `page`: the page's warnings and its duplicate
+   * count are taken now, and its records are handed back for the caller to hold.
+   * ADR-0004 requires exactly this split — `warning` lines are written as pages
+   * arrive rather than held back, so `skipped` and `duplicates` are true on an
+   * error trailer that reports `emitted: 0`. Its stated consequence is that in
+   * the collected path every `warning` line precedes every `record` line.
+   */
+  hold(page: Page<Record<string, unknown>>): Record<string, unknown>[] {
+    this.#refuseAfterTrailer("page");
 
-		for (const warning of page.warnings) this.#deduplicated(warning);
+    for (const warning of page.warnings) this.#deduplicated(warning);
 
-		this.#duplicates += page.duplicates;
-		return page.records;
-	}
+    this.#duplicates += page.duplicates;
+    return page.records;
+  }
 
-	/**
-	 * One `warning` per distinct cause, `skipped` counting every record behind it
-	 * — ADR-0006 §5. Shared by `hold`, which receives a page's warnings, and by
-	 * the shadowed-key rejection below, which mints one of its own after the page
-	 * has already passed through.
-	 */
-	#deduplicated(warning: PdWarning): void {
-		// Only a rejected record moves `skipped`; run-level warnings such as an
-		// unmatched projection selector describe no removed record.
-		if (isRecordRejected(warning)) this.#skipped += 1;
-		const cause = causeOf(warning);
-		if (this.#causes.has(cause)) return;
-		if (this.#causes.size >= MAX_WARNING_CAUSES) return;
-		this.#causes.add(cause);
-		if (this.#pretty) this.#humanWarning(warning.message);
-		else this.#line({ type: "warning", ...warning });
-	}
+  /**
+   * One `warning` per distinct cause, `skipped` counting every record behind it
+   * — ADR-0006 §5. Shared by `hold`, which receives a page's warnings, and by
+   * the shadowed-key rejection below, which mints one of its own after the page
+   * has already passed through.
+   */
+  #deduplicated(warning: PdWarning): void {
+    // Only a rejected record moves `skipped`; run-level warnings such as an
+    // unmatched projection selector describe no removed record.
+    if (isRecordRejected(warning)) this.#skipped += 1;
+    const cause = causeOf(warning);
+    if (this.#causes.has(cause)) return;
+    if (this.#causes.size >= MAX_WARNING_CAUSES) return;
+    this.#causes.add(cause);
+    if (this.#pretty) this.#humanWarning(warning.message);
+    else this.#line({ type: "warning", ...warning });
+  }
 
-	/**
-	 * ADR-0029 §6. The record reached the writer whole, so unlike the walk's
-	 * rejections its `id` is trustworthy — but it is left off all the same, so
-	 * that one cause reads the same however it was raised. `path` is the offending
-	 * key, which is what makes two different shadowed names two causes.
-	 */
-	#reject(resource: string, field: string): void {
-		this.#deduplicated({
-			kind: "record_rejected",
-			resource,
-			path: field,
-			issue: "shadowed",
-			message:
-				`This ${resource} record carries a field named '${field}', which ` +
-				"would shadow the line's own key. The record is skipped; pd cannot " +
-				"emit it without losing a field.",
-		});
-	}
+  /**
+   * ADR-0029 §6. The record reached the writer whole, so unlike the walk's
+   * rejections its `id` is trustworthy — but it is left off all the same, so
+   * that one cause reads the same however it was raised. `path` is the offending
+   * key, which is what makes two different shadowed names two causes.
+   */
+  #reject(resource: string, field: string): void {
+    this.#deduplicated({
+      kind: "record_rejected",
+      resource,
+      path: field,
+      issue: "shadowed",
+      message:
+        `This ${resource} record carries a field named '${field}', which ` +
+        "would shadow the line's own key. The record is skipped; pd cannot " +
+        "emit it without losing a field.",
+    });
+  }
 
-	/**
-	 * Writes `record` lines and moves `emitted`. The two always happen together.
-	 *
-	 * A field `pd`'s own rename would shadow ends the run here rather than
-	 * shipping an unclassifiable line (ADR-0025 §1). The **trailer is written
-	 * first**, so the counters on it are the true ones: the records already on
-	 * stdout are real, and a bug is precisely when a counter must not lie. The
-	 * throw that follows carries `trailer_already_written`, which is the same
-	 * marker `#refuseAfterTrailer` uses and which tells `cli.ts` the whole
-	 * trailer — stdout line and stderr line both — is already out.
-	 *
-	 * A reserved name that came off the wire is not a bug and costs one record
-	 * (ADR-0029 §6); `shadowed` tells the two apart.
-	 */
-	records(records: readonly Record<string, unknown>[]): void {
-		this.#refuseAfterTrailer("page");
-		for (const record of records) {
-			let recordType = this.#recordType;
-			let body = record;
-			let collision: PdError | undefined;
-			if (this.#mixedRecordTypes) {
-				const { record_type: ownType, ...rest } = record;
-				body = rest;
-				if (typeof ownType === "string" && ownType !== "") {
-					recordType = ownType;
-				} else {
-					collision = pdError({
-						code: "internal",
-						message:
-							"A mixed record has no record_type. This is a bug in pd's search schema.",
-					});
-				}
-			}
-			if (collision === undefined) {
-				const shadowing = shadowed(body, this.#rename);
-				if (shadowing?.fault === "wire") {
-					this.#reject(recordType, shadowing.field);
-					continue;
-				}
-				collision = shadowing?.error;
-			}
-			if (collision !== undefined) {
-				this.error(collision);
-				throw new PdFailure(
-					pdError({
-						code: "internal",
-						message: collision.message,
-						details: { ...collision.details, trailer_already_written: true },
-					}),
-				);
-			}
-			this.#emitted += 1;
-			this.#diagnostics?.record();
-			const output = present(body, this.#rename);
-			if (this.#pretty) this.#prettyRecords.push(output);
-			else {
-				this.#line({
-					type: "record",
-					record_type: recordType,
-					...output,
-				});
-			}
-			this.#warnOnSize();
-		}
-	}
+  /**
+   * Writes `record` lines and moves `emitted`. The two always happen together.
+   *
+   * A field `pd`'s own rename would shadow ends the run here rather than
+   * shipping an unclassifiable line (ADR-0025 §1). The **trailer is written
+   * first**, so the counters on it are the true ones: the records already on
+   * stdout are real, and a bug is precisely when a counter must not lie. The
+   * throw that follows carries `trailer_already_written`, which is the same
+   * marker `#refuseAfterTrailer` uses and which tells `cli.ts` the whole
+   * trailer — stdout line and stderr line both — is already out.
+   *
+   * A reserved name that came off the wire is not a bug and costs one record
+   * (ADR-0029 §6); `shadowed` tells the two apart.
+   */
+  records(records: readonly Record<string, unknown>[]): void {
+    this.#refuseAfterTrailer("page");
+    for (const record of records) {
+      let recordType = this.#recordType;
+      let body = record;
+      let collision: PdError | undefined;
+      if (this.#mixedRecordTypes) {
+        const { record_type: ownType, ...rest } = record;
+        body = rest;
+        if (typeof ownType === "string" && ownType !== "") {
+          recordType = ownType;
+        } else {
+          collision = pdError({
+            code: "internal",
+            message:
+              "A mixed record has no record_type. This is a bug in pd's search schema.",
+          });
+        }
+      }
+      if (collision === undefined) {
+        const shadowing = shadowed(body, this.#rename);
+        if (shadowing?.fault === "wire") {
+          this.#reject(recordType, shadowing.field);
+          continue;
+        }
+        collision = shadowing?.error;
+      }
+      if (collision !== undefined) {
+        this.error(collision);
+        throw new PdFailure(
+          pdError({
+            code: "internal",
+            message: collision.message,
+            details: { ...collision.details, trailer_already_written: true },
+          }),
+        );
+      }
+      this.#emitted += 1;
+      this.#diagnostics?.record();
+      const output = present(body, this.#rename);
+      if (this.#pretty) this.#prettyRecords.push(output);
+      else {
+        this.#line({
+          type: "record",
+          record_type: recordType,
+          ...output,
+        });
+      }
+      this.#warnOnSize();
+    }
+  }
 
-	/** ADR-0003's stderr size warning, on crossing each 10,000 emitted records. */
-	#warnOnSize(): void {
-		if (this.#bounded) return;
-		if (this.#emitted % SIZE_WARNING_EVERY !== 0) return;
-		// The wording does not claim the walk continues. The threshold can be met
-		// by the very last record of a complete run, and a line that said "still
-		// going" would then be false on the one channel a human is reading.
-		const message = `${this.#emitted} records emitted so far. Pass --limit to bound the walk.`;
-		if (this.#diagnostics !== undefined) this.#diagnostics.sizeWarning(message);
-		else this.#stderr(`pd: ${message}\n`);
-	}
+  /** ADR-0003's stderr size warning, on crossing each 10,000 emitted records. */
+  #warnOnSize(): void {
+    if (this.#bounded) return;
+    if (this.#emitted % SIZE_WARNING_EVERY !== 0) return;
+    // The wording does not claim the walk continues. The threshold can be met
+    // by the very last record of a complete run, and a line that said "still
+    // going" would then be false on the one channel a human is reading.
+    const message = `${this.#emitted} records emitted so far. Pass --limit to bound the walk.`;
+    if (this.#diagnostics !== undefined) this.#diagnostics.sizeWarning(message);
+    else this.#stderr(`pd: ${message}\n`);
+  }
 
-	/** A `warning` that did not come from a rejected record — a cache skip, say. */
-	warn(warning: PdWarning): void {
-		this.#refuseAfterTrailer("warn");
-		if (this.#pretty) this.#humanWarning(warning.message);
-		else this.#line({ type: "warning", ...warning });
-		if (!this.#pretty && warning.kind === "cache_entry_skipped") {
-			this.#diagnostics?.anomaly(warning.message);
-		}
-	}
+  /** A `warning` that did not come from a rejected record — a cache skip, say. */
+  warn(warning: PdWarning): void {
+    this.#refuseAfterTrailer("warn");
+    if (this.#pretty) this.#humanWarning(warning.message);
+    else this.#line({ type: "warning", ...warning });
+    if (!this.#pretty && warning.kind === "cache_entry_skipped") {
+      this.#diagnostics?.anomaly(warning.message);
+    }
+  }
 
-	#humanWarning(message: string): void {
-		if (this.#diagnostics !== undefined) this.#diagnostics.warning(message);
-		else this.#stderr(`pd: ${message}\n`);
-	}
+  #humanWarning(message: string): void {
+    if (this.#diagnostics !== undefined) this.#diagnostics.warning(message);
+    else this.#stderr(`pd: ${message}\n`);
+  }
 
-	/** A permanent human diagnostic; silent in machine mode. */
-	anomaly(message: string): void {
-		this.#refuseAfterTrailer("anomaly");
-		this.#diagnostics?.anomaly(message);
-	}
+  /** A permanent human diagnostic; silent in machine mode. */
+  anomaly(message: string): void {
+    this.#refuseAfterTrailer("anomaly");
+    this.#diagnostics?.anomaly(message);
+  }
 
-	/** ADR-0008: an ancillary resolver failed after the writer was constructed. */
-	resolutionPartial(): void {
-		if (this.#resolved === "full") this.#resolved = "partial";
-	}
+  /** ADR-0008: an ancillary resolver failed after the writer was constructed. */
+  resolutionPartial(): void {
+    if (this.#resolved === "full") this.#resolved = "partial";
+  }
 
-	/**
-	 * The `summary` trailer. `bound` is `null` for a run that fetched everything
-	 * and `"limit"` for one the caller bounded; ADR-0003 keeps `reason` off every
-	 * other trailer, because every guard stop is an `error` instead.
-	 */
-	finish(bound: Bound | null): number {
-		this.#refuseAfterTrailer("finish");
-		this.#finished = true;
-		if (this.#pretty) {
-			this.#diagnostics?.finish();
-			this.#sink(
-				renderTable(
-					this.#prettyRecords,
-					this.#prettyFields,
-					this.#resolved !== "off",
-				),
-			);
-		} else {
-			this.#line({
-				type: "summary",
-				complete: bound === null,
-				...this.#counters(),
-				...(bound === null ? {} : { reason: bound }),
-			});
-			this.#diagnostics?.finish();
-		}
-		return 0;
-	}
+  /**
+   * The `summary` trailer. `bound` is `null` for a run that fetched everything
+   * and `"limit"` for one the caller bounded; ADR-0003 keeps `reason` off every
+   * other trailer, because every guard stop is an `error` instead.
+   */
+  finish(bound: Bound | null): number {
+    this.#refuseAfterTrailer("finish");
+    this.#finished = true;
+    if (this.#pretty) {
+      this.#diagnostics?.finish();
+      this.#sink(
+        renderTable(
+          this.#prettyRecords,
+          this.#prettyFields,
+          this.#resolved !== "off",
+        ),
+      );
+    } else {
+      this.#line({
+        type: "summary",
+        complete: bound === null,
+        ...this.#counters(),
+        ...(bound === null ? {} : { reason: bound }),
+      });
+      this.#diagnostics?.finish();
+    }
+    return 0;
+  }
 
-	/**
-	 * The `error` trailer, and the run's exit code. ADR-0001 puts the
-	 * machine-readable object on **stdout** and a one-line human summary of the
-	 * same error on stderr; both are written here, so the pair cannot come apart.
-	 *
-	 * `details` is always present, `{}` when the error carried none.
-	 */
-	error(error: PdError): number {
-		this.#refuseAfterTrailer("error");
-		this.#finished = true;
-		if (!this.#pretty) this.#line(errorLine(error, this.#counters()));
-		if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
-		else this.#stderr(`pd: ${error.message}\n`);
-		if (this.#pretty && this.#prettyRecords.length > 0) {
-			this.#sink(
-				renderTable(
-					this.#prettyRecords,
-					this.#prettyFields,
-					this.#resolved !== "off",
-				),
-			);
-		}
-		return error.exit_code;
-	}
+  /**
+   * The `error` trailer, and the run's exit code. ADR-0001 puts the
+   * machine-readable object on **stdout** and a one-line human summary of the
+   * same error on stderr; both are written here, so the pair cannot come apart.
+   *
+   * `details` is always present, `{}` when the error carried none.
+   */
+  error(error: PdError): number {
+    this.#refuseAfterTrailer("error");
+    this.#finished = true;
+    if (!this.#pretty) this.#line(errorLine(error, this.#counters()));
+    if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
+    else this.#stderr(`pd: ${error.message}\n`);
+    if (this.#pretty && this.#prettyRecords.length > 0) {
+      this.#sink(
+        renderTable(
+          this.#prettyRecords,
+          this.#prettyFields,
+          this.#resolved !== "off",
+        ),
+      );
+    }
+    return error.exit_code;
+  }
 
-	#counters(): TrailerCounters {
-		return {
-			emitted: this.#emitted,
-			skipped: this.#skipped,
-			duplicates: this.#duplicates,
-			resolved: this.#resolved,
-			requests: this.#requests(),
-		};
-	}
+  #counters(): TrailerCounters {
+    return {
+      emitted: this.#emitted,
+      skipped: this.#skipped,
+      duplicates: this.#duplicates,
+      resolved: this.#resolved,
+      requests: this.#requests(),
+    };
+  }
 
-	/**
-	 * ADR-0004: the exactly-one-trailer invariant is a runtime check here rather
-	 * than a type, so a hand-rolled loop that writes past the trailer fails
-	 * loudly. It travels as the `PdFailure` carrier for the same reason
-	 * `guardedFetch`'s refusals do: there is no `Result` channel on a void method,
-	 * and the top level converts it back.
-	 */
-	#refuseAfterTrailer(call: string): void {
-		if (!this.#finished) return;
-		const error = pdError({
-			code: "internal",
-			message:
-				`pd wrote a second trailer: ${call}() was called after the run had ` +
-				"already ended. This is a bug in pd.",
-			// Read by `cli.ts`, which must not answer this by writing the very
-			// second trailer the refusal exists to prevent. The marker covers stderr
-			// as well as stdout, so the line below is the only one a reader sees.
-			details: { call, trailer_already_written: true },
-		});
-		if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
-		else this.#stderr(`pd: ${error.message}\n`);
-		throw new PdFailure(error);
-	}
+  /**
+   * ADR-0004: the exactly-one-trailer invariant is a runtime check here rather
+   * than a type, so a hand-rolled loop that writes past the trailer fails
+   * loudly. It travels as the `PdFailure` carrier for the same reason
+   * `guardedFetch`'s refusals do: there is no `Result` channel on a void method,
+   * and the top level converts it back.
+   */
+  #refuseAfterTrailer(call: string): void {
+    if (!this.#finished) return;
+    const error = pdError({
+      code: "internal",
+      message:
+        `pd wrote a second trailer: ${call}() was called after the run had ` +
+        "already ended. This is a bug in pd.",
+      // Read by `cli.ts`, which must not answer this by writing the very
+      // second trailer the refusal exists to prevent. The marker covers stderr
+      // as well as stdout, so the line below is the only one a reader sees.
+      details: { call, trailer_already_written: true },
+    });
+    if (this.#diagnostics !== undefined) this.#diagnostics.error(error.message);
+    else this.#stderr(`pd: ${error.message}\n`);
+    throw new PdFailure(error);
+  }
 }

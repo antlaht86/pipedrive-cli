@@ -20,7 +20,7 @@ import {
 } from "./relation-resolution.ts";
 import type { Projection } from "./projection.ts";
 
-const HASH = /^[0-9a-f]{40}$/i;
+const FIELD_KEY = /^[0-9a-f]{40}$/i;
 
 const USER_FIELDS = ["owner_id", "creator_user_id", "user_id"] as const;
 const STANDARD_PAIRS = [
@@ -42,7 +42,7 @@ type LookupMaps = Partial<
 const Scalar = z.union([z.string(), z.number()]);
 const ResolutionOption = z.object({ id: Scalar, label: z.string() });
 const ResolutionField = z.object({
-	field_code: z.string().regex(HASH),
+	field_code: z.string().regex(FIELD_KEY),
 	field_name: z.string(),
 	field_type: z.string(),
 	options: z.array(ResolutionOption).nullable().optional(),
@@ -359,19 +359,19 @@ export const createResolution = async ({
 			typeof custom === "object" &&
 			!Array.isArray(custom)
 		) {
-			for (const [hash, value] of Object.entries(
+			for (const [fieldKey, value] of Object.entries(
 				custom as Record<string, unknown>,
 			)) {
-				// ADR-0030 §4. The writer drops a null-valued hash from the raw block,
-				// and resolution is an additive decoration of a raw value — so a hash
+				// ADR-0030 §4. The writer drops a null-valued field key from the raw block,
+				// and resolution is an additive decoration of a raw value — so a field key
 				// with no value has nothing to decorate and gets no artifact. Skipping
 				// it here rather than in the writer keeps the two blocks in step
 				// whatever order the stages run in.
 				if (value === null || value === undefined) continue;
-				const definition = fields.get(hash);
+				const definition = fields.get(fieldKey);
 				if (definition === undefined) continue;
 				const label = customLabel(definition, value, lookups);
-				resolved[hash] = {
+				resolved[fieldKey] = {
 					name: definition.field_name,
 					...(label === undefined ? {} : { label }),
 				};
@@ -413,15 +413,15 @@ export const createResolution = async ({
 						Array.isArray(custom)
 					)
 						continue;
-					for (const [hash, value] of Object.entries(
+					for (const [fieldKey, value] of Object.entries(
 						custom as Record<string, unknown>,
 					)) {
-						// ADR-0030 §1 makes a null-valued hash absent, and an absent key
+						// ADR-0030 §1 makes a null-valued field key absent, and an absent key
 						// cannot be an unrecognised one: counting it here would spend a
 						// schema-refresh request, mark the run `partial` and warn that a key
 						// was "emitted raw" when nothing was emitted at all.
 						if (value === null || value === undefined) continue;
-						if (HASH.test(hash) && !fields.has(hash)) unknown.add(hash);
+						if (FIELD_KEY.test(fieldKey) && !fields.has(fieldKey)) unknown.add(fieldKey);
 					}
 				}
 			}
@@ -429,7 +429,7 @@ export const createResolution = async ({
 
 			await resolveRelations(page.value.records);
 
-			const surviving = [...unknown].filter((hash) => !fields.has(hash));
+			const surviving = [...unknown].filter((fieldKey) => !fields.has(fieldKey));
 			const warnings: PdWarning[] = [...page.value.warnings];
 			if (surviving.length > 0) {
 				writer.resolutionPartial();

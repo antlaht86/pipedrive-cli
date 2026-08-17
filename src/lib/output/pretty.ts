@@ -35,7 +35,7 @@ const humanValue = (value: unknown): string => {
 
 const customValue = (
 	record: Readonly<Record<string, unknown>>,
-	hash: string,
+	fieldKey: string,
 	replaceResolved: boolean,
 ): unknown => {
 	if (replaceResolved) {
@@ -45,13 +45,13 @@ const customValue = (
 			typeof resolved === "object" &&
 			!Array.isArray(resolved)
 		) {
-			const value = (resolved as Record<string, unknown>)[hash];
+			const value = (resolved as Record<string, unknown>)[fieldKey];
 			if (value !== undefined) return value;
 		}
 	}
 	const raw = record["custom_fields"];
 	return raw !== null && typeof raw === "object" && !Array.isArray(raw)
-		? (raw as Record<string, unknown>)[hash]
+		? (raw as Record<string, unknown>)[fieldKey]
 		: undefined;
 };
 
@@ -78,9 +78,9 @@ const valueOf = (
 			return raw;
 		}
 		return Object.fromEntries(
-			Object.keys(raw as Record<string, unknown>).map((hash) => [
-				hash,
-				customValue(record, hash, true),
+			Object.keys(raw as Record<string, unknown>).map((fieldKey) => [
+				fieldKey,
+				customValue(record, fieldKey, true),
 			]),
 		);
 	}
