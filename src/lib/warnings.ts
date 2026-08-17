@@ -66,7 +66,11 @@ export type RecordRejected = {
   id?: number;
   /** Record-relative — `person_id`, never `data.7.person_id`. Empty at the root. */
   path: string;
-  /** The zod issue code of the reported cause. */
+  /**
+   * The zod issue code of the reported cause — or `shadowed`, which the writer
+   * raises for a wire field that would shadow a line key (ADR-0029 §6) and which
+   * no parse produced.
+   */
   issue: string;
   message: string;
 };
