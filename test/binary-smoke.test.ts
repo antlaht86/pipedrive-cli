@@ -45,10 +45,7 @@ for (const stamp of stamps) {
 
 		const run = Bun.spawnSync([binary, "--version"], { cwd: workspace });
 		const manifestRun = Bun.spawnSync([binary, "manifest"], { cwd: workspace });
-		const manifest = parseOutput(
-			ManifestOutput,
-			manifestRun.stdout.toString(),
-		);
+		const manifest = parseOutput(ManifestOutput, manifestRun.stdout.toString());
 
 		expect(run.exitCode).toBe(0);
 		expect(run.stdout.toString()).toBe(`${stamp}\n`);
@@ -82,10 +79,7 @@ test("the built pd carries its exact AGENTS.md when copied away from the checkou
 	expect(Buffer.from(run.stdout).equals(readFileSync("AGENTS.md"))).toBe(true);
 	expect(run.stderr.toString()).toBe("");
 	expect(refusal.exitCode).toBe(2);
-	const refusalLine = parseOutput(
-		UsageErrorOutput,
-		refusal.stdout.toString(),
-	);
+	const refusalLine = parseOutput(UsageErrorOutput, refusal.stdout.toString());
 	expect(refusalLine.isOk()).toBe(true);
 	expect(refusalLine.isOk() ? refusalLine.value : undefined).toEqual({
 		type: "error",

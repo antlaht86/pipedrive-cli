@@ -164,7 +164,8 @@ const allowedFieldHashes = (files: readonly FixtureFile[]): Set<string> => {
 		const document = FixtureDocumentSchema.safeParse(parsedJson.value);
 		if (!document.success) continue;
 		for (const fixture of document.data.fixtures) {
-			if (fixture.status !== 200 || !FIELD_SCHEMA_PATH.test(fixture.path)) continue;
+			if (fixture.status !== 200 || !FIELD_SCHEMA_PATH.test(fixture.path))
+				continue;
 			const envelope = FieldEnvelopeResponse.safeParse(fixture.body);
 			if (!envelope.success) continue;
 			for (const field of envelope.data.data) {
@@ -226,7 +227,10 @@ const fixtureNeedles = (
 				: [],
 		),
 	];
-	const addJsonNeedle = (label: string, value: JsonValue): ResultType<void, string> =>
+	const addJsonNeedle = (
+		label: string,
+		value: JsonValue,
+	): ResultType<void, string> =>
 		stringifyJson(value).map((text) => {
 			needles.push({ label, bytes: Buffer.from(text) });
 			return undefined;
@@ -327,7 +331,9 @@ const checkPlatformCredentialPath = (
 	const expected = expectedCredentialPath(process.platform, roots);
 	return makeDirectory(dirname(posixCredential))
 		.andThen(() => makeDirectory(dirname(windowsCredential)))
-		.andThen(() => writeText(posixCredential, "posix-path-token\n", { mode: 0o600 }))
+		.andThen(() =>
+			writeText(posixCredential, "posix-path-token\n", { mode: 0o600 }),
+		)
 		.andThen(() =>
 			writeText(windowsCredential, "windows-path-token\n", { mode: 0o600 }),
 		)
@@ -381,11 +387,14 @@ const checkVersionAndDocs = (binary: string): ResultType<void, string> =>
 					!expectedManifest.success ||
 					!isDeepStrictEqual(manifest.value, expectedManifest.data)
 				) {
-					return err("binary gate: manifest does not match this binary version");
+					return err(
+						"binary gate: manifest does not match this binary version",
+					);
 				}
 				const docs = readText("AGENTS.md");
 				if (docs.isErr()) return err(`binary gate: ${docs.error}`);
-				return docsRun.exitCode === 0 && docsRun.stdout.toString() === docs.value
+				return docsRun.exitCode === 0 &&
+					docsRun.stdout.toString() === docs.value
 					? ok(undefined)
 					: err("binary gate: pd docs does not equal AGENTS.md");
 			}),
@@ -426,10 +435,9 @@ const checkCredentialSafety = (binary: string): ResultType<void, string> =>
 				if (authRun.exitCode !== 0) {
 					return err("binary gate: pd auth status failed beside a .env");
 				}
-				return parseOutput(
-					MissingAuthOutput,
-					authRun.stdout.toString(),
-				).map(() => undefined);
+				return parseOutput(MissingAuthOutput, authRun.stdout.toString()).map(
+					() => undefined,
+				);
 			})
 			.andThen(() => checkPlatformCredentialPath(binary, workspace, env));
 	});
@@ -459,11 +467,14 @@ const main = (args: readonly string[]): number => {
 		);
 		return reported.isErr() ? 1 : 2;
 	}
-	const result = parsed.value === undefined
-		? fixtureCredentialGate("fixtures")
-		: binaryGate(parsed.value);
+	const result =
+		parsed.value === undefined
+			? fixtureCredentialGate("fixtures")
+			: binaryGate(parsed.value);
 	if (result.isErr()) {
-		return writeStderr(`${result.error}\n`).map(() => 1).unwrapOr(1);
+		return writeStderr(`${result.error}\n`)
+			.map(() => 1)
+			.unwrapOr(1);
 	}
 	return 0;
 };

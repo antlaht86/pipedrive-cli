@@ -51,12 +51,14 @@ describe("the fixture credential gate", () => {
 				status: 200,
 				body: {
 					success: true,
-					data: [{
-						field_code: hash,
-						field_name: "Renewal",
-						field_type: "varchar",
-						is_custom_field: true,
-					}],
+					data: [
+						{
+							field_code: hash,
+							field_name: "Renewal",
+							field_type: "varchar",
+							is_custom_field: true,
+						},
+					],
 				},
 			},
 			{
@@ -100,13 +102,10 @@ describe("live fixture documents", () => {
 			},
 		]);
 		const raw = JSON.stringify(document.fixtures[0]?.body);
-		const embedded = binaryContainsFixture(
-			Buffer.from(`prefix${raw}suffix`),
-			{
-				documents: [],
-				rawContents: [Buffer.from(raw)],
-			},
-		);
+		const embedded = binaryContainsFixture(Buffer.from(`prefix${raw}suffix`), {
+			documents: [],
+			rawContents: [Buffer.from(raw)],
+		});
 		expect(embedded.isOk() ? embedded.value : undefined).toBe(
 			"raw fixture file",
 		);

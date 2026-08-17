@@ -60,7 +60,8 @@ export type SpawnOptions = {
 };
 
 export const runProcessSync = Result.fromThrowable(
-	(command: string[], options?: SpawnOptions) => Bun.spawnSync(command, options),
+	(command: string[], options?: SpawnOptions) =>
+		Bun.spawnSync(command, options),
 	(cause) => message("process launch failed", cause),
 );
 
@@ -114,13 +115,16 @@ export const withTempDirectoryAsync = <Value>(
 		const started = Result.fromThrowable(work, workFailure)(path);
 		if (started.isErr()) {
 			const cleanup = removeDirectory(path);
-			return cleanup.isErr() ? errAsync(cleanup.error) : errAsync(started.error);
+			return cleanup.isErr()
+				? errAsync(cleanup.error)
+				: errAsync(started.error);
 		}
 		const awaited = ResultAsync.fromPromise(
 			Promise.resolve(started.value),
 			workFailure,
 		);
-		const clean = (result: ResultType<Value, string>): ResultType<Value, string> =>
-			removeDirectory(path).andThen(() => result);
+		const clean = (
+			result: ResultType<Value, string>,
+		): ResultType<Value, string> => removeDirectory(path).andThen(() => result);
 		return awaited.andThen(clean).orElse((cause) => clean(err(cause)));
 	});

@@ -41,7 +41,9 @@ describe("run diagnostics", () => {
 	});
 
 	test("a TTY timer rewrites progress at roughly 1 Hz", async () => {
-		const { clock, diagnostics, output, request } = diagnosticsOf({ tty: true });
+		const { clock, diagnostics, output, request } = diagnosticsOf({
+			tty: true,
+		});
 		diagnostics.record();
 		request();
 		clock.advance(1_000);

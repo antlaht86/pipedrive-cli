@@ -46,7 +46,10 @@ import {
 } from "./result-io.ts";
 
 const parseJson = Result.fromThrowable(JSON.parse, (cause) => String(cause));
-const RequestUrl = z.url().transform((value) => URL.parse(value)).pipe(z.instanceof(URL));
+const RequestUrl = z
+	.url()
+	.transform((value) => URL.parse(value))
+	.pipe(z.instanceof(URL));
 const JsonBody = z.json();
 
 const failure = (message: string, code: ErrorCode): PdFailure =>
@@ -76,12 +79,18 @@ export const createRecordingTransport = ({
 	return (request) => {
 		if (request.method !== "GET") {
 			return Promise.reject(
-				failure("The live recorder refused a non-GET request.", "write_blocked"),
+				failure(
+					"The live recorder refused a non-GET request.",
+					"write_blocked",
+				),
 			);
 		}
 		if (requests >= maxRequests) {
 			return Promise.reject(
-				failure("The live recorder reached its request ceiling.", "request_ceiling"),
+				failure(
+					"The live recorder reached its request ceiling.",
+					"request_ceiling",
+				),
 			);
 		}
 		requests += 1;
@@ -147,7 +156,13 @@ const FIXTURE_PATH = "fixtures/live/responses.json";
 const LISTS = ["deals", "persons", "organizations", "activities", "products"];
 const SEARCHES = ["deals", "persons", "organizations", "products", "items"];
 const CACHED = ["pipelines", "stages", "users"];
-const FIELD_ENTITIES = ["deal", "person", "organization", "activity", "product"];
+const FIELD_ENTITIES = [
+	"deal",
+	"person",
+	"organization",
+	"activity",
+	"product",
+];
 
 const commands = (term: string): string[][] => [
 	...LISTS.map((resource) => [resource, "list", "--limit", "20"]),
@@ -186,15 +201,21 @@ export const classifyCommand = (
 	output: string,
 ): ResultType<CommandOutcome, string> => {
 	if (exit === 0) return ok({ kind: "success", exit });
-	const line = output.split("\n").filter((candidate) => candidate !== "").at(-1);
-	if (line === undefined) return err("live command failed without an error trailer");
+	const line = output
+		.split("\n")
+		.filter((candidate) => candidate !== "")
+		.at(-1);
+	if (line === undefined)
+		return err("live command failed without an error trailer");
 	const parsed = parseJson(line).andThen((value) => {
 		const json = JsonBody.safeParse(value);
 		return json.success ? ok(json.data) : err(json.error.message);
 	});
-	if (parsed.isErr()) return err(`live command output was invalid: ${parsed.error}`);
+	if (parsed.isErr())
+		return err(`live command output was invalid: ${parsed.error}`);
 	const trailer = CommandErrorTrailer.safeParse(parsed.value);
-	if (!trailer.success) return err("live command did not end in an error trailer");
+	if (!trailer.success)
+		return err("live command did not end in an error trailer");
 	if (trailer.data.exit_code !== exit) {
 		return err("live command exit code disagreed with its error trailer");
 	}
@@ -325,7 +346,10 @@ const main = async (args: readonly string[]): Promise<number> => {
 	}
 	return runLive(parsed.value).match(
 		(exit) => exit,
-		(message) => writeStderr(`${message}\n`).map(() => 1).unwrapOr(1),
+		(message) =>
+			writeStderr(`${message}\n`)
+				.map(() => 1)
+				.unwrapOr(1),
 	);
 };
 

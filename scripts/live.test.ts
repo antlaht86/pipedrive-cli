@@ -81,7 +81,10 @@ describe("the hand-invoked live recorder", () => {
 		let command = 0;
 		let persisted = false;
 		const result = await completeRecording(
-			[["deals", "list"], ["persons", "list"]],
+			[
+				["deals", "list"],
+				["persons", "list"],
+			],
 			recorded,
 			() => {
 				command += 1;
@@ -93,7 +96,11 @@ describe("the hand-invoked live recorder", () => {
 					body: command === 1 ? { changed_shape: true } : { data: [] },
 				});
 				return command === 1
-					? okAsync({ kind: "failure" as const, exit: 1 as const, recordableDrift: true })
+					? okAsync({
+							kind: "failure" as const,
+							exit: 1 as const,
+							recordableDrift: true,
+						})
 					: okAsync({ kind: "success" as const, exit: 0 as const });
 			},
 			() => {
@@ -155,7 +162,10 @@ describe("the hand-invoked live recorder", () => {
 		let command = 0;
 		let persisted = false;
 		const result = await completeRecording(
-			[["deals", "list"], ["persons", "list"]],
+			[
+				["deals", "list"],
+				["persons", "list"],
+			],
 			recorded,
 			() => {
 				command += 1;
@@ -209,7 +219,10 @@ describe("live command failure classification", () => {
 
 	test("requires the final trailer and matching process exit", () => {
 		expect(
-			classifyCommand(1, `${trailer("internal", 1)}{"type":"warning"}\n`).isErr(),
+			classifyCommand(
+				1,
+				`${trailer("internal", 1)}{"type":"warning"}\n`,
+			).isErr(),
 		).toBe(true);
 		expect(classifyCommand(1, trailer("request_ceiling", 3)).isErr()).toBe(
 			true,

@@ -43,18 +43,18 @@ A separate suite and a separate command. **Never in CI, never on a schedule, nev
 - **Its output is a re-recording and a git diff, not a pass or fail.** A diff touching only values is noise; a diff touching keys is Pipedrive changing under `pd`, and that is the signal.
 - **It never tests a retry path, a 429, or the Cloudflare block. Permanently.** Those are the tests whose *successful execution* costs the company its API access. They are tested against fixtures with the injected clock and nowhere else.
 
-- [ ] The repository is private, and `AGENTS.md` says the clone is of a private repository
-- [ ] A CI gate greps the whole fixture tree for credential-shaped strings and fails the build on a hit
-- [ ] A CI gate asserts no fixture is embedded in `dist/pd`
-- [ ] All five safety gates fail the build rather than warn
-- [ ] Three CI legs pass: Bun suite plus lint and gates, binary smoke on Linux, binary smoke on Windows
-- [ ] The built binary asserts version agreement, the embedded `AGENTS.md`, no embedded fixture, and the CWD `.env` refusal
-- [ ] `pd` makes no HTTP request that is not a Pipedrive GET, at any point in its lifecycle
-- [ ] The hand-invoked live suite exists, produces a re-recording plus a diff rather than a pass or fail, and is absent from CI and from `bun test`
-- [ ] The live suite contains no retry, 429 or Cloudflare-block test
-- [ ] `1.0.0` is tagged, and a clean checkout at the tag builds a binary printing `1.0.0` with no suffix
-- [ ] A clone-and-build from scratch yields a working `pd` on macOS, Linux and Windows
-- [ ] Design ticket 22 in `.scratch/pd-cli-design/issues/` is resolved once this and ticket 19 are done
+- [x] The repository is private, and `AGENTS.md` says the clone is of a private repository
+- [x] A CI gate greps the whole fixture tree for credential-shaped strings and fails the build on a hit
+- [x] A CI gate asserts no fixture is embedded in `dist/pd`
+- [x] All five safety gates fail the build rather than warn
+- [x] Three CI legs pass: Bun suite plus lint and gates, binary smoke on Linux, binary smoke on Windows
+- [x] The built binary asserts version agreement, the embedded `AGENTS.md`, no embedded fixture, and the CWD `.env` refusal
+- [x] `pd` makes no HTTP request that is not a Pipedrive GET, at any point in its lifecycle
+- [x] The hand-invoked live suite exists, produces a re-recording plus a diff rather than a pass or fail, and is absent from CI and from `bun test`
+- [x] The live suite contains no retry, 429 or Cloudflare-block test
+- [x] `1.0.0` is tagged, and a clean checkout at the tag builds a binary printing `1.0.0` with no suffix
+- [x] A clone-and-build from scratch yields a working `pd` on macOS, Linux and Windows
+- [x] Design ticket 22 in `.scratch/pd-cli-design/issues/` is resolved once this and ticket 19 are done
 
 ## Comments
 
@@ -65,3 +65,11 @@ transport, writes no request headers, enforces one 30-request ceiling across its
 before retry-provoking responses, rewrites the versioned live fixture document and prints its git
 diff. The offline suite, lint, typecheck, gate command, compiled-binary gate and clean-checkout build
 all pass. Release tag: `v1.0.0`.
+
+**2026-08-17 — verification.** Ran the whole acceptance list against the working tree: `bun run
+lint`, `bun run typecheck`, `bun test` (557 pass, 0 fail), `bun run gates` (fixture credential
+tree), `bun run build` and `bun run gates dist/pd` (version agreement, embedded `AGENTS.md`, no
+embedded fixture, CWD `.env` refusal, platform credential path) all pass. `AGENTS.md` names the
+clone as a private repository. The live recorder is invoked only by `bun run live` and appears in no
+CI leg. Linux and Windows binary smoke are asserted by the two CI legs, not locally. Design ticket
+22 is already resolved. Checklist ticked.
