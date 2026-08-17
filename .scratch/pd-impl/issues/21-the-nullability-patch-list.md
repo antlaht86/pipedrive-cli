@@ -62,8 +62,11 @@ All five acceptance criteria are answered, none of them the way this ticket prop
 - No new `parser.patch` entry exists, and no generated file is hand-edited. `openapi-ts.config.ts` is
   untouched.
 - The nine first-surface resources are covered by one rule rather than by nine observations.
-- `pd deals list` against a live account is expected to emit and exit 0. That remains unverified here:
-  nothing in this repository calls the real API, which is the same constraint that closed the ticket.
+- `pd deals list` against a live account emits and exits 0. **Verified by hand, 2026-08-17**, against
+  the real company account: `pd deals list --limit 5` returned `emitted: 5, skipped: 0, requests: 1`.
+  The first record was deal 1856, `status: "open"`, carrying no `won_time`, no `lost_time` and no
+  `expected_close_date` — the exact shape this ticket was opened for. Two further records carried no
+  `org_id`. Nothing was recorded to disk; the evidence is this paragraph.
 
 The third fault the ticket recorded — `zGetProductsItem`'s `tax: z.number().default(0)` materialising
 a value Pipedrive never sent, against ADR-0020 §6 — closes with it, for the same reason.
