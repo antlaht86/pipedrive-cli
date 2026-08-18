@@ -197,6 +197,12 @@ Implementation-level, decided rather than put to the user, per the map's altitud
 - **The status line is redrawn on a timer, not per record.** A 40,000-record walk redrawing per
   record would spend more time on terminal I/O than on HTTP. ~1 Hz is below the rate at which a
   human reads a changing number and above the rate at which the display looks frozen.
+- **A page of records redraws once, on top of the timer.** Ticket 23 measured the gap the timer alone
+  leaves: an anomaly line redraws the status line from the response headers, which is before the
+  page's records are counted, so a completed request can sit next to `0 records` — the one reading a
+  human watches that line to rule out. Arriving records therefore schedule a redraw of their own,
+  coalesced so a whole page costs one write rather than one per record, and a run that reaches its
+  trailer in the same tick as its records draws that redraw before the final summary replaces it.
 - **`\r` is used only under §2's TTY condition**, which is already the gate for the whole status
   line, so no control character can reach a redirected stderr. No cursor addressing, no ANSI colour,
   no alternate screen — a `\r` and a trailing space-pad to erase the previous line's tail is the

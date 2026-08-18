@@ -107,6 +107,7 @@ export class RunDiagnostics {
 	#records = 0;
 	#lastStatusWidth = 0;
 	#finished = false;
+	#redrawPending = false;
 
 	constructor({
 		sink = defaultSink,
@@ -136,10 +137,30 @@ export class RunDiagnostics {
 
 	record(count = 1): void {
 		this.#records += count;
+		this.#scheduleRedraw();
+	}
+
+	/**
+	 * The counter climbs while a page is emitted, but the last thing to have
+	 * drawn the status line may be an anomaly raised before that page arrived —
+	 * `rate-limit gate raised…` fires on the response headers, so its redraw
+	 * shows `0 records` next to a completed request. A page therefore redraws
+	 * once itself, coalesced into a microtask so ADR-0015's "on a timer, not per
+	 * record" cost holds: a whole page of records costs one write, not one each.
+	 */
+	#scheduleRedraw(): void {
+		if (!this.#enabled || this.#finished || this.#redrawPending) return;
+		this.#redrawPending = true;
+		queueMicrotask(() => {
+			if (this.#redrawPending) this.refresh();
+		});
 	}
 
 	refresh(): void {
 		if (!this.#enabled || this.#finished) return;
+		// Every draw settles the debt, whoever asked for it: a timer tick landing
+		// between the records and the microtask leaves that microtask nothing to do.
+		this.#redrawPending = false;
 		const pacing = this.#pacing();
 		const pacingText =
 			pacing === undefined
@@ -207,6 +228,11 @@ export class RunDiagnostics {
 	}
 
 	#finishLine(): void {
+		// A bounded single-page run reaches the trailer in the same tick as its
+		// records, so the coalesced redraw has not run yet. Draw it here, before
+		// the clear, so the last status line ever written agrees with the count on
+		// the `finished:` line below it and on the trailer.
+		if (this.#redrawPending) this.refresh();
 		this.#clearStatus();
 		const ceiling =
 			this.#maxRequests === undefined ? "" : `, ceiling ${this.#maxRequests}`;

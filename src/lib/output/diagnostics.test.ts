@@ -32,6 +32,10 @@ const diagnosticsOf = ({
 	};
 };
 
+/** The status line is the only write that opens with a carriage return. */
+const statusLines = (output: readonly string[]): string[] =>
+	output.filter((text) => text.startsWith("\rpd: "));
+
 describe("run diagnostics", () => {
 	test("a bounded successful machine run is byte-silent", () => {
 		const { diagnostics, output } = diagnosticsOf();
@@ -59,6 +63,53 @@ describe("run diagnostics", () => {
 		expect(text).toContain("gate paused for 2s\n");
 		expect(text).toContain("pd: finished: 1 records, 1 requests, 1.3s\n");
 		expect(text).not.toContain("token");
+	});
+
+	/**
+	 * Ticket 23. The gate-raise anomaly redraws the status line between the
+	 * response arriving and the page's records being emitted, so that redraw
+	 * pairs `0 records` with `1 requests` — which reads as "the walk returned
+	 * nothing", the one thing a human watches the line to find out. Arriving
+	 * records therefore schedule a redraw of their own.
+	 *
+	 * The two runs differ only in whether anything yields between the record and
+	 * the trailer. Nothing does on a bounded single-page walk: `stream` writes the
+	 * trailer in the same tick the page was emitted in, so the coalesced redraw
+	 * never gets its turn and the finish path has to draw it.
+	 */
+	for (const yields of [true, false]) {
+		test(`a run that ${yields ? "yields" : "never yields"} ends on an agreeing count`, async () => {
+			const { diagnostics, output, request } = diagnosticsOf({ tty: true });
+			request();
+			diagnostics.anomaly(
+				"rate-limit gate raised from 10 to 20 requests per window",
+			);
+			diagnostics.record();
+			if (yields) await Promise.resolve();
+			diagnostics.finish();
+
+			expect(statusLines(output).at(-1)).toContain("1 records, 1 requests");
+			expect(output.join("")).toContain("pd: finished: 1 records, 1 requests");
+		});
+	}
+
+	/** ADR-0015 keeps the redraw off the per-record path: a page costs one. */
+	test("a page of records costs one redraw, not one per record", async () => {
+		const { diagnostics, output, request } = diagnosticsOf({ tty: true });
+		request();
+		for (let index = 0; index < 500; index += 1) diagnostics.record();
+		await Promise.resolve();
+		diagnostics.finish();
+
+		expect(statusLines(output)).toHaveLength(1);
+	});
+
+	test("a machine run stays byte-silent when records arrive", async () => {
+		const { diagnostics, output } = diagnosticsOf();
+		diagnostics.record();
+		await Promise.resolve();
+		diagnostics.finish();
+		expect(output.join("")).toBe("");
 	});
 
 	test("verbose request lines redact query values and headers by allowlist", () => {
