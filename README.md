@@ -81,6 +81,25 @@ On macOS `codesign -v` reports an invalid signature on fresh `--compile` output,
 Bun appends its payload after the signature. The binary runs as built and the project
 does not re-sign it.
 
+## Claude Code skill
+
+[`.claude/skills/pd/SKILL.md`](.claude/skills/pd/SKILL.md) is the agent skill for this CLI.
+It tells the agent to run `pd docs` before its first command, to bound every list with
+`--limit`, to narrow with `--fields`, to parse stdout only, and never to pass `--pretty`.
+Working inside this checkout, Claude Code picks it up as is.
+
+To make it available in every project, copy the directory into your personal skills
+directory:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -r .claude/skills/pd ~/.claude/skills/
+```
+
+On Windows the same directory is `%USERPROFILE%\.claude\skills\pd`.
+
+The skill assumes `pd` is on your `PATH`; build it first as described above.
+
 ## Develop
 
 ```bash
