@@ -2,7 +2,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** needs-triage
+**Status:** superseded
 
 ## What happens
 
@@ -30,3 +30,7 @@ rejected distribution plan.
 Two honest options: leave it, on the grounds that a superseded record is history and history should
 not be rewritten; or replace the scope with a neutral placeholder and say in the record's comments
 that the name was removed before publication. Pick one — do not half-scrub.
+
+**2026-08-19 — superseded by 07.** Merged with ticket 05 into one disclosure pass. Both touch the
+same records, and neither was worth a context of its own. The choice this ticket framed — leave the
+name as history, or replace it and say so — is carried over verbatim.

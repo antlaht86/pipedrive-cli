@@ -47,3 +47,21 @@ being an access boundary. That makes 01 and 03 mandatory and narrows what 02 mus
   The tracked canary stays for the release gates. This unblocks 02.
 - **02, 04, 05 open.** 02 is now the last hard blocker: the agent contract, the README and two
   decision records still say the repository is private.
+
+## The remaining work, resized
+
+The first breakdown cut the documentation work into six document-sized tickets. Each was far smaller
+than one context window, so the sequencing overhead exceeded the work. Rebuilt at roughly one full
+context each:
+
+- [06](issues/06-record-the-decision-and-correct-the-normative-documents.md) — the decision record,
+  the supersede pointers, the agent contract and the glossary, as one sweep. Supersedes 02.
+- [07](issues/07-the-disclosure-pass.md) — the disclosure pass: the employer name and the facts about
+  the company account. Supersedes 04 and 05. Blocked by 06, which opens the same records.
+- [08](issues/08-the-binary-exclusion-gate-and-the-empty-fixture-document.md) — the binary-exclusion
+  gate, whose coverage shrank by accident when ticket 01 emptied the tracked fixture document.
+  Blocked by 06.
+- [09](issues/09-flip-the-switch-and-verify-a-cold-clone.md) — the visibility change, and proving a
+  stranger can clone and build. Blocked by 07 and 08.
+
+06 is the frontier. 07 and 08 are independent of each other and can run in parallel once 06 lands.

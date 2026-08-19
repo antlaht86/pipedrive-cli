@@ -2,7 +2,7 @@
 
 **Blocked by:** 01
 
-**Status:** needs-triage
+**Status:** superseded
 
 ## What happens
 
@@ -45,3 +45,9 @@ re-answer only the questions that the clone boundary was silently answering:
   budget, so the shared-budget argument narrows to the company account rather than every run.
 - **What the audience boundary protects** — nothing, once the fixture question in ticket 01 is
   settled. The clone boundary stops being a safety mechanism and becomes an ordinary install step.
+
+**2026-08-19 — superseded by 06.** This ticket was one context too small to hold: the decision
+record, the supersede pointers, the agent contract and the glossary are one sweep over the same
+documents. Ticket 06 carries all of it, and every acceptance question this ticket raised — who may
+obtain the tool, whose budget a run spends, what the clone boundary protected — is an explicit
+acceptance line there.
