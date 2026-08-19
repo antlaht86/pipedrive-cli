@@ -87,3 +87,10 @@ custom_fields` through a pseudoterminal. The last status line drawn is
 line, on the run that failed it. The early `0 records` draw still happens, because the gate-raise
 anomaly fires on the response headers before the page is counted; it is erased before anything else
 is written, so no reader reaches it.
+
+The visible win this ticket promised is now measured. `pd deals list --limit 1200` drew the status
+line four times, at `0`, `500`, `1000` and `1200 records`, against `1`, `1`, `2` and `3 requests`.
+The run took **0.8s**, so ADR-0015 §4's 1 Hz timer never fired once — every draw after the first is
+a page's own redraw. Before this ticket the run would have shown a single `0 records` line for its
+whole duration. The trailer reads `emitted: 1200, requests: 3` and the summary line
+`pd: finished: 1200 records, 3 requests, 0.8s`, agreeing with the last draw.

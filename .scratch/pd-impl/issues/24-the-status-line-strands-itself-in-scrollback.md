@@ -117,3 +117,8 @@ the record line are `yieldLine`. The record starts on a cleared line, and nothin
 scrollback — against the transcript in ticket 23's `## Observed`, where the status text and the
 record shared a line. Nothing was recorded to the repository; `.scratch/live/` is ignored and the
 evidence is this paragraph.
+
+A multi-page walk measures the cost claim. `pd deals list --limit 1200` — three pages, three
+requests, 1200 records — wrote **four** erase sequences and four status draws. Not 1200: the guard
+on `#lastStatusWidth` holds at the scale it was written for, one erase per page plus the trailer's.
+The whole capture contains no record written onto a parked status line.
