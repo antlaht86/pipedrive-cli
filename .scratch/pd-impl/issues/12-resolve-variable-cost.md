@@ -39,3 +39,31 @@ Relation batches have a soft 50-request default ceiling, configurable with `--re
 the search verb, as this ticket said it would. `test/search.test.ts` covers both halves: a cold owner
 cache dispatches nothing and reports `resolved: "partial"`, and a warm one reads the names out of
 cache with no extra request.
+
+**2026-08-19 — measured against the live account.** Three runs of `pd deals list --limit 500
+--resolve --verbose`, cold cache first, captured through a pseudoterminal. All three emitted 500
+records with `skipped: 0` and `resolved: "full"`.
+
+| Run | Requests | What was dispatched |
+| --- | --- | --- |
+| Cold cache | 7 | `dealFields`, `users`, `pipelines`, `stages`, `deals`, `persons`, `organizations` |
+| Warm cache | 3 | `deals`, `persons`, `organizations` |
+| `--fields id,title` | 1 | `deals` |
+
+Three things this settles, none previously measured against a real account:
+
+- **The cache saves four requests per run** — the whole fixed-cost tier, ADR-0005's four cached
+  resources, in one hit. 1.2s falls to 0.5s.
+- **Variable-cost resolution stays run-scoped.** `persons` and `organizations` are dispatched again
+  on the warm run, which is what ticket 12 designed: the id→name map lives for the run and is not
+  persisted. One batch each covered every relation on the page, well inside the 100-id batch size
+  and nowhere near the 50-request budget, so no `resolution_budget_exhausted` warning was raised.
+- **The `--fields` box is confirmed on real data.** `id,title` excludes `person_id` and `org_id`,
+  and the resolve requests fall to zero — one request for the whole run.
+
+Two caveats recorded rather than claimed. The trailer says `resolved: "full"` on the `--fields` run,
+where nothing was resolved because nothing needed resolving; ADR-0008's tri-state cannot separate
+"resolved everything" from "there was nothing to resolve", and that is the contract rather than a
+fault. And a 500-record run is one page, so it cannot show enrichment interleaving with the next
+page's fetch — every request necessarily precedes the first record here, and the streaming claim
+needs a multi-page run to test.
