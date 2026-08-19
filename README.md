@@ -116,10 +116,11 @@ bun run live [search-term]
 ```
 
 It uses the normal credential chain, enforces a 30-request ceiling, rewrites
-`fixtures/live/responses.json`, and prints its git diff. It never runs in CI or as
-part of `bun test`, and stops rather than exercising a retry, 429, or Cloudflare
-block path. Recorded response bodies contain real company CRM data; the private
-repository is their access boundary. Request headers are never recorded.
+`.scratch/live/responses.json`, and prints a `git diff --no-index` of the previous
+recording against the new one. It never runs in CI or as part of `bun test`, and stops
+rather than exercising a retry, 429, or Cloudflare block path. Recorded response bodies
+contain real CRM data from the account the run points at, so the recording lives in an
+ignored directory and is never committed. Request headers are never recorded.
 
 ### Regenerating the Pipedrive clients
 

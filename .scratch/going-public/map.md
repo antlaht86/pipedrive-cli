@@ -1,0 +1,49 @@
+# Going public
+
+Can this repository be made public? A QA session on 2026-08-19 audited the working tree and the whole
+git history for private data.
+
+## What the audit found
+
+**The history is clean.** Across all 86 commits: exactly one blob has ever existed at
+`fixtures/live/responses.json` and it is the canary placeholder with an empty fixture list. No API
+tokens, no real email addresses, no home-directory paths, no internal links, no colleague names. One
+file has ever been deleted and it held source, not data. Every Pipedrive-shaped record in the tree
+comes from an invented generator; the sample custom-field keys are hand-patterned hex, and the two
+real-looking field keys in the research notes are quoted from Pipedrive's public documentation. The
+`.scratch/live/` directory on disk holds real run output but is ignored and untracked.
+
+**So nothing leaks today.** The blockers are design and documentation, not spilled data.
+
+## Tickets
+
+- [01](issues/01-live-fixtures-land-in-a-tracked-path.md) — the live recorder writes real CRM data
+  into a tracked path. The one hard blocker: the next recording plus a commit is a permanent leak.
+- [02](issues/02-the-documents-say-the-repository-is-private.md) — the agent contract, the README and
+  two decision records all state the repository is private, and the distribution record makes that an
+  access boundary. Blocked by 01.
+- [03](issues/03-no-licence-and-the-package-is-marked-private.md) — no `LICENSE`, and the manifest is
+  marked private. Human decision.
+- [04](issues/04-the-superseded-npm-scope-names-the-employer.md) — the employer's name survives as an
+  npm scope in a declined distribution plan.
+- [05](issues/05-the-budget-record-states-facts-about-the-company-account.md) — two records state
+  operational facts about the real company account.
+
+01 and 02 gate publication. 03 is required for publication to mean anything. 04 and 05 are
+judgement calls that can be answered either way, but should be answered before the switch, not after.
+
+## Goal, stated 2026-08-19
+
+The reporter wants to share `pd` with other people and have the repository be clonable. The
+distribution model does not change — build-from-source stays the only channel — but the clone stops
+being an access boundary. That makes 01 and 03 mandatory and narrows what 02 must re-decide.
+
+## Progress
+
+- **03 done, 2026-08-19.** `LICENSE` holds MIT, copyright 2026 Antti Lahtinen; `package.json` gains
+  `"license": "MIT"` and keeps `"private": true`.
+- **01 done, 2026-08-19.** The live recorder writes to the ignored `.scratch/live/responses.json`,
+  and its drift signal is a `git diff --no-index` between the previous recording and the new one.
+  The tracked canary stays for the release gates. This unblocks 02.
+- **02, 04, 05 open.** 02 is now the last hard blocker: the agent contract, the README and two
+  decision records still say the repository is private.

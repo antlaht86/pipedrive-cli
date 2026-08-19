@@ -4,7 +4,10 @@
  * This file is deliberately outside `test/`, is never imported by CI, and is
  * reached only through `bun run live`. It records real response bodies through
  * the same guarded transport as production, supplies a hard request ceiling,
- * and prints a git diff rather than comparing values or declaring a pass.
+ * and prints a git diff of the previous recording against the new one rather
+ * than comparing values or declaring a pass. The recording itself is written
+ * to an ignored directory and is never committed: it holds real CRM data and
+ * the repository is meant to be clonable by anyone.
  * Retry-provoking responses are converted to `PdFailure` before guardedFetch
  * can retry them: the live suite never exercises 429, 5xx or Cloudflare paths.
  */
@@ -38,7 +41,10 @@ import {
 } from "./release-gates.ts";
 import {
 	homeDirectory,
+	makeDirectory,
+	readText,
 	runProcessSync,
+	withTempDirectory,
 	withTempDirectoryAsync,
 	writeStderr,
 	writeStdout,
@@ -152,7 +158,14 @@ export const createRecordingTransport = ({
 };
 
 const MAX_REQUESTS = 30;
-const FIXTURE_PATH = "fixtures/live/responses.json";
+/**
+ * The recording holds real deals, real organisation names and real amounts, so
+ * it is written to an ignored directory. `.gitignore` covers `.scratch/live/`,
+ * which means no `git add` reaches it and the public repository cannot acquire
+ * customer data by anyone forgetting the rule.
+ */
+const RECORDING_DIRECTORY = ".scratch/live";
+const RECORDING_PATH = join(RECORDING_DIRECTORY, "responses.json");
 const LISTS = ["deals", "persons", "organizations", "activities", "products"];
 const SEARCHES = ["deals", "persons", "organizations", "products", "items"];
 const CACHED = ["pipelines", "stages", "users"];
@@ -273,24 +286,58 @@ export const completeRecording = (
 			: persist().map(() => 0),
 	);
 
+/**
+ * The signal is the diff between the previous recording and the new one. An
+ * ignored path has no index entry, so the comparison is `--no-index` over two
+ * files rather than `git diff` against HEAD. `--no-index` exits 1 for "the
+ * files differ", which is the interesting outcome and not a failure; only 2
+ * and above mean git itself failed.
+ */
+const diffRecording = (
+	previous: string,
+	next: string,
+): ResultType<void, string> =>
+	withTempDirectory("pd-live-diff-", (workspace) => {
+		const previousPath = join(workspace, "previous.json");
+		const nextPath = join(workspace, "next.json");
+		return writeText(previousPath, previous)
+			.andThen(() => writeText(nextPath, next))
+			.andThen(() =>
+				runProcessSync([
+					"git",
+					"diff",
+					"--no-index",
+					"--src-prefix=previous/",
+					"--dst-prefix=current/",
+					"--",
+					previousPath,
+					nextPath,
+				]),
+			)
+			.andThen((diff) =>
+				diff.exitCode > 1
+					? err(`git diff failed with exit ${diff.exitCode}`)
+					: writeStdout(diff.stdout)
+							.andThen(() => writeStderr(diff.stderr))
+							.map(() => undefined),
+			);
+	});
+
 const persistRecording = (
 	recorded: readonly RecordedFixture[],
 ): ResultType<void, string> =>
-	serializeFixtureDocument(fixtureDocument(recorded))
-		.andThen((text) => writeText(FIXTURE_PATH, text))
-		.andThen(() => runProcessSync(["git", "diff", "--", FIXTURE_PATH]))
-		.andThen((diff) =>
-			writeStdout(
-				`re-recorded ${recorded.length} responses in ${FIXTURE_PATH}\n`,
-			)
-				.andThen(() => writeStdout(diff.stdout))
-				.andThen(() => writeStderr(diff.stderr))
-				.andThen(() =>
-					diff.exitCode === 0
-						? ok(undefined)
-						: err(`git diff failed with exit ${diff.exitCode}`),
+	serializeFixtureDocument(fixtureDocument(recorded)).andThen((text) => {
+		const previous = readText(RECORDING_PATH).unwrapOr("");
+		return makeDirectory(RECORDING_DIRECTORY)
+			.andThen(() => writeText(RECORDING_PATH, text))
+			.andThen(() =>
+				writeStdout(
+					`re-recorded ${recorded.length} responses in ${RECORDING_PATH}\n` +
+						"this path is ignored by git and must never be committed\n",
 				),
-		);
+			)
+			.andThen(() => diffRecording(previous, text));
+	});
 
 export const runLive = (term: string): ResultAsync<number, string> =>
 	homeDirectory().asyncAndThen((home) =>
