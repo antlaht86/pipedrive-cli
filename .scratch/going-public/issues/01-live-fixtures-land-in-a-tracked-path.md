@@ -86,3 +86,18 @@ them, but the wider privacy argument is untouched.
 Consequence for ticket 02: the testing record still claims the signal is a git diff of a committed
 fixture, and the distribution record still rests on the clone being an access boundary. Fixing that
 prose belongs to 02, which this ticket unblocks.
+
+**2026-08-19 — two review findings fixed.** A two-axis review of the change raised both, and both
+were real:
+
+- The previous recording was read with `unwrapOr("")`, so a permission or I/O fault became "first
+  run" and the drift output showed the whole recording as new. `previousRecording` now asks whether
+  the file exists and propagates a genuine read failure instead of hiding it. `fileExists` joins the
+  wrappers in `scripts/result-io.ts`.
+- On `git diff --no-index` exit 2 and above the code errored without printing git's own diagnostic.
+  Both streams are written first, and the exit code is judged after.
+
+Two findings were noted and not acted on. `binaryContainsFixture` in the release gates now has only
+the canary string to grep for, because the tracked fixture document is permanently empty — the gate
+is weaker by construction, and whether it still earns its place belongs with ticket 02's rewrite of
+the testing record. And "recording" is a new domain word with no glossary entry in `CONTEXT.md`.

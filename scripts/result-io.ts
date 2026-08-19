@@ -1,4 +1,5 @@
 import {
+	existsSync,
 	mkdtempSync,
 	mkdirSync,
 	readFileSync,
@@ -24,6 +25,11 @@ const message = (operation: string, cause: unknown): string =>
 export const readText = Result.fromThrowable(
 	(path: string) => readFileSync(path, "utf8"),
 	(cause) => message("read failed", cause),
+);
+
+export const fileExists = Result.fromThrowable(
+	(path: string) => existsSync(path),
+	(cause) => message("existence check failed", cause),
 );
 
 export const readBytes = Result.fromThrowable(

@@ -40,6 +40,7 @@ import {
 	type RecordedFixture,
 } from "./release-gates.ts";
 import {
+	fileExists,
 	homeDirectory,
 	makeDirectory,
 	readText,
@@ -315,29 +316,42 @@ const diffRecording = (
 				]),
 			)
 			.andThen((diff) =>
-				diff.exitCode > 1
-					? err(`git diff failed with exit ${diff.exitCode}`)
-					: writeStdout(diff.stdout)
-							.andThen(() => writeStderr(diff.stderr))
-							.map(() => undefined),
+				writeStdout(diff.stdout)
+					.andThen(() => writeStderr(diff.stderr))
+					.andThen(() =>
+						diff.exitCode > 1
+							? err(`git diff failed with exit ${diff.exitCode}`)
+							: ok(undefined),
+					),
 			);
 	});
+
+/**
+ * A missing recording is the first run and diffs as one whole addition. A read
+ * that fails for any other reason is not that, and swallowing it would report
+ * total drift on what is really a permission or an I/O fault.
+ */
+const previousRecording = (): ResultType<string, string> =>
+	fileExists(RECORDING_PATH).andThen((exists) =>
+		exists ? readText(RECORDING_PATH) : ok(""),
+	);
 
 const persistRecording = (
 	recorded: readonly RecordedFixture[],
 ): ResultType<void, string> =>
-	serializeFixtureDocument(fixtureDocument(recorded)).andThen((text) => {
-		const previous = readText(RECORDING_PATH).unwrapOr("");
-		return makeDirectory(RECORDING_DIRECTORY)
-			.andThen(() => writeText(RECORDING_PATH, text))
-			.andThen(() =>
-				writeStdout(
-					`re-recorded ${recorded.length} responses in ${RECORDING_PATH}\n` +
-						"this path is ignored by git and must never be committed\n",
-				),
-			)
-			.andThen(() => diffRecording(previous, text));
-	});
+	serializeFixtureDocument(fixtureDocument(recorded)).andThen((text) =>
+		previousRecording().andThen((previous) =>
+			makeDirectory(RECORDING_DIRECTORY)
+				.andThen(() => writeText(RECORDING_PATH, text))
+				.andThen(() =>
+					writeStdout(
+						`re-recorded ${recorded.length} responses in ${RECORDING_PATH}\n` +
+							"this path is ignored by git and must never be committed\n",
+					),
+				)
+				.andThen(() => diffRecording(previous, text)),
+		),
+	);
 
 export const runLive = (term: string): ResultAsync<number, string> =>
 	homeDirectory().asyncAndThen((home) =>
