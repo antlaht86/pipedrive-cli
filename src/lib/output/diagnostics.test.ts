@@ -138,6 +138,25 @@ describe("run diagnostics", () => {
 		expect(output.filter(isStatusClear)).toHaveLength(1);
 	});
 
+	test("the cache line is verbose-only, and a TTY alone does not earn it", () => {
+		const tty = diagnosticsOf({ tty: true });
+		tty.diagnostics.cacheServed("users");
+		expect(tty.output.join("")).not.toContain("served from cache");
+
+		const verbose = diagnosticsOf({ verbose: true });
+		verbose.diagnostics.cacheServed("dealFields");
+		expect(verbose.output.join("")).toContain(
+			"pd: dealFields served from cache, no request\n",
+		);
+
+		// After the trailer nothing may be written — the same rule the request
+		// line follows.
+		verbose.diagnostics.finish();
+		const settled = verbose.output.length;
+		verbose.diagnostics.cacheServed("stages");
+		expect(verbose.output).toHaveLength(settled);
+	});
+
 	test("verbose request lines redact query values and headers by allowlist", () => {
 		const { diagnostics, output } = diagnosticsOf({ verbose: true });
 		diagnostics.request({
@@ -161,7 +180,7 @@ describe("run diagnostics", () => {
 			}),
 			durationMs: 25,
 			attempt: 1,
-			cacheHit: false,
+			upstreamCacheHit: false,
 		});
 		diagnostics.finish();
 

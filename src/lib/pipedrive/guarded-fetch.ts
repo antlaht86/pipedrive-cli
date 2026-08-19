@@ -150,6 +150,11 @@ const rateLimitHeader = (
 };
 
 /** Standard proxy cache signals; their values never enter diagnostics. */
+/**
+ * Pipedrive's cache or Cloudflare's, never `pd`'s — `pd`'s own cache
+ * short-circuits before a request is formed, so no response of its ever reaches
+ * here. Ticket 25 named the reported field `upstream_cache_hit` for that reason.
+ */
 const responseCameFromCache = (response: Response): boolean =>
 	response.headers.has("age") ||
 	/\bhit\b/i.test(response.headers.get("x-cache") ?? "") ||
@@ -433,7 +438,8 @@ export const createGuardedFetch = ({
 					: { transportError: true }),
 				durationMs,
 				attempt: attemptNumber,
-				cacheHit: attempt.isOk() && responseCameFromCache(attempt.value),
+				upstreamCacheHit:
+					attempt.isOk() && responseCameFromCache(attempt.value),
 			});
 
 			// A transport that refuses with a `PdFailure` has already said what went

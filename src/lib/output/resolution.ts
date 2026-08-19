@@ -210,6 +210,12 @@ export const createCachedOwnerResolution = ({
 	if (read?.outcome === "skipped") writer.warn(read.warning);
 	const records =
 		read?.outcome === "hit" ? parseAll(source, read.records) : undefined;
+	// Ticket 25, on the same rule as the sites below: the line is written where
+	// the run commits to the cached records, not at the read that returned them.
+	// A hit whose records will not parse dispatches nothing either, but saying
+	// "served from cache" about it would answer "did the cache work" with a yes
+	// the `owner_resolution_unavailable` warning underneath then contradicts.
+	if (records !== undefined) writer.cacheServed(source.entry);
 	const users = records === undefined ? undefined : idNameMap(records);
 	if (users === undefined) {
 		writer.resolutionPartial();
@@ -289,7 +295,12 @@ export const createResolution = async ({
 			if (read.outcome === "skipped") writer.warn(read.warning);
 			if (read.outcome === "hit") {
 				const records = parseAll(source, read.records);
-				if (records !== undefined) return { records, source };
+				// Ticket 25: reported only on the branch that returns, because the
+				// other one falls through to `fresh` and does dispatch a request.
+				if (records !== undefined) {
+					writer.cacheServed(source.entry);
+					return { records, source };
+				}
 			}
 		}
 		return fresh(source);

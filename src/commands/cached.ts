@@ -261,6 +261,11 @@ export const cachedCommand = async ({
 			const fresh = await fetchFresh();
 			if (fresh.isErr()) return writer.error(fresh.error);
 			checked = validate(resource, source, fresh.value.records);
+		} else if (fromCache) {
+			// Ticket 25, and this is why the report waits until here rather than
+			// firing where the entry was read: the branch above answers a hit with a
+			// request, and "no request" would already have been written by then.
+			writer.cacheServed(source.entry);
 		}
 
 		// ADR-0006 §4, as `walk.ts` applies it to a first page and ADR-0029 §5
@@ -319,6 +324,10 @@ export const cachedCommand = async ({
 		const fresh = await fetchFresh();
 		if (fresh.isErr()) return writer.error(fresh.error);
 		record = matched(fresh.value.records);
+	} else if (loaded.value.fromCache) {
+		// Ticket 25, deferred for the same reason as the list path above: a warm
+		// `get` that does not find its id spends a request after all.
+		writer.cacheServed(source.entry);
 	}
 
 	if (record === undefined) return writer.error(notFound(resource, id));

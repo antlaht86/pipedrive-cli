@@ -138,7 +138,22 @@ would both be silent, which is the exact ambiguity ADR-0011's stalls created.
 
 `--verbose` is a boolean global flag. It forces §4's progress and anomaly output on regardless of
 TTY, and adds a line per HTTP request: method, path, redacted query, status, duration, attempt
-number, and whether the response came from cache.
+number, and whether the response came from an **upstream** cache — Pipedrive's or Cloudflare's, read
+from the response's `age`, `x-cache` and `cf-cache-status` headers. The field is named
+`upstream_cache_hit` for that reason (ticket 25).
+
+It can never report ADR-0005's own cache. A hit there short-circuits before a request is formed, so
+there is no request line to carry it. `--verbose` emits a line of its own instead, naming the entry
+and saying that nothing was dispatched:
+
+```
+pd: users served from cache, no request
+pd: GET /api/v2/deals status=200 duration=180ms attempt=1 upstream_cache_hit=no
+```
+
+That line is behind `--verbose` alone, not a plain TTY run, because it is the counterpart of the
+request line above it. A cache hit is not a request and never moves the trailer's `requests` count —
+the whole point of the report is that the number went down.
 
 No short form — ADR-0009 §"no synonyms" forbids `-v`. No `--quiet`, because the default is already
 silent for every consumer that would want it. No level scale (`--log-level=debug`): with prose that
@@ -215,6 +230,15 @@ Implementation-level, decided rather than put to the user, per the map's altitud
   status line depends on. The `--pretty` table is the one stdout write that goes round that funnel,
   and it needs no erase: §7 already suppresses the status line while the table prints, so the
   diagnostics trailer has cleared the line and ended on a newline before the first row lands.
+- **A cache hit is reported where it is served, not where the entry is read.** Ticket 25 measured a
+  `deals list --resolve` run twice: seven requests cold, three warm, and the `--verbose` log said
+  nothing about the four that disappeared. Three read sites answer a hit with a request anyway — a
+  warm entry whose every record has stopped validating, a warm `get` whose id is not in it, and a
+  resolution entry that no longer parses — so the line is written at the point the run commits to
+  the cached records, not at the `read` that returned them. A hit that is followed by a refetch
+  reports the refetch and not "no request". The cache-only owner resolver never dispatches and so
+  could report either way; it defers on the same rule, because "served from cache" about an entry
+  that did not answer contradicts the `owner_resolution_unavailable` warning underneath it.
 - **`\r` is used only under §2's TTY condition**, which is already the gate for the whole status
   line, so no control character can reach a redirected stderr. No cursor addressing, no ANSI colour,
   no alternate screen — a `\r` and a trailing space-pad to erase the previous line's tail is the

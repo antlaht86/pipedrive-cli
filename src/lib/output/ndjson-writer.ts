@@ -35,6 +35,7 @@
 import { pdError, type PdError } from "../errors.ts";
 import { PdFailure } from "../pipedrive/failure.ts";
 import { causeOf, isRecordRejected } from "../warnings.ts";
+import type { CacheEntryName } from "../cache/entries.ts";
 import type { RunDiagnostics } from "./diagnostics.ts";
 import type { PdWarning } from "../warnings.ts";
 import type { Bound, Page } from "../pipedrive/walk.ts";
@@ -567,6 +568,15 @@ export class NdjsonWriter {
   #humanWarning(message: string): void {
     if (this.#diagnostics !== undefined) this.#diagnostics.warning(message);
     else this.#stderr(`pd: ${message}\n`);
+  }
+
+  /**
+   * Ticket 25: an ADR-0005 entry answered from disk, so no request was formed.
+   * `--verbose` only, and the diagnostics writer owns that gate.
+   */
+  cacheServed(entry: CacheEntryName): void {
+    this.#refuseAfterTrailer("cacheServed");
+    this.#diagnostics?.cacheServed(entry);
   }
 
   /** A permanent human diagnostic; silent in machine mode. */

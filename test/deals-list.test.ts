@@ -111,7 +111,7 @@ describe("the walk", () => {
 		expect(diagnostics).toContain("GET /api/v2/deals");
 		expect(diagnostics).toContain("status=200");
 		expect(diagnostics).toContain("attempt=1");
-		expect(diagnostics).toContain("cache_hit=yes");
+		expect(diagnostics).toContain("upstream_cache_hit=yes");
 		expect(diagnostics).not.toContain("age=12");
 		expect(diagnostics).toContain("pd: finished:");
 	});

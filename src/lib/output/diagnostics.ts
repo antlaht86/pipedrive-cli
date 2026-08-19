@@ -1,5 +1,6 @@
 /** Human-only run diagnostics. stderr is prose and never a machine contract. */
 
+import type { CacheEntryName } from "../cache/entries.ts";
 import type { Clock } from "../pipedrive/clock.ts";
 import { systemClock } from "../pipedrive/clock.ts";
 import type { Sink } from "./ndjson-writer.ts";
@@ -66,7 +67,8 @@ export type RequestDiagnostic = {
 	response?: Response;
 	durationMs: number;
 	attempt: number;
-	cacheHit: boolean;
+	/** Pipedrive's or Cloudflare's, from `age` / `x-cache` / `cf-cache-status`. */
+	upstreamCacheHit: boolean;
 	transportError?: boolean;
 };
 
@@ -210,12 +212,29 @@ export class RunDiagnostics {
 		this.refresh();
 	}
 
+	/**
+	 * Ticket 25. `pd`'s own cache short-circuits before a request is formed, so a
+	 * hit on one of ADR-0005's entries can never appear on the per-request line
+	 * below — it would have to be a line about a request that was not made. It
+	 * gets its own line instead, and the pair is what makes a cold run and a warm
+	 * run of the same command tell themselves apart on stderr alone.
+	 *
+	 * Gated on `--verbose` rather than on `#enabled`, exactly as the per-request
+	 * line is: §5 puts the request log behind the flag, and this is its
+	 * counterpart. A bare TTY run keeps its status line and its anomalies and
+	 * gains nothing here.
+	 */
+	cacheServed(entry: CacheEntryName): void {
+		if (!this.#verbose || this.#finished) return;
+		this.anomaly(`${entry} served from cache, no request`);
+	}
+
 	request({
 		request,
 		response,
 		durationMs,
 		attempt,
-		cacheHit,
+		upstreamCacheHit,
 		transportError = false,
 	}: RequestDiagnostic): void {
 		if (!this.#verbose || this.#finished) return;
@@ -230,7 +249,7 @@ export class RunDiagnostics {
 		this.anomaly(
 			`${request.method.toUpperCase()} ${path}${query === "" ? "" : `?${query}`} ` +
 				`status=${status} duration=${durationMs}ms attempt=${attempt} ` +
-				`cache_hit=${cacheHit ? "yes" : "no"}${headers === "" ? "" : ` headers=${headers}`}`,
+				`upstream_cache_hit=${upstreamCacheHit ? "yes" : "no"}${headers === "" ? "" : ` headers=${headers}`}`,
 		);
 	}
 
