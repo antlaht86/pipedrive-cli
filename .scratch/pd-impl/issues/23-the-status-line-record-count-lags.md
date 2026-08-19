@@ -79,3 +79,11 @@ fixing; ADR-0015 §2 already assumes the human case is `pd deals list > out.ndjs
 arise.
 
 589 tests pass, `tsc --noEmit` and `eslint .` clean.
+
+**2026-08-19 — verified against the live account.** Re-ran `pd deals list --limit 1 --fields
+custom_fields` through a pseudoterminal. The last status line drawn is
+`pd: 1 records, 1 requests, 0.3s`, the trailer carries `emitted: 1` and the summary line reads
+`pd: finished: 1 records, 1 requests, 0.3s` — the three agree, which is this ticket's acceptance
+line, on the run that failed it. The early `0 records` draw still happens, because the gate-raise
+anomaly fires on the response headers before the page is counted; it is erased before anything else
+is written, so no reader reaches it.

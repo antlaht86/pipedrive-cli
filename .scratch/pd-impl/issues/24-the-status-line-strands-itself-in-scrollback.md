@@ -103,3 +103,17 @@ erase's shape is named once as `isStatusClear` in `test/support/ndjson.ts`, beca
 count erasures.
 
 595 tests pass, `tsc --noEmit` and `eslint .` clean.
+
+**2026-08-19 — verified against the live account.** The same invocation this ticket was written
+from, `pd deals list --limit 1 --fields custom_fields`, captured through a pseudoterminal so the
+status line renders as it does for a human. The bytes around the record line now read:
+
+```
+\rpd: 0 records, 1 requests, 0.3s, gate 20/5 per 2s, concurrency 4\r                    \r{"type":"record",…
+```
+
+The carriage return, the run of spaces and the second carriage return between the status text and
+the record line are `yieldLine`. The record starts on a cleared line, and nothing is left in
+scrollback — against the transcript in ticket 23's `## Observed`, where the status text and the
+record shared a line. Nothing was recorded to the repository; `.scratch/live/` is ignored and the
+evidence is this paragraph.

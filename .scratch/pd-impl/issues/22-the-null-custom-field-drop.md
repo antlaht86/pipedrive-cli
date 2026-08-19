@@ -103,3 +103,9 @@ ADR-0025's nested-absence section repeated the withdrawn exemption; it gained a
 `Partly superseded by` header rather than a body edit.
 
 585 tests pass, `tsc --noEmit` and `eslint .` clean, `dist/pd` builds and reports `1.1.0`.
+
+**2026-08-19 — verified against the live account.** `pd deals list --limit 1 --fields custom_fields`
+emitted a record whose `custom_fields` block holds **4** filled entries, against the 87 the account
+defines — the ratio this ticket measured. The whole record contains no `null` at any depth. Its
+top-level keys are `type`, `record_type`, `id` and `custom_fields`, which is the projection asked
+for and nothing else.
