@@ -1,7 +1,12 @@
 # ADR-0019: Testing `pd` against an API it must not spend
 
-Status: accepted
+Status: accepted, partly superseded
 Date: 2026-08-12
+Partly superseded by: [ADR-0031](0031-the-repository-is-public.md) — §10 is withdrawn whole: the
+repository is public, and no recording is committed, so its privacy protects nothing. §9's signal is
+amended — the live suite's output is still a re-recording a human reads, but the diff is a
+`git diff --no-index` between two recordings on an ignored path. §9's three hard rules and every
+other section stand unchanged.
 Deciding ticket: [Testing strategy against a shared live account](../../.scratch/pd-cli-design/issues/28-grilling-testing-strategy.md)
 Extends: [ADR-0013](0013-read-only-enforcement.md) §2 — the CI gate set grows from three to six, and the fixture tree gains two of its own
 Extends: [ADR-0011](0011-concurrency-and-retry.md) — the gate and both retry budgets take an injected clock; no observable behaviour changes
@@ -203,6 +208,11 @@ account state — which is a recording-time constraint, not a test-time one.
 
 ### 9. The live suite exists, is invoked by hand, and never provokes a failure
 
+*Amended by [ADR-0031](0031-the-repository-is-public.md) §3: the three hard rules and the refusal to
+fail stand, but the output is a recording on an ignored path rather than a committed fixture, and
+the signal is a `git diff --no-index` between two recordings rather than a git diff against HEAD.
+Read every "git diff" below as that diff.*
+
 A separate suite, a separate command, and three hard rules.
 
 - **It never runs in CI, and never on a schedule.** A weekly automated run was rejected: it would put a
@@ -226,8 +236,13 @@ tested against fixtures with §4's clock, where a 429 is a recorded response and
 number, and they are tested nowhere else. This is not a gap to close later; it is a refusal, and it is
 the strongest single reason the fake clock is worth its parameter.
 
-**Its output is a re-recording, not a pass or fail.** The live suite fetches, writes fixtures, and
-leaves a git diff for a human to read. It does not assert equality against the committed fixtures and
+**Its output is a re-recording, not a pass or fail.** The live suite fetches, ~~writes fixtures, and
+leaves a git diff for a human to read. It does not assert equality against the committed fixtures~~
+**Corrected by [ADR-0031](0031-the-repository-is-public.md) §3**: writes a recording to the ignored
+`.scratch/live/responses.json`, keeps the previous one beside it, and leaves a
+`git diff --no-index` between the two for a human to read. No fixture is written and none is
+committed, so there is no committed fixture to assert equality against. The refusal is unchanged —
+the suite does not assert equality and
 fail the run — that design produces a suite that goes red every time a colleague edits a deal, and a
 suite that is red for uninteresting reasons is a suite nobody reads. A diff touching only values is
 noise; a diff touching keys is Pipedrive changing under `pd`, and that is the signal the whole layer
@@ -241,12 +256,18 @@ manual.
 
 ### 10. Fixtures keep real CRM data, and that has named consequences
 
-*Confirmed and extended by [ADR-0021](0021-distribution-build-from-source.md) §9. The repository stays
-private, and under ADR-0021 it is also the distribution channel — so this section now bounds who can
-obtain `pd` at all, not only who can read the fixtures. Splitting the fixtures into a second repository
-and sanitising them for a public one were both considered there and declined. Read "the tarball" below
-as "the built binary": the gate is the same, checked against `dist/pd`. The reference to ADR-0014 §1's
-public npm package is stale — there is no published package.*
+*Superseded by [ADR-0031](0031-the-repository-is-public.md). The repository is public and anyone may
+clone it. Nothing in this section is normative any more: no recording is committed, so there is no
+private data in the tree for privacy to protect, and the clone bounds nobody's access to `pd`. What
+survives is stated in ADR-0031 §4 — real CRM data never returns to version control, permanently and
+independently of visibility. This section is kept as the account of why the constraint existed.*
+
+*Historical note, from when this section still held: it was confirmed and extended by
+[ADR-0021](0021-distribution-build-from-source.md) §9, which made the repository the distribution
+channel and so made this section bound who could obtain `pd` at all. Splitting the fixtures into a
+second repository and sanitising them for a public one were both considered there and declined. Read
+"the tarball" below as "the built binary": the gate is the same, checked against `dist/pd`. The
+reference to ADR-0014 §1's public npm package is stale — there is no published package.*
 
 Recorded responses are committed verbatim: real deals, real organisation names, real contact addresses,
 real amounts, real owners. Anonymisation at record time was rejected in favour of the fixture being
@@ -289,9 +310,12 @@ it was never about the token, and the token has no exception.
 - **Two known blind spots, both stated rather than closed.** Pipedrive can change without anything
   noticing until a human runs the live suite; and the retry, 429 and Cloudflare paths are never
   exercised against the real API, on purpose and permanently.
-- **The repository must stay private.** Recorded fixtures hold real customer data and git history keeps
-  it. This is now a design constraint with a name, and `AGENTS.md` says nothing about it — it is a
-  contributor fact, not an agent-visible one.
+- ~~**The repository must stay private.** Recorded fixtures hold real customer data and git history
+  keeps it. This is now a design constraint with a name, and `AGENTS.md` says nothing about it — it is
+  a contributor fact, not an agent-visible one.~~ **Superseded by
+  [ADR-0031](0031-the-repository-is-public.md)**: the repository is public. No recording reaches the
+  tree, so there is no customer data for privacy to protect. The permanent rule that replaces this one
+  is ADR-0031 §4 — a recording is never committed, whatever the visibility.
 - **CI runs four legs**: the Bun suite plus lint and the gates, the Node 20 and Node LTS bundle smoke,
   and the Windows bundle smoke. The three bundle legs exist to protect ADR-0014's single distribution
   channel, and they are short by design.

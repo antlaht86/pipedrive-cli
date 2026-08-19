@@ -1,14 +1,19 @@
 # ADR-0021: `pd` is built from source, and the repository is the channel
 
-Status: accepted
+Status: accepted, partly superseded
 Date: 2026-08-13
+Partly superseded by: [ADR-0031](0031-the-repository-is-public.md) — §9 is withdrawn whole and §1's
+"the repository is the access control" sentence with it. The repository is public, the clone bounds
+nobody, and `pd`'s audience is no longer this repository's access list. §1's build-from-source
+channel — no registry, no release artifact, no installer — stands unchanged, as does every other
+section.
 Deciding input: user direction — "jakelu täytyy suunnitella uudestaan … täytyy ladata repo ja bun js:llä tehdä binaari"
 Supersedes: [ADR-0014](0014-distribution.md) in full
 Withdraws: [ADR-0001](0001-error-model-and-exit-codes.md)'s thirteenth variant `unsupported_runtime`, which ADR-0014 §9 added
 Releases: [ADR-0012](0012-authentication-and-credential-resolution.md) §4's constraint — the `Bun.*` ban is no longer load-bearing
 Reinforces: [ADR-0005](0005-cache-design.md) §6 — the original "the binary may sit on a read-only path" reason returns
 Amends: [ADR-0019](0019-testing-strategy.md) §7 and §8 — the Node smoke legs and the `Bun.*` lint gate are replaced
-Confirms: [ADR-0019](0019-testing-strategy.md) §10 — the repository's privacy is kept, and now bounds who can obtain `pd` at all (§9)
+Confirms: [ADR-0019](0019-testing-strategy.md) §10 — the repository's privacy is kept, and now bounds who can obtain `pd` at all (§9) *(withdrawn by [ADR-0031](0031-the-repository-is-public.md): ADR-0019 §10 is superseded, the repository is public, and nothing here confirms it any more)*
 
 ## Context
 
@@ -66,10 +71,13 @@ and the scope is dropped. The **command** name stays `pd`, as every ADR in this 
 collision ADR-0014 accepted with `pd-cli`'s own `pd` bin no longer exists unless the user creates it,
 because nothing installs a `pd` on their behalf.
 
-**The repository is the access control**, and §9 keeps it private. Whoever can clone can build; there
-is no second gate. No credential is in the tree to protect — ADR-0012 keeps every credential out of it
-and [ADR-0013](0013-read-only-enforcement.md) keeps every write out of the code — but the fixtures are
-company data, so the clone is not something to hand out.
+~~**The repository is the access control**, and §9 keeps it private.~~ **Superseded by
+[ADR-0031](0031-the-repository-is-public.md)**: the repository is public and controls access to
+nothing. Whoever can clone can build; there is no second gate. No credential is in the tree to
+protect — ADR-0012 keeps every credential out of it and
+[ADR-0013](0013-read-only-enforcement.md) keeps every write out of the code — and ~~the fixtures are
+company data, so the clone is not something to hand out~~ no recording is in the tree either, because
+the recorder writes to an ignored path.
 
 ### 2. Bun is the only runtime, at build time and at run time
 
@@ -244,6 +252,16 @@ from the entrypoint would be embedded rather than published.
 
 ### 9. The repository stays private, and that bounds who can have `pd`
 
+*Superseded by [ADR-0031](0031-the-repository-is-public.md). The repository is public, anyone may
+clone it, and `pd`'s audience is no longer this repository's access list. The premise this whole
+section rests on — a recording of the real company account on a tracked path — was removed by ticket
+01: the recorder writes to the ignored `.scratch/live/responses.json`, so there is no company data
+for the clone to protect. In particular the `.gitignore` refusal below is reversed, with its reason
+answered in ADR-0031 §3, and the closing sentence "`AGENTS.md` states plainly that the clone is of a
+private repository" is no longer true of `AGENTS.md`. The distribution channel §1 decides is
+untouched. What survives of §10's data rule is ADR-0031 §4: a recording is never committed,
+permanently. This section is kept as the account of why the boundary existed.*
+
 [ADR-0019](0019-testing-strategy.md) §10 made the repository's privacy a design constraint with a
 name: fixtures are recorded verbatim from the real company account — real deals, real organisation
 names, real amounts, real owners — and they persist in git history, so the repository "cannot become
@@ -300,10 +318,14 @@ budget this whole design protects, spent on setup.
   no writable location next to itself.
 - **[ADR-0019](0019-testing-strategy.md) §7 and §8 are amended; §10 is confirmed.** The gate count is
   unchanged in spirit: one gate leaves (the `Bun.*` ban) and one arrives (the CWD `.env` assertion).
-  §10's "the repository must stay private" is not merely preserved but promoted: it was a constraint on
-  where the *data* could live, and it is now also the answer to who can obtain the *tool*.
-- **`pd` has no audience outside this repository's access list**, and the design should stop implying
-  one. Anything written for "a user who installs `pd`" means a colleague with a clone.
+  ~~§10's "the repository must stay private" is not merely preserved but promoted: it was a constraint
+  on where the *data* could live, and it is now also the answer to who can obtain the *tool*.~~
+  **Corrected by [ADR-0031](0031-the-repository-is-public.md)**, which supersedes §10 and §9 together,
+  so the promotion is undone. The §7 and §8 amendments and the gate count are unaffected.
+- ~~**`pd` has no audience outside this repository's access list**, and the design should stop implying
+  one. Anything written for "a user who installs `pd`" means a colleague with a clone.~~ **Withdrawn by
+  [ADR-0031](0031-the-repository-is-public.md) §1**: anyone may clone, so "a user who installs `pd`"
+  means what it says.
 - **The credential threat model gains one entry and loses none.** A CWD `.env` is a credential-
   substitution vector unique to the compiled artifact, closed by a build flag rather than by code,
   which means it is closed only as long as the documented build is the one that runs. That is why §3

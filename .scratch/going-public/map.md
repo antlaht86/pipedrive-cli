@@ -45,8 +45,13 @@ being an access boundary. That makes 01 and 03 mandatory and narrows what 02 mus
 - **01 done, 2026-08-19.** The live recorder writes to the ignored `.scratch/live/responses.json`,
   and its drift signal is a `git diff --no-index` between the previous recording and the new one.
   The tracked canary stays for the release gates. This unblocks 02.
-- **02, 04, 05 open.** 02 is now the last hard blocker: the agent contract, the README and two
-  decision records still say the repository is private.
+- **06 done, 2026-08-19, superseding 02.** [ADR-0031](../../docs/adr/0031-the-repository-is-public.md)
+  records the decision: the repository is public and the clone is not an access boundary. ADR-0019 §10
+  and ADR-0021 §9 are superseded and point at it, ADR-0019 §9's git-diff signal is amended,
+  `AGENTS.md` no longer names a private repository, and `CONTEXT.md` gains **recording**. The design
+  spec and the closed release ticket are deliberately left as history. This unblocks 07 and 08.
+- **02, 04 and 05 superseded** — 02 by ticket 06, and 04 and 05 by ticket 07. No hard blocker
+  remains: what is left is the disclosure pass, the binary-exclusion gate, and the switch itself.
 
 ## The remaining work, resized
 
@@ -55,7 +60,7 @@ than one context window, so the sequencing overhead exceeded the work. Rebuilt a
 context each:
 
 - [06](issues/06-record-the-decision-and-correct-the-normative-documents.md) — the decision record,
-  the supersede pointers, the agent contract and the glossary, as one sweep. Supersedes 02.
+  the supersede pointers, the agent contract and the glossary, as one sweep. Supersedes 02. **Done.**
 - [07](issues/07-the-disclosure-pass.md) — the disclosure pass: the employer name and the facts about
   the company account. Supersedes 04 and 05. Blocked by 06, which opens the same records.
 - [08](issues/08-the-binary-exclusion-gate-and-the-empty-fixture-document.md) — the binary-exclusion
@@ -64,4 +69,4 @@ context each:
 - [09](issues/09-flip-the-switch-and-verify-a-cold-clone.md) — the visibility change, and proving a
   stranger can clone and build. Blocked by 07 and 08.
 
-06 is the frontier. 07 and 08 are independent of each other and can run in parallel once 06 lands.
+06 has landed. 07 and 08 are independent of each other and are the frontier; 09 waits on both.

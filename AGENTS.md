@@ -4,7 +4,7 @@
 
 ## Install and update
 
-Clone the private repository and build with Bun 1.3.14 or newer:
+Clone the repository and build with Bun 1.3.14 or newer:
 
 ```sh
 git clone https://github.com/antlaht86/pipedrive-cli.git
