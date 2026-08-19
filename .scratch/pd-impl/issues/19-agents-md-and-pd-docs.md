@@ -37,13 +37,13 @@ Notes for the implementer:
 - **`CONTEXT.md` pass.** The glossary stops at ADR-0011's terms. Terms settled later and not recorded: *hit*, *push-down*, *sentinel*, *seam*, *anomaly line*, *projection*, *absence*.
 - When this ticket and ticket 20 are both done, design ticket 22 in `.scratch/pd-cli-design/issues/` can be resolved. Do not close it before then.
 
-- [ ] `AGENTS.md` exists and carries every one of the fifteen content items listed above
-- [ ] `pd docs` prints `AGENTS.md` byte-for-byte, asserted against the built binary rather than the source tree
-- [ ] `dist/pd` copied to an unrelated directory still emits the full `AGENTS.md`
-- [ ] `pd docs --fields x` is a usage error, exit 2
-- [ ] The administrator-token risk paragraph is present in `AGENTS.md` and echoed in the root `--help` opening
-- [ ] Harness-specific pointer files are written
-- [ ] `CONTEXT.md` gains entries for hit, push-down, sentinel, seam, anomaly line, projection and absence
+- [x] `AGENTS.md` exists and carries every one of the fifteen content items listed above
+- [x] `pd docs` prints `AGENTS.md` byte-for-byte, asserted against the built binary rather than the source tree
+- [x] `dist/pd` copied to an unrelated directory still emits the full `AGENTS.md`
+- [x] `pd docs --fields x` is a usage error, exit 2
+- [x] The administrator-token risk paragraph is present in `AGENTS.md` and echoed in the root `--help` opening
+- [x] Harness-specific pointer files are written
+- [x] `CONTEXT.md` gains entries for hit, push-down, sentinel, seam, anomaly line, projection and absence
 
 ## Comments
 
@@ -59,3 +59,19 @@ that does not resolve is a usage error, exit 2, and `pd` never silently falls ba
 missing glossary entries, made the administrator-token risk explicit in root help, and asserted the
 embedded documentation byte-for-byte against a copied compiled binary. `pd docs --fields x` is also
 covered as a usage refusal. The full 540-test suite, typecheck and lint pass.
+
+**2026-08-19 — acceptance verified.** The boxes were never ticked either. Checked:
+
+- All fifteen content items are in `AGENTS.md`, including the four easiest to lose — the
+  no-budget-guard paragraph, the "parallel invocations are not free" note, the Windows `%APPDATA%`
+  paths, and "`pd` never checks for updates or updates itself" (line 16).
+- `test/binary-smoke.test.ts` "the built pd carries its exact AGENTS.md when copied away from the
+  checkout" compiles the binary, copies it to a fresh temporary directory, runs `docs` with an
+  unrelated CWD and compares the bytes to `AGENTS.md` — which is three boxes at once: verbatim,
+  byte-for-byte against the built binary, and still whole away from the checkout. The same test
+  asserts `docs --fields x` is a usage refusal.
+- The administrator-token paragraph is `AGENTS.md:73` and `src/command-table.ts:648`, the root help
+  opening.
+- The pointer files are `CLAUDE.md`, `GEMINI.md` and `.github/copilot-instructions.md`.
+- `CONTEXT.md` has an entry for each of hit, push-down, sentinel, seam, anomaly line, projection and
+  absence.

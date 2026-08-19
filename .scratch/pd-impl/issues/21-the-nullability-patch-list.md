@@ -32,6 +32,9 @@ Notes for the implementer:
 - Nine resources reach this ticket, not one. Ticket 07's eight others share the shape and will share the fault.
 - The regression test is a replay fixture per resource holding a record shaped like the observed one — an open deal with no `won_time`, `lost_time` or `expected_close_date` — asserting it survives validation and emits.
 
+The boxes below stay unticked deliberately. All five outcomes are answered — see `## Comments` — but
+none by this ticket's own method, and ticking them would read as though the patch list shipped.
+
 - [ ] An open deal with no `won_time`, `lost_time` or `expected_close_date` survives the record schema and emits (replay fixture recorded from a real response)
 - [ ] The patch distinguishes *nullable* from *absent* and each observed field gets the right one
 - [ ] Every correction is a `parser.patch` entry; no generated file is hand-edited

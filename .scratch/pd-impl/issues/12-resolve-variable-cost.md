@@ -25,10 +25,17 @@ Notes for the implementer:
 - [x] Exhausting the resolve budget emits one `resolution_budget_exhausted` warning, sets `resolved: "partial"`, and exits **0**
 - [x] A batch is dispatched only if `--max-requests` headroom survives it, so enrichment never produces `request_ceiling`
 - [x] `--fields` measurably reduces resolve request count on the same fixture
-- [ ] `--resolve` on a search command resolves owner ids only and dispatches zero extra requests — deferred to ticket 14, which introduces search commands
+- [x] `--resolve` on a search command resolves owner ids only and dispatches zero extra requests — deferred to ticket 14, which introduces search commands, and delivered there
 
 ## What shipped
 
 Variable-cost resolution now scans each projected page for standard and custom person/organization relations, fetches unseen ids in batches of 100, and keeps run-scoped name maps. Each page is enriched and emitted before the next walk page is requested.
 
 Relation batches have a soft 50-request default ceiling, configurable with `--resolve-budget`. Spending that ceiling—or lacking surviving `--max-requests` headroom—warns once, marks resolution partial, leaves subsequent ids raw, and preserves exit 0. Search-specific zero-cost owner resolution remains with ticket 14 because this branch has no search command surface yet.
+
+## Comments
+
+**2026-08-19 — the deferred box is closed by ticket 14.** Search-side owner resolution shipped with
+the search verb, as this ticket said it would. `test/search.test.ts` covers both halves: a cold owner
+cache dispatches nothing and reports `resolved: "partial"`, and a warm one reads the names out of
+cache with no extra request.
