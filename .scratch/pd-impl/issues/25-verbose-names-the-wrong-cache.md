@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0015](../../../docs/adr/0015-stderr-and-run-diagnostics.md) §5 (the per-request line
 and what it carries), §1 (a machine run is byte-silent). Touches [ADR-0005](../../../docs/adr/0005-cache-and-invalidation.md)'s
@@ -64,13 +64,49 @@ Three decisions taken rather than left open:
 
 ## Acceptance
 
-- [ ] Under `--verbose`, a hit on each of the four cached resources emits a line naming the entry
+- [x] Under `--verbose`, a hit on each of the four cached resources emits a line naming the entry
       and stating that no request was dispatched
-- [ ] The per-request field names the upstream cache rather than "cache"
-- [ ] A cold run and a warm run of the same command are distinguishable from the `--verbose` log
+- [x] The per-request field names the upstream cache rather than "cache"
+- [x] A cold run and a warm run of the same command are distinguishable from the `--verbose` log
       alone, without comparing request counts
-- [ ] The trailer's `requests` count is unchanged, and a cache hit never increments it
-- [ ] A machine run — no TTY, no `--verbose` — stays byte-silent on stderr
-- [ ] stdout is byte-identical in every mode
-- [ ] ADR-0015 §5 is amended to name which cache the per-request field reports
-- [ ] No new flag, no change to the status line or the trailer grammar
+- [x] The trailer's `requests` count is unchanged, and a cache hit never increments it
+- [x] A machine run — no TTY, no `--verbose` — stays byte-silent on stderr
+- [x] stdout is byte-identical in every mode
+- [x] ADR-0015 §5 is amended to name which cache the per-request field reports
+- [x] No new flag, no change to the status line or the trailer grammar
+
+## Comments
+
+Both halves moved. `RunDiagnostics.cacheServed(entry)` writes the new line, and the per-request
+field is `upstream_cache_hit`. The carried property was renamed with it — `cacheHit` became
+`upstreamCacheHit`, at the producer in `guarded-fetch.ts` as well — because a comment explaining
+that `cacheHit` means somebody else's cache is the rename it was standing in for.
+
+`cacheServed` is gated on `--verbose` rather than on `#enabled`, so a bare TTY run is unchanged, and
+it takes a `CacheEntryName` rather than a `string`, so the closed eight-entry list stays a compile
+error rather than a discipline. `NdjsonWriter.cacheServed` forwards it, which is what lets the read
+sites report without each holding a diagnostics handle.
+
+The line is written where the run **commits** to the cached records, not at the `store.read` that
+returned them. Three sites answer a hit with a request anyway and would otherwise print "no request"
+immediately before dispatching one:
+
+- `commands/cached.ts` list — a warm entry whose every record has stopped validating is refetched.
+- `commands/cached.ts` get — a warm entry that does not carry the asked-for id is refetched.
+- `output/resolution.ts` `load` — a hit whose records will not parse falls through to `fresh`.
+
+The cache-only owner resolver in `output/resolution.ts` never fetches, so it could report either
+way. It defers on the same rule: "served from cache" about an entry that did not answer would
+contradict the `owner_resolution_unavailable` warning printed underneath it. `/code-review` raised
+that site, and the placement above is the fix.
+
+Verified by `test/verbose-cache.test.ts`, which runs `deals list --resolve` twice against one
+temporary cache home: cold, five requests and no cache line; warm, one request and a line for each
+of `dealFields`, `users`, `pipelines` and `stages`. stdout is identical between `--verbose` and
+plain at the same cache temperature, and stderr is byte-silent with neither flag nor TTY.
+`diagnostics.test.ts` holds the `--verbose`-only gate against a TTY-only run and the refusal after
+the trailer.
+
+ADR-0015 §5 now names the upstream cache and shows both lines; its implementation-notes list gained
+the placement decision. CONTEXT.md gained an **Upstream cache** entry, because the term became
+load-bearing vocabulary this ticket had no glossary word for.
