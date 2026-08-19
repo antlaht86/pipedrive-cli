@@ -82,6 +82,13 @@ wrapper boundary, as ADR-0006 already requires for every resource:
   because they are the fields a human asks about a user; the rest are stripped by ADR-0006's
   unknown-key rule.
 
+**Amendment (2026-08-19, ticket 26): `access` joins the kept list.** It carries the per-app `admin`
+flag, so it answers "who administers this account", which nothing else `pd` emits can. It is
+declared as `z.unknown()` rather than as its wire shape: ADR-0029 §1 validates what `pd` acts on and
+`pd` never reads inside `access`. The narrower declaration would also be a hazard here, because this
+schema is the gate as well as the vocabulary — an `app` enum would turn a Pipedrive product launch
+into a rejected user record, and a rejected user record is a name §5 promised to keep.
+
 The envelope schema is `{ success, data: unknown[] }` with no `additional_data` member. It is
 validated strictly and a failure ends the fetch as `invalid_response`, exactly as ADR-0006 §1
 specifies. Records are validated individually.

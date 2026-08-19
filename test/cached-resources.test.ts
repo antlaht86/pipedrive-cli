@@ -128,6 +128,7 @@ describe("pd users list", () => {
       "active_flag",
       "is_deleted",
       "timezone_name",
+      "access",
     ]);
   });
 

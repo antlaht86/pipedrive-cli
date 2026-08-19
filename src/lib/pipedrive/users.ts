@@ -29,10 +29,20 @@ import { getUsers } from "./v1/generated/sdk.gen.ts";
 
 /**
  * `id` and `name` are required — without them the record cannot do the one job
- * it exists for. `email`, `active_flag`, `is_deleted` and `timezone_name` are
- * kept because they are the fields a human asks about a user; every other field
- * the v1 response carries is dropped, because this is a `z.object` and zod
- * strips what a shape does not declare.
+ * it exists for. `email`, `active_flag`, `is_deleted`, `timezone_name` and
+ * `access` are kept because they are the fields a human asks about a user;
+ * every other field the v1 response carries is dropped, because this is a
+ * `z.object` and zod strips what a shape does not declare.
+ *
+ * `access` is the one member `pd` never reads. It arrives as an array of
+ * `{ app, admin, permission_set_id }`, and it answers "who administers this
+ * account" — the question `pd users list` could not answer before. ADR-0029 §1
+ * validates what `pd` acts on and passes through what `pd` only emits, so it is
+ * declared as `z.unknown()`: enough to stop the strip, not enough to reject. An
+ * `app` enum would be the opposite trade — a Pipedrive product launch would
+ * fail the gate, and a failed gate drops the user from `--resolve` as well as
+ * from stdout, which is precisely the naming failure ADR-0007 §5 exists to
+ * prevent.
  *
  * That makes `users` the one resource whose output is still closed. ADR-0029 §6
  * opened the other nine by taking their generated schemas out of the record
@@ -46,6 +56,7 @@ export const UserRecord = z.object({
   active_flag: z.boolean().optional(),
   is_deleted: z.boolean().optional(),
   timezone_name: z.string().optional(),
+  access: z.unknown().optional(),
 });
 
 export type UserRecord = z.infer<typeof UserRecord>;
