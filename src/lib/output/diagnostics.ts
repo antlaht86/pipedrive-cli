@@ -156,6 +156,34 @@ export class RunDiagnostics {
 		});
 	}
 
+	/**
+	 * Ticket 24. The status line carries no newline — that is what makes it
+	 * rewritable — so the cursor stays parked on it. stdout owns the same
+	 * terminal on a bare `pd deals list`, which satisfies §2's TTY gate exactly,
+	 * and a `record` line written there would land on the status text and scroll
+	 * it into scrollback, where no later `\r` can reach it. The status line
+	 * therefore gives the line back before stdout uses it, and is redrawn below
+	 * whatever stdout wrote.
+	 *
+	 * `#clearStatus` zeroes the width, so the second and every later record of a
+	 * page returns at the guard: the clear costs one write per page, the same
+	 * cadence as the redraw ticket 23 pairs it with. It is unconditional rather
+	 * than gated on stdout being a TTY — §2 puts the detection on stderr's own
+	 * descriptor and nowhere else, and the wasted clear on a redirected stdout is
+	 * one stderr write per page.
+	 *
+	 * It asks for **no** redraw of its own. A page's records have already
+	 * scheduled one before the first of them reaches stdout, and the writes that
+	 * have not — a `warning` line, the trailer — are answered by §4's 1 Hz timer
+	 * or by nothing at all, because the run has ended. Scheduling here instead
+	 * would leave a redraw owing at the trailer and cost a draw the next
+	 * statement erases.
+	 */
+	yieldLine(): void {
+		if (!this.#enabled || this.#finished || this.#lastStatusWidth === 0) return;
+		this.#clearStatus();
+	}
+
 	refresh(): void {
 		if (!this.#enabled || this.#finished) return;
 		// Every draw settles the debt, whoever asked for it: a timer tick landing

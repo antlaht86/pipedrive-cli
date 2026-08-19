@@ -14,9 +14,15 @@ import type { Result } from "neverthrow";
 import { pdError, type PdError } from "../errors.ts";
 import { isPdFailure } from "../pipedrive/failure.ts";
 import type { Page } from "../pipedrive/walk.ts";
+import { RunDiagnostics } from "./diagnostics.ts";
 import { NdjsonWriter } from "./ndjson-writer.ts";
 import { collect, stream } from "./stream.ts";
-import { capture, type Line } from "../../../test/support/ndjson.ts";
+import {
+  capture,
+  isStatusClear,
+  type Line,
+} from "../../../test/support/ndjson.ts";
+import { FakeClock } from "../../../test/support/clock.ts";
 
 const writerOf = (
   bounded = false,
@@ -448,5 +454,142 @@ describe("a record field never shadows a line key", () => {
       code: "internal",
       details: { field: "type", renamed_to: "activity_type" },
     });
+  });
+});
+
+/**
+ * Ticket 24. The status line is rewritable because it carries no newline, which
+ * also means the cursor is parked on it. On a shared terminal — a bare
+ * `pd deals list`, which satisfies ADR-0015 §2's TTY gate exactly — a `record`
+ * line written to stdout lands on that same line and scrolls the status text
+ * into scrollback, where no later `\r` can reach it.
+ *
+ * The two channels are recorded into **one** log here, because the defect is an
+ * ordering between them and neither channel alone can show it.
+ */
+describe("the status line yields the terminal to stdout", () => {
+  type Write = { channel: "stdout" | "stderr"; text: string };
+
+  /** A status draw parks the cursor; a clear or a whole line does not. */
+  const parksTheCursor = (write: Write): boolean =>
+    write.channel === "stderr" &&
+    write.text.startsWith("\rpd: ") &&
+    !write.text.endsWith("\n");
+
+  const sharedTerminal = (
+    pretty = false,
+  ): {
+    writer: NdjsonWriter;
+    diagnostics: RunDiagnostics;
+    log: Write[];
+    stdout: () => string;
+  } => {
+    const log: Write[] = [];
+    const diagnostics = new RunDiagnostics({
+      sink: (text) => log.push({ channel: "stderr", text }),
+      isTty: () => true,
+      pretty,
+      clock: new FakeClock(),
+      requests: () => 1,
+    });
+    const writer = new NdjsonWriter({
+      recordType: "deal",
+      requests: () => 1,
+      pretty,
+      sink: (line) => log.push({ channel: "stdout", text: line }),
+      stderr: (line) => log.push({ channel: "stderr", text: line }),
+      diagnostics,
+    });
+    return {
+      writer,
+      diagnostics,
+      log,
+      stdout: () =>
+        log
+          .filter((write) => write.channel === "stdout")
+          .map((write) => write.text)
+          .join(""),
+    };
+  };
+
+  test("no stdout line is written onto a parked status line", async () => {
+    const { writer, diagnostics, log } = sharedTerminal();
+    diagnostics.anomaly("rate-limit gate raised from 10 to 20 requests per window");
+    writer.records([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    await Promise.resolve();
+    writer.finish(null);
+
+    const stranded = log.filter((write, index) => {
+      const before = log[index - 1];
+      return (
+        write.channel === "stdout" &&
+        before !== undefined &&
+        parksTheCursor(before)
+      );
+    });
+    expect(stranded).toEqual([]);
+  });
+
+  test("a page of records costs one clear, not one per record", async () => {
+    const { writer, diagnostics, log } = sharedTerminal();
+    diagnostics.anomaly("rate-limit gate raised from 10 to 20 requests per window");
+    writer.records(Array.from({ length: 500 }, (_, index) => ({ id: index })));
+    await Promise.resolve();
+    writer.finish(null);
+
+    const clears = log.filter(
+      (write) => write.channel === "stderr" && isStatusClear(write.text),
+    );
+    expect(clears).toHaveLength(2); // one for the page, one for the trailer
+  });
+
+  test("stdout is byte-identical to a run with no diagnostics at all", () => {
+    const bare = capture();
+    const bareWriter = new NdjsonWriter({
+      recordType: "deal",
+      requests: () => 1,
+      sink: bare.sink,
+      stderr: bare.stderr,
+    });
+    bareWriter.records([{ id: 1 }, { id: 2 }]);
+    bareWriter.finish(null);
+
+    const { writer, diagnostics, stdout } = sharedTerminal();
+    diagnostics.anomaly("gate paused for 2s");
+    writer.records([{ id: 1 }, { id: 2 }]);
+    writer.finish(null);
+
+    expect(stdout()).toBe(bare.text());
+  });
+
+  /**
+   * `--pretty` writes its table straight to the sink rather than through the
+   * funnel the yield hooks, so it is safe by ordering instead: the diagnostics
+   * writer's own trailer clears the status line and ends on a newline before
+   * the table lands. The table is therefore never yielded to — and the bytes
+   * must be identical to a run that had no diagnostics writer to yield to.
+   */
+  test("the pretty table is byte-identical and lands on a cleared line", () => {
+    const bare = capture();
+    const bareWriter = new NdjsonWriter({
+      recordType: "deal",
+      requests: () => 1,
+      pretty: true,
+      sink: bare.sink,
+      stderr: bare.stderr,
+    });
+    bareWriter.records([{ id: 1 }, { id: 2 }]);
+    bareWriter.finish(null);
+
+    const { writer, diagnostics, log, stdout } = sharedTerminal(true);
+    diagnostics.anomaly("gate paused for 2s");
+    writer.records([{ id: 1 }, { id: 2 }]);
+    writer.finish(null);
+
+    expect(stdout()).toBe(bare.text());
+
+    const beforeTable = log[log.findIndex((write) => write.channel === "stdout") - 1];
+    expect(beforeTable?.channel).toBe("stderr");
+    expect(beforeTable?.text.endsWith("\n")).toBe(true);
   });
 });

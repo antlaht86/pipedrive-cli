@@ -394,7 +394,22 @@ export class NdjsonWriter {
     this.#diagnostics = diagnostics;
   }
 
+  /**
+   * The single **NDJSON** write. Every line of the grammar goes through here,
+   * which is why ticket 24's terminal yield sits here too: stdout and stderr
+   * may be the same terminal, and ADR-0015's status line parks the cursor on a
+   * line it intends to rewrite. The yield is a no-op unless a status line is
+   * actually on screen.
+   *
+   * It is not every byte of stdout. `--pretty` writes its table straight to
+   * `#sink` from `finish` and `error` below, and that table is safe by ordering
+   * rather than by this funnel: both call the diagnostics writer first, which
+   * ends by clearing the status line and appending a newline-terminated
+   * `pd: finished:` line, so the cursor is already at the start of a fresh line
+   * when the table lands.
+   */
   #line(value: unknown): void {
+    this.#diagnostics?.yieldLine();
     this.#sink(`${JSON.stringify(value)}\n`);
   }
 

@@ -203,6 +203,16 @@ Implementation-level, decided rather than put to the user, per the map's altitud
   human watches that line to rule out. Arriving records therefore schedule a redraw of their own,
   coalesced so a whole page costs one write rather than one per record, and a run that reaches its
   trailer in the same tick as its records draws that redraw before the final summary replaces it.
+- **The status line gives the terminal line back before stdout writes to it.** The line carries no
+  newline, which is what makes it rewritable, so the cursor is parked on it. §2's gate is satisfied
+  by a bare `pd deals list` with no redirection, where stdout is the same terminal: a `record` line
+  would land on the status text and scroll it into scrollback, where no later `\r` can reach it.
+  Ticket 24 therefore erases the line before every stdout write, from the writer that owns stdout,
+  at the same one-per-page cost as the redraw above — the second and every later record of a page
+  find nothing to erase. This does **not** make the status line conditional on stdout: the erase is
+  unconditional and §2's "never stdout's descriptor" is untouched. The section's
+  `pd deals list > out.ndjson` is now the case the erase is wasted on rather than the case the
+  status line depends on.
 - **`\r` is used only under §2's TTY condition**, which is already the gate for the whole status
   line, so no control character can reach a redirected stderr. No cursor addressing, no ANSI colour,
   no alternate screen — a `\r` and a trailing space-pad to erase the previous line's tail is the

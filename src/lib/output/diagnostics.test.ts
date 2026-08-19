@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { FakeClock } from "../../../test/support/clock.ts";
 import { RunDiagnostics } from "./diagnostics.ts";
 import type { Sink } from "./ndjson-writer.ts";
+import { isStatusClear } from "../../../test/support/ndjson.ts";
 
 const diagnosticsOf = ({
 	tty = false,
@@ -110,6 +111,31 @@ describe("run diagnostics", () => {
 		await Promise.resolve();
 		diagnostics.finish();
 		expect(output.join("")).toBe("");
+	});
+
+	/**
+	 * Ticket 24. `yieldLine` is called from the stdout writer on every line it
+	 * writes, so it runs on a machine run too — where there is no status line to
+	 * give back and stderr must stay byte-silent (ADR-0015 §1).
+	 */
+	test("yielding the line writes nothing on a machine run", () => {
+		const { diagnostics, output } = diagnosticsOf();
+		diagnostics.record();
+		diagnostics.yieldLine();
+		diagnostics.finish();
+		expect(output.join("")).toBe("");
+	});
+
+	/** Nothing to give back before the first draw, and nothing after the last. */
+	test("yielding the line is a no-op with no status line on screen", () => {
+		const { diagnostics, output } = diagnosticsOf({ tty: true });
+		diagnostics.yieldLine();
+		expect(output).toEqual([]);
+
+		diagnostics.refresh();
+		diagnostics.yieldLine();
+		diagnostics.yieldLine();
+		expect(output.filter(isStatusClear)).toHaveLength(1);
 	});
 
 	test("verbose request lines redact query values and headers by allowlist", () => {

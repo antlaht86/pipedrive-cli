@@ -9,6 +9,14 @@
 
 export type Line = Record<string, unknown>;
 
+/**
+ * ADR-0015's status line is erased by a carriage return, a run of spaces wide
+ * enough to cover what was there, and a second carriage return. Ticket 24's
+ * tests count those erasures on both sides of the writer seam, so the shape is
+ * named once here rather than as a regex literal in each file.
+ */
+export const isStatusClear = (text: string): boolean => /^\r +\r$/.test(text);
+
 export const parseNdjson = (chunks: readonly string[]): Line[] =>
   chunks
     .join("")
