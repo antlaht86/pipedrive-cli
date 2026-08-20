@@ -13,7 +13,7 @@ bun install
 bun run build             # writes dist/pd (dist\pd.exe on Windows)
 ```
 
-`pd` performs no installation step. Putting `dist/pd` on `PATH` is your responsibility and the destination is your choice; for example, `cp dist/pd ~/.local/bin/`. `pd` never checks for updates or updates itself. Update the checkout deliberately with `git pull`, then run `bun run build` again.
+`pd` performs no installation step. Putting `dist/pd` on `PATH` is your responsibility and the destination is your choice; for example, `cp dist/pd ~/.local/bin/`. On macOS and Linux the repository also offers `bun run update`, which builds and then copies the binary to `$HOME/.local/bin/pd`; it is a convenience for that one destination, not a general installer, and Windows has no equivalent. `pd` never checks for updates or updates itself. Update the checkout deliberately with `git pull`, then run `bun run build` (or `bun run update`) again.
 
 ## Command surface
 

@@ -132,17 +132,31 @@ experiment, kept as a test: build, place a `.env` setting `PD_API_TOKEN` in a te
 `pd auth status` from there, and assert it does not report the `env` tier. This joins the gate table
 of [ADR-0019](0019-testing-strategy.md) §8, replacing the `Bun.*` ban this ADR removed.
 
-### 4. `dist/pd` is the output, and `pd` installs nothing
+### 4. `dist/pd` is the output, and the binary installs nothing
 
 `bun run build` writes `dist/pd` (`dist\pd.exe` on Windows) inside the checkout and stops there.
 
-**There is no install script.** No `bun run install-local`, no `$PD_INSTALL_DIR`, no copy step the
-project performs on the user's behalf. Getting the binary onto `PATH` is the user's business, and the
-project has no opinion worth encoding about where their `PATH` directories are.
+**The binary installs nothing and updates nothing.** `pd` never copies itself anywhere, never checks
+for a new version, and writes nothing outside the paths its own commands name. That is the safety
+property this section exists to protect, and it is unchanged.
 
-This is the smallest surface that works, and it keeps a property the rest of the design cares about:
-a tool whose safety claim is "it cannot write anything" ships no code that writes outside its own
-checkout. `AGENTS.md` shows `cp dist/pd ~/.local/bin/` as an example and says explicitly that the
+**The repository carries exactly one convenience script for the maintainer**, `bun run update`:
+`bun install`, `bun run build`, then `install -m 755 dist/pd "$HOME/.local/bin/pd"`, then print the
+installed binary's stamped version. It is a checkout-level developer command, deliberately invoked
+from the repository root — not part of the shipped CLI surface, and not something the binary can
+trigger.
+
+The destination is hardcoded to `$HOME/.local/bin/pd`. There is deliberately **no `$PD_INSTALL_DIR`**
+and no configuration: configurability over install locations is what this ADR originally refused, and
+that refusal still holds. A reader whose `PATH` looks different ignores the script and copies the
+binary by hand, which stays the documented baseline. The script is POSIX-only (macOS and Linux);
+Windows has no `install(1)` and the artifact is `dist\pd.exe`, so Windows keeps the manual copy.
+
+`install` is used rather than `cp` because it unlinks the destination before writing. A `pd` process
+already running keeps its old inode, so the update cannot raise `ETXTBSY` or hand a running process a
+half-written binary.
+
+`AGENTS.md` shows both `bun run update` and `cp dist/pd ~/.local/bin/`, and says explicitly that the
 destination is the reader's choice.
 
 On macOS the binary runs as built. `codesign -v` reports `invalid signature` on fresh `--compile`

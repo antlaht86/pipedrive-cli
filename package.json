@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "bun run scripts/build.ts",
+    "update": "bun install && bun run build && mkdir -p \"$HOME/.local/bin\" && install -m 755 dist/pd \"$HOME/.local/bin/pd\" && \"$HOME/.local/bin/pd\" --version",
     "gates": "bun run scripts/release-gates.ts",
     "live": "bun run scripts/live.ts",
     "test": "bun test",
