@@ -105,13 +105,45 @@ export type Projection = {
   readonly unmatched: () => readonly CustomFieldKey[];
 };
 
+/**
+ * The default projection — ADR-0016 §5, ticket 29.
+ *
+ * A resource may declare a field that is **selectable but not sent**: it stays
+ * in the record schema, stays in the manifest's selectable list, and stays
+ * readable by anything that derives from it, but a run that names no `--fields`
+ * does not carry it. `users` declares `access` for that reason — three objects
+ * and three UUIDs on every line, to state a fact the two admin booleans beside
+ * it already state.
+ *
+ * It is a **deny-list**, and that is the whole of it. `includes` answers
+ * "everything except what is withheld", because ADR-0008's resolver asks the
+ * projection whether a field survived and reads an absent projection as
+ * "everything did. An allow-list here would switch resolution off on every run
+ * that passed no `--fields`, which is a wrong answer that looks like a right
+ * one.
+ */
+const withholding = (withheld: readonly string[]): Projection => ({
+  pushdown: undefined,
+  apply: (record) =>
+    Object.fromEntries(
+      Object.entries(record).filter(([key]) => !withheld.includes(key)),
+    ),
+  includes: (field) => !withheld.includes(field),
+  unmatched: () => [],
+});
+
 export const createProjection = (
   given: readonly string[] | undefined,
   schemaFields: readonly string[],
   rename: Readonly<Record<string, string>> = {},
   identityField = "id",
+  withheld: readonly string[] = [],
 ): Result<Projection | undefined, PdError> => {
-  if (given === undefined) return ok(undefined);
+  // No `--fields` and nothing withheld is the passthrough every resource but
+  // `users` takes, and it stays a missing projection rather than an empty one.
+  if (given === undefined) {
+    return ok(withheld.length === 0 ? undefined : withholding(withheld));
+  }
 
   const outputToRaw = new Map(
     schemaFields.map((raw) => [rename[raw] ?? raw, raw]),

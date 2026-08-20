@@ -185,6 +185,7 @@ export const cachedCommand = async ({
 				source.fields,
 				{},
 				source.identityField,
+				source.withheld,
 			).map((projection) => ({ source, projection }));
 		},
 	});

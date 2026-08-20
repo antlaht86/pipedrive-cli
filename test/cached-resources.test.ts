@@ -131,7 +131,6 @@ describe("pd users list", () => {
       "active_flag",
       "is_deleted",
       "timezone_name",
-      "access",
       "is_global_admin",
       "is_deal_admin",
     ]);
@@ -280,9 +279,16 @@ describe("pd users names the admin directly", () => {
     });
   });
 
-  test("access is still emitted, unchanged", async () => {
+  test("access is emitted unchanged when it is selected", async () => {
+    // Ticket 29 withheld it from the default output; ticket 27's rule that the
+    // raw value survives is unchanged, and this is where it is now visible.
     const access = [{ app: "sales", admin: true, permission_set_id: "set-9" }];
-    expect((await listed(access))["access"]).toEqual(access);
+    const { lines } = await runWith(
+      [usersFixture([user(11, { access })])],
+      ["users", "list", "--fields", "access"],
+    );
+
+    expect((records(lines)[0] as Line)["access"]).toEqual(access);
   });
 
   test("pd users get <id> emits the same two fields", async () => {
@@ -339,6 +345,127 @@ describe("pd users names the admin directly", () => {
       is_deal_admin: false,
     });
     expect(warm.last).toMatchObject({ requests: 0 });
+  });
+});
+
+describe("pd users withholds access from the default output", () => {
+  // Ticket 29. `access` is three objects and three UUIDs on every line, and the
+  // two booleans beside it already answer the question it carries — so it is
+  // selected rather than sent, and nothing else about it changes.
+
+  test("neither verb emits access by default", async () => {
+    const list = await runWith([usersFixture([user(11)])], ["users", "list"]);
+    expect(records(list.lines)[0]).not.toHaveProperty("access");
+
+    const got = await runWith(undefined, ["users", "get", "11"]);
+    expect(got.exit).toBe(0);
+    expect(records(got.lines)[0]).not.toHaveProperty("access");
+  });
+
+  test("--fields access emits it on both verbs", async () => {
+    const list = await runWith(
+      [usersFixture([user(11)])],
+      ["users", "list", "--fields", "access"],
+    );
+    expect(records(list.lines)[0]).toEqual({
+      type: "record",
+      record_type: "user",
+      id: 11,
+      access: [{ app: "global", admin: true, permission_set_id: "set-1" }],
+    } as unknown as Line);
+
+    const got = await runWith(undefined, [
+      "users",
+      "get",
+      "11",
+      "--fields",
+      "access",
+    ]);
+    expect(records(got.lines)[0]).toMatchObject({
+      access: [{ app: "global", admin: true, permission_set_id: "set-1" }],
+    });
+  });
+
+  test("the derivation reads access before the projection withholds it", async () => {
+    const { lines } = await runWith(
+      [
+        usersFixture([
+          user(11, { access: [{ app: "sales", admin: true, permission_set_id: "s" }] }),
+        ]),
+      ],
+      ["users", "list"],
+    );
+
+    expect(records(lines)[0]).not.toHaveProperty("access");
+    expect(records(lines)[0]).toMatchObject({
+      is_global_admin: false,
+      is_deal_admin: true,
+    });
+  });
+
+  test("--admin still filters with access absent from the output", async () => {
+    const { exit, lines } = await runWith(
+      [
+        usersFixture([
+          user(11),
+          user(12, { access: [{ app: "sales", admin: true, permission_set_id: "s" }] }),
+        ]),
+      ],
+      ["users", "list", "--admin", "deal"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines).map((line) => line["id"])).toEqual([12]);
+    expect(records(lines)[0]).not.toHaveProperty("access");
+  });
+
+  test("access selects alongside another field", async () => {
+    const { lines } = await runWith(
+      [usersFixture([user(11)])],
+      ["users", "list", "--fields", "access,is_deal_admin"],
+    );
+
+    expect(Object.keys(records(lines)[0] as Line)).toEqual([
+      "type",
+      "record_type",
+      "id",
+      "access",
+      "is_deal_admin",
+    ]);
+  });
+
+  test("a resource that withholds nothing emits every field it did before", async () => {
+    // The withholding is one resource's policy, not a new stage every record
+    // passes through: a source with an empty list still produces no projection
+    // at all, which is the path these two took before ticket 29.
+    const emitted = async (
+      name: string,
+      raw: Record<string, unknown>,
+    ): Promise<string[]> => {
+      const { lines } = await runWith(
+        [cachedPage(name, [raw])],
+        [name, "list"],
+      );
+      return Object.keys(records(lines)[0] as Line);
+    };
+
+    const survives = (
+      name: string,
+      raw: Record<string, unknown>,
+    ): string[] => [
+      "type",
+      "record_type",
+      ...(cachedResourceNamed(name)?.source()?.fields ?? []).filter(
+        (field) => raw[field] !== null,
+      ),
+    ];
+
+    expect(await emitted("pipelines", pipeline(1))).toEqual(
+      survives("pipelines", pipeline(1)),
+    );
+    expect(await emitted("stages", stage(1))).toEqual(
+      survives("stages", stage(1)),
+    );
   });
 });
 

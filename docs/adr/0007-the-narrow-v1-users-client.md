@@ -107,6 +107,23 @@ field is added beside the raw one, never in place of it — and a derived boolea
 runs on the way out of the one-hour cache entry, so a warm entry starts emitting both fields without
 a refresh.
 
+**Amendment (2026-08-20, ticket 29): `access` is selectable, not default-emitted.** It stays in the
+record schema, stays in the manifest's selectable list under both verbs, and stays what the two
+booleans are derived from. What it no longer does is ride every line: three objects and three
+UUIDs, on every user of every run, to carry a fact the booleans beside them already state.
+`--fields access` emits it, byte-for-byte as Pipedrive sent it.
+
+This does not touch §7. That rule is about `--resolve`, which adds a derived field beside the raw
+one and never in place of it, and the derivation still reads `access` in full before anything is
+withheld — a user's `is_deal_admin` is identical with the field selected and without it. What
+changed is one stage later: ADR-0016 §5's projection, which is already the one place `pd` removes a
+field from a line. A source now declares what it withholds from a run that named no `--fields`, and
+`users` is the only source that declares anything.
+
+The declaration is a **deny-list** and has to stay one. ADR-0008's resolver asks the projection
+whether a field survived and reads an absent projection as "every field did"; a default projection
+answering allow-list would switch resolution off on every run that passed no `--fields`.
+
 The envelope schema is `{ success, data: unknown[] }` with no `additional_data` member. It is
 validated strictly and a failure ends the fetch as `invalid_response`, exactly as ADR-0006 §1
 specifies. Records are validated individually.

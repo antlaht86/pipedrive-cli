@@ -84,6 +84,12 @@ export type CachedSource = {
 	/** `field_code` for fields, `id` for every other cached resource. */
 	readonly identityField: string;
 	/**
+	 * Ticket 29: fields this source keeps in its vocabulary — selectable with
+	 * `--fields`, listed by the manifest — and withholds from a run that named
+	 * no `--fields`. `users` withholds `access`; nothing else withholds anything.
+	 */
+	readonly withheld: readonly string[];
+	/**
 	 * ADR-0006 §2's second stage, one record at a time — narrowed by ADR-0029 §5
 	 * to "does this record carry an identity", except on `users`, whose interior
 	 * `pd` reads.
@@ -189,6 +195,7 @@ type SourceDefinition = {
 	 */
 	gate?: z.ZodType<Record<string, unknown>, unknown>;
 	identityField?: string;
+	withheld?: readonly string[];
 	key: (raw: unknown) => string | number | undefined;
 	fetch: (client: PipedriveClient) => PromiseLike<Result<unknown[], PdError>>;
 };
@@ -198,6 +205,7 @@ const defineSource = ({
 	vocabulary,
 	gate,
 	identityField = "id",
+	withheld = [],
 	key,
 	fetch,
 }: SourceDefinition): CachedSource => {
@@ -206,6 +214,7 @@ const defineSource = ({
 		entry,
 		fields: Object.keys(vocabulary.shape),
 		identityField,
+		withheld,
 		key,
 		fetch,
 		parse: (raw) => {
@@ -338,6 +347,10 @@ const FIXED_SOURCES = {
 		entry: "users",
 		vocabulary: UserRecord,
 		gate: UserGate,
+		// Ticket 29: the gate reads `access` to derive the two booleans, and the
+		// projection then withholds it. `--fields access` is how a caller who
+		// wants the per-app `permission_set_id` asks for it.
+		withheld: ["access"],
 		key: integerId,
 		fetch: fetchUsers,
 	}),

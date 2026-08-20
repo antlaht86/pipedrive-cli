@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { route } from "../src/router.ts";
+import { createProjection } from "../src/lib/output/projection.ts";
 import { capture, type Line } from "./support/ndjson.ts";
 import { deal } from "./support/deals.ts";
 import { cachedPage, field, user, usersFixture } from "./support/cached.ts";
@@ -233,5 +234,38 @@ describe("--fields projection", () => {
       "deals", "list", "--fields", "close_time",
     ]);
     expect(records(lines)[0]).toEqual({ type: "record", record_type: "deal", id: 1 });
+  });
+});
+
+describe("a withheld field", () => {
+  // Ticket 29's hazard, asserted at the projection itself. ADR-0008's resolver
+  // reads `projection?.includes(field) ?? true`, so a run with no `--fields`
+  // used to mean "everything survived". `users` now has a projection on such a
+  // run, and if it answered allow-list every `--resolve` would quietly stop
+  // resolving — the shape of failure ticket 28 removed from the filter path.
+  const withholding = createProjection(
+    undefined,
+    ["id", "name", "access", "owner_id"],
+    {},
+    "id",
+    ["access"],
+  )._unsafeUnwrap();
+
+  test("is the only thing the default projection removes", () => {
+    expect(
+      withholding?.apply({ id: 1, name: "Aino", access: [{}], owner_id: 7 }),
+    ).toEqual({ id: 1, name: "Aino", owner_id: 7 });
+  });
+
+  test("leaves includes answering for every field but itself", () => {
+    expect(withholding?.includes("owner_id")).toBe(true);
+    expect(withholding?.includes("name")).toBe(true);
+    expect(withholding?.includes("access")).toBe(false);
+  });
+
+  test("withholding nothing is no projection at all", () => {
+    expect(
+      createProjection(undefined, ["id", "name"], {}, "id", [])._unsafeUnwrap(),
+    ).toBeUndefined();
   });
 });
