@@ -22,8 +22,10 @@ import {
 	parseArguments,
 	refusesToken,
 } from "./commands/arguments.ts";
-import { pdError, type PdError } from "./lib/errors.ts";
+import { noCredentialAdvice } from "./lib/auth/credentials.ts";
+import { credentialsPath } from "./lib/auth/paths.ts";
 import { authStatus } from "./lib/auth/status.ts";
+import { pdError, type PdError } from "./lib/errors.ts";
 import { route } from "./router.ts";
 import { cacheCommand, isCacheVerb, CACHE_VERBS } from "./commands/cache.ts";
 import { isPdFailure } from "./lib/pipedrive/failure.ts";
@@ -96,14 +98,29 @@ const runAuthStatus = (argv: readonly string[]): number => {
 	if (parsed.isErr()) return fail(parsed.error, pretty);
 
 	const tokenFile = parsed.value.flags["token-file"];
-	const status = authStatus({
+	const context = {
 		platform: process.platform,
 		env: process.env,
 		home: homedir(),
+	};
+	const status = authStatus({
+		...context,
 		...(tokenFile === undefined ? {} : { tokenFile }),
 	});
 
 	if (status.isErr()) return fail(status.error, pretty);
+
+	// Finding nothing is this command's normal zero-exit answer (ADR-0012 §5 as
+	// scoped by ADR-0022 §1), so it is not an error and ADR-0001's error line
+	// does not apply. The absence is reported on stdout as data; what to do
+	// about it is said here, in prose, on the stream AGENTS.md already reserves
+	// for human text a harness may discard. That is the same success-path use of
+	// stderr the unbounded-list warning makes, and it carries no version promise.
+	// It goes out in both output modes: an agent parses stdout only, and a human
+	// running `pd auth status` after a fresh build is exactly the reader for it.
+	if (!status.value.found) {
+		process.stderr.write(`pd: ${noCredentialAdvice(credentialsPath(context))}\n`);
+	}
 
 	if (pretty) {
 		process.stdout.write(

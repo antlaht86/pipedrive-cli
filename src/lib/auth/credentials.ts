@@ -183,15 +183,28 @@ const tokenFileRefusal = (path: string): PdError =>
       `never falls back to another tier when --token-file is given.`,
   });
 
+/**
+ * The one sentence that says what an empty credential chain looks like and what
+ * to do about it. Two callers share it: the `auth` error every command that
+ * needs a credential fails with, and `pd auth status`, whose answer to the same
+ * situation is a zero exit and this text on stderr. They are the same advice, so
+ * they are not written twice.
+ *
+ * "--token-file (not given)" is unconditional because it cannot be reached any
+ * other way: a named `--token-file` returns from `resolveCredential` either
+ * resolved or as `tokenFileRefusal`, and never falls through to this text.
+ */
+export const noCredentialAdvice = (configPath: string): string =>
+  `No Pipedrive API token found. pd searched, in order: --token-file (not ` +
+  `given), the PD_API_TOKEN environment variable (not set), and the ` +
+  `credentials file ${configPath} (absent or empty). Create that file with ` +
+  `mode 0600 containing the token, or export PD_API_TOKEN. pd never writes ` +
+  `a credential itself.`;
+
 const notFound = (configPath: string): PdError =>
   pdError({
     code: "auth",
-    message:
-      `No Pipedrive API token found. pd searched, in order: --token-file (not ` +
-      `given), the PD_API_TOKEN environment variable (not set), and the ` +
-      `credentials file ${configPath} (absent or empty). Create that file with ` +
-      `mode 0600 containing the token, or export PD_API_TOKEN. pd never writes ` +
-      `a credential itself.`,
+    message: noCredentialAdvice(configPath),
   });
 
 export const resolveCredential = (

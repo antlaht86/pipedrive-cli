@@ -23,6 +23,10 @@ Check which tier answered without spending a request:
 pd auth status
 ```
 
+It makes no request and exits 0 either way. With no token anywhere it reports
+`"found":false` on stdout and names all three tiers on stderr, so a fresh build tells you
+what it is missing rather than failing on your first real command.
+
 The grammar is `pd <resource> <verb> [argument] [flags]`. The verbs are `list`, `get` and
 `search`.
 
@@ -52,7 +56,8 @@ with a restricted Pipedrive permission set.
 ## Build
 
 This repository is the only channel: there is no npm package and no release artifact
-([ADR-0021](docs/adr/0021-distribution-build-from-source.md)). Building needs Bun — the
+([ADR-0021](docs/adr/0021-distribution-build-from-source.md)). Building needs Bun and
+nothing else; install it from [bun.sh](https://bun.sh) if you do not have it. The version
 floor is `engines.bun` in `package.json`.
 
 ```bash

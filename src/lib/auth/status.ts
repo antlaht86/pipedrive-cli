@@ -2,8 +2,14 @@
  * `pd auth status` — ADR-0012 §5.
  *
  * The only auth command. There is no `login`, no `logout`, no `verify` and no
- * `--show-token`. It makes **zero network requests** and writes nothing: its job
- * is to describe the configuration, not to use it.
+ * `--show-token`. It makes **zero network requests** and writes no file: its job
+ * is to describe the configuration, not to use it or to author it. ADR-0012 §5's
+ * "writes nothing" is that sentence — it is about the filesystem, not about the
+ * output streams, which this command has always used to report its answer.
+ *
+ * When the chain comes up empty the caller also writes `noCredentialAdvice` to
+ * stderr. That belongs to the caller rather than here, because this function
+ * returns the value and `cli.ts` owns the stdout/stderr split.
  *
  * **Finding no credential is not a failure.** It exits 0 and reports the absence
  * in `found`, because a diagnostic that exits non-zero when the thing it

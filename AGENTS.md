@@ -63,6 +63,8 @@ Credential precedence is:
 
 The first match wins. A named `--token-file` that cannot be resolved is a usage error (exit 2); `pd` never silently falls back from it. If no tier resolves, `pd` reports `code: "auth"`, exits 1, and its message names all three tiers. Use `pd auth status` to inspect the chosen tier and token fingerprint without making a Pipedrive request.
 
+`pd auth status` answers an empty chain with `"found":false` on stdout and exit 0, and writes the same three-tier sentence to stderr as human prose. Its stdout object is unchanged by that line; read stdout, as always.
+
 The credentials file is `$XDG_CONFIG_HOME/pd/credentials`, defaulting to `~/.config/pd/credentials`, on POSIX and `%APPDATA%\pd\credentials` on Windows. It must be mode `0600` on POSIX. Per-user directories are:
 
 | Purpose | POSIX | Windows |

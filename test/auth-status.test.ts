@@ -69,6 +69,28 @@ describe("with no credential", () => {
 		expect(result.exitCode).toBe(0);
 		expect(parse(result.stdout)["found"]).toBe(false);
 	});
+
+	test("tells the reader on stderr what to do about it", () => {
+		const { env } = isolated();
+		const result = run(["auth", "status"], env);
+
+		// Prose, so the assertion is on the facts it must carry rather than on
+		// the sentence: the two tiers a reader can act on, and the path of the
+		// file pd looked for.
+		expect(result.stderr).toContain("PD_API_TOKEN");
+		expect(result.stderr).toContain(join(env["XDG_CONFIG_HOME"] as string, "pd", "credentials"));
+		expect(result.stderr).toContain("--token-file");
+		// The machine surface is unchanged by the prose.
+		expect(parse(result.stdout)["found"]).toBe(false);
+	});
+
+	test("carries the same guidance under --pretty", () => {
+		const { env } = isolated();
+		const result = run(["auth", "status", "--pretty"], env);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stderr).toContain("PD_API_TOKEN");
+	});
 });
 
 describe("with PD_API_TOKEN set", () => {
