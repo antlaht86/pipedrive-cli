@@ -53,6 +53,39 @@ error object.
 The token is write-capable even though `pd` is not. Give it a token belonging to a user
 with a restricted Pipedrive permission set.
 
+## Keep the token out of an agent's context
+
+`pd` never prints the token. `pd auth status` reports a fingerprint, the first 16 hex
+characters of the token's SHA-256, and `--verbose` redacts the `x-api-token` header along
+with every query value outside a fixed allowlist. There is no `--token <value>` flag,
+because `argv` is readable by every other user on the machine.
+
+The leaks happen upstream of `pd`, in whatever runs it. Use tier 3 and put the token there
+by hand:
+
+```bash
+mkdir -p ~/.config/pd
+touch ~/.config/pd/credentials
+chmod 600 ~/.config/pd/credentials
+```
+
+Open that file in an editor and paste the token in. Do not write it with a shell command:
+an agent harness records the commands it runs, so `echo '<token>' > ~/.config/pd/credentials`
+puts the token into the transcript the file was supposed to keep it out of.
+
+- Never paste the token into a prompt, and never ask an agent to write the credentials file.
+- Deny `env`, `printenv` and `cat ~/.config/pd/credentials` in the harness. A `deny` rule
+  beats a habit, because it stops the command from being proposed at all.
+- Prefer tier 3 over `PD_API_TOKEN`. Exporting the variable in a shell the agent drives puts
+  the token in the transcript. Exporting it in your own shell before you start the agent does
+  not, but the value stays readable to anything that dumps the environment.
+- Do not put the token in a `.env` file. The compiled binary ignores `.env` in the working
+  directory, but agents read `.env` files freely, and running from source with `bun run
+  src/cli.ts` does not have that protection.
+
+To confirm which credential is live, run `pd auth status` and compare fingerprints instead
+of tokens.
+
 ## Build
 
 This repository is the only channel: there is no npm package and no release artifact
