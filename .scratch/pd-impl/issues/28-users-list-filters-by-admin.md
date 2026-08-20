@@ -6,7 +6,7 @@ Any other value is a usage refusal that names the two it accepts. The flag exist
 
 **Blocked by:** 27 — the filter selects on the booleans that ticket derives.
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0001](../../../docs/adr/0001-error-model-and-exit-codes.md) (the `usage`
 refusal), [ADR-0003](../../../docs/adr/0003-pagination-bounding-and-partiality.md) (`--limit` and the summary trailer)
@@ -46,24 +46,24 @@ regression test for the generalisation.
 
 ## Acceptance
 
-- [ ] `pd users list --admin global` emits only records with `is_global_admin: true`
-- [ ] `pd users list --admin deal` emits only records with `is_deal_admin: true`
-- [ ] `pd users list` with no flag emits every user, as before
-- [ ] `pd users list --admin sales`, or any other unrecognised value, ends as a `usage` refusal that
+- [x] `pd users list --admin global` emits only records with `is_global_admin: true`
+- [x] `pd users list --admin deal` emits only records with `is_deal_admin: true`
+- [x] `pd users list` with no flag emits every user, as before
+- [x] `pd users list --admin sales`, or any other unrecognised value, ends as a `usage` refusal that
       names `global` and `deal`
-- [ ] `--admin` with no value ends as a `usage` refusal
-- [ ] `pd users get <id> --admin global` is rejected as an unknown flag for that command
-- [ ] `--admin` composes with `--limit`: the filter runs first, and the summary reports `complete`
+- [x] `--admin` with no value ends as a `usage` refusal
+- [x] `pd users get <id> --admin global` is rejected as an unknown flag for that command
+- [x] `--admin` composes with `--limit`: the filter runs first, and the summary reports `complete`
       and `reason` against the filtered list
-- [ ] A filter that matches no user exits 0 with `emitted: 0` and one summary line
-- [ ] `--admin` composes with `--fields`, including when the selected fields exclude the boolean the
+- [x] A filter that matches no user exits 0 with `emitted: 0` and one summary line
+- [x] `--admin` composes with `--fields`, including when the selected fields exclude the boolean the
       filter read
-- [ ] `pd manifest` and `pd users list --help` both list `--admin` with its two values
-- [ ] `pd stages list --pipeline-id <n>` still behaves exactly as before the generalisation, proven
+- [x] `pd manifest` and `pd users list --help` both list `--admin` with its two values
+- [x] `pd stages list --pipeline-id <n>` still behaves exactly as before the generalisation, proven
       by its existing tests passing unchanged
-- [ ] A resource-declared filter value that the flag parser rejects can never reach the filter as a
+- [x] A resource-declared filter value that the flag parser rejects can never reach the filter as a
       silently ignored value — the failure is a refusal, not a no-op
-- [ ] `AGENTS.md` documents the flag, its two values, and that it exists on `list` alone
+- [x] `AGENTS.md` documents the flag, its two values, and that it exists on `list` alone
 
 ## Comments
 

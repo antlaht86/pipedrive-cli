@@ -276,15 +276,17 @@ export const cachedCommand = async ({
 			return writer.error(noSurvivors(resource.recordType, checked.rejected));
 		}
 
+		// Ticket 28: the flag is either absent or applied. The test that used to
+		// stand here read the value's *type*, so a resource declaring a filter over
+		// a string would have had its flag parse and then quietly do nothing.
 		let filtered = checked.page;
 		const listFilter = resource.listFilter;
 		if (listFilter !== undefined) {
 			const value = flags[listFilter.flag];
-			if (typeof value === "number") {
-				filtered = {
-					...checked.page,
-					records: listFilter.apply(checked.page.records, value),
-				};
+			if (value !== undefined) {
+				const applied = listFilter.apply(checked.page.records, value);
+				if (applied.isErr()) return writer.error(applied.error);
+				filtered = { ...checked.page, records: applied.value };
 			}
 		}
 

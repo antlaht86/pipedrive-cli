@@ -173,6 +173,12 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
 		group: "command",
 		enumerable: true,
 	},
+	{
+		parser: "admin",
+		name: "--admin <role>",
+		group: "command",
+		enumerable: true,
+	},
 	{ parser: "exact", name: "--exact", group: "command", enumerable: true },
 	{
 		parser: "search-in",
@@ -356,7 +362,11 @@ const dataCommands = (name: string): readonly CommandDefinition[] => {
 
 	if (cached !== undefined) {
 		const entityFlags = cached.needsEntity ? (["entity"] as const) : [];
-		const listFilter = cached.listFilter?.flag;
+		const listFilter = cached.listFilter;
+		const filterValues =
+			listFilter?.values === undefined
+				? undefined
+				: { [FLAG_NAMES[listFilter.flag]]: listFilter.values };
 		const common = [...GLOBAL_DATA_FLAGS, ...entityFlags] as const;
 		const source = cached.source();
 		const byEntity = cached.needsEntity
@@ -378,8 +388,9 @@ const dataCommands = (name: string): readonly CommandDefinition[] => {
 				parserFlags: [
 					...LIST_DATA_FLAGS,
 					...entityFlags,
-					...(listFilter === undefined ? [] : [listFilter]),
+					...(listFilter === undefined ? [] : [listFilter.flag]),
 				],
+				flagValues: filterValues,
 				selectableFields: source?.fields,
 				selectableFieldsByEntity: byEntity,
 			}),

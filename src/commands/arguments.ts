@@ -32,6 +32,7 @@ import { z } from "zod";
 
 import { pdError, type PdError } from "../lib/errors.ts";
 import { DEAL_STATUSES, SORT_FIELDS } from "../lib/pipedrive/list-filters.ts";
+import { ADMIN_SCOPES } from "../lib/pipedrive/users.ts";
 
 /**
  * The value both quantitative flags take — ADR-0003: a positive integer of 1 or
@@ -199,6 +200,16 @@ export const Arguments = z.object({
 	"organization-id": positiveId("organization-id").optional(),
 	/** ADR-0009 §4: required on `fields`, and its value set is checked there. */
 	entity: z.string().min(1, { error: "--entity needs a value." }).optional(),
+	/**
+	 * Ticket 28: the one value set a cached resource declares for itself. It is
+	 * checked here rather than at the filter, so `--admin sales` is refused
+	 * offline instead of arriving at a filter that would ignore it.
+	 */
+	admin: z
+		.enum(ADMIN_SCOPES, {
+			error: `--admin takes one of: ${ADMIN_SCOPES.join(", ")}.`,
+		})
+		.optional(),
 	/** ADR-0016 §1: repeatable values are split and validated by the resource schema. */
 	fields: z.array(z.string()).optional(),
 	/** ADR-0018 §3: deduplicated before the API's 100-id chunks are formed. */
@@ -253,6 +264,7 @@ const FLAG_TYPE: Record<Flag, "string" | "boolean"> = {
 	types: "string",
 	"organization-id": "string",
 	entity: "string",
+	admin: "string",
 	fields: "string",
 	ids: "string",
 	"owner-id": "string",

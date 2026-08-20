@@ -27,7 +27,10 @@ import { tmpdir } from "node:os";
 
 import { route } from "../src/router.ts";
 import { fingerprintOf } from "../src/lib/auth/credentials.ts";
-import { CACHED_RESOURCES } from "../src/lib/pipedrive/cached.ts";
+import {
+  CACHED_RESOURCES,
+  cachedResourceNamed,
+} from "../src/lib/pipedrive/cached.ts";
 import { createReplayTransport, type Fixture } from "./support/replay.ts";
 import { capture, type Line } from "./support/ndjson.ts";
 import { FakeClock } from "./support/clock.ts";
@@ -336,6 +339,159 @@ describe("pd users names the admin directly", () => {
       is_deal_admin: false,
     });
     expect(warm.last).toMatchObject({ requests: 0 });
+  });
+});
+
+describe("pd users list --admin", () => {
+  const SALES = [{ app: "sales", admin: true, permission_set_id: "s" }];
+  const NEITHER = [{ app: "account_settings", admin: true, permission_set_id: "a" }];
+
+  /** 11 and 13 administer `global`; 12 administers `sales`; 14 administers neither. */
+  const fourUsers = (): Fixture =>
+    usersFixture([
+      user(11),
+      user(12, { access: SALES }),
+      user(13),
+      user(14, { access: NEITHER }),
+    ]);
+
+  test("--admin global emits only the global admins", async () => {
+    const { exit, lines, last } = await runWith(
+      [fourUsers()],
+      ["users", "list", "--admin", "global"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines).map((line) => line["id"])).toEqual([11, 13]);
+    expect(
+      records(lines).every((line) => line["is_global_admin"] === true),
+    ).toBe(true);
+    expect(last).toMatchObject({ complete: true, emitted: 2 });
+  });
+
+  test("--admin deal emits only the deal admins", async () => {
+    const { exit, lines } = await runWith(
+      [fourUsers()],
+      ["users", "list", "--admin", "deal"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines).map((line) => line["id"])).toEqual([12]);
+    expect(records(lines)[0]).toMatchObject({ is_deal_admin: true });
+  });
+
+  test("no flag emits every user, as before", async () => {
+    const { exit, lines } = await runWith([fourUsers()], ["users", "list"]);
+
+    expect(exit).toBe(0);
+    expect(records(lines).map((line) => line["id"])).toEqual([11, 12, 13, 14]);
+  });
+
+  test("an unrecognised value is a usage refusal naming both values", async () => {
+    const { exit, last } = await runWith(undefined, [
+      "users",
+      "list",
+      "--admin",
+      "sales",
+    ]);
+
+    expect(exit).toBe(2);
+    expect(last).toMatchObject({ code: "usage", requests: 0 });
+    expect(last["message"]).toContain("global");
+    expect(last["message"]).toContain("deal");
+  });
+
+  test("--admin with no value is a usage refusal", async () => {
+    const { exit, last } = await runWith(undefined, [
+      "users",
+      "list",
+      "--admin",
+    ]);
+
+    expect(exit).toBe(2);
+    expect(last).toMatchObject({ code: "usage", requests: 0 });
+  });
+
+  test("get does not carry the flag", async () => {
+    const { exit, last } = await runWith(undefined, [
+      "users",
+      "get",
+      "11",
+      "--admin",
+      "global",
+    ]);
+
+    expect(exit).toBe(2);
+    expect(last).toMatchObject({ code: "usage", requests: 0 });
+    expect(last["message"]).toContain("--admin");
+  });
+
+  test("the filter runs before --limit bounds it", async () => {
+    const { exit, lines, last } = await runWith(
+      [fourUsers()],
+      ["users", "list", "--admin", "global", "--limit", "1"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines).map((line) => line["id"])).toEqual([11]);
+    expect(last).toMatchObject({
+      complete: false,
+      reason: "limit",
+      emitted: 1,
+    });
+  });
+
+  test("a limit above the filtered count is complete", async () => {
+    const { last } = await runWith(
+      [fourUsers()],
+      ["users", "list", "--admin", "global", "--limit", "3"],
+    );
+
+    expect(last).toMatchObject({ complete: true, emitted: 2 });
+  });
+
+  test("a filter that matches nothing exits 0 with emitted: 0", async () => {
+    const { exit, lines, last } = await runWith(
+      [usersFixture([user(14, { access: NEITHER })])],
+      ["users", "list", "--admin", "deal"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)).toHaveLength(0);
+    expect(lines.filter((line) => line["type"] === "summary")).toHaveLength(1);
+    expect(last).toMatchObject({ complete: true, emitted: 0 });
+  });
+
+  test("a value the flag parser would reject is refused rather than ignored", () => {
+    // Ticket 28's hazard, asserted at the filter itself: the old path read the
+    // value's type and skipped a value it did not recognise, so a mis-declared
+    // filter produced an unfiltered answer that looked filtered. The code is
+    // `internal` rather than `usage` (ADR-0001): the command line cannot reach
+    // this branch, because `--admin sales` is refused by the argument schema
+    // first, so only a declaration that disagrees with itself gets here and no
+    // command edit would fix it.
+    const filter = cachedResourceNamed("users")?.listFilter;
+    const refused = filter?.apply([user(11)] as Record<string, unknown>[], "sales");
+
+    expect(refused?.isErr()).toBe(true);
+    expect(refused?._unsafeUnwrapErr()).toMatchObject({ code: "internal" });
+  });
+
+  test("--fields composes even when it excludes the boolean the filter read", async () => {
+    const { exit, lines } = await runWith(
+      [fourUsers()],
+      ["users", "list", "--admin", "deal", "--fields", "name"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)).toEqual([
+      {
+        type: "record",
+        record_type: "user",
+        id: 12,
+        name: "Aino Virtanen 12",
+      },
+    ] as unknown as Line[]);
   });
 });
 

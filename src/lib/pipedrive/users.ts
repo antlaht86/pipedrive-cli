@@ -106,6 +106,21 @@ const withAdminFlags = (raw: unknown): unknown => {
 };
 
 /**
+ * The two roles `pd users list --admin` selects on, and the derived boolean
+ * each one reads. The vocabulary is `global` and `deal` — the spelling of the
+ * fields above and of Pipedrive's own UI — and `sales` is not a synonym for
+ * `deal` here: the wire word stays on the wire (ticket 28).
+ */
+export const ADMIN_SCOPES = ["global", "deal"] as const;
+
+export type AdminScope = (typeof ADMIN_SCOPES)[number];
+
+export const ADMIN_FIELD: Readonly<Record<AdminScope, keyof UserRecord>> = {
+  global: "is_global_admin",
+  deal: "is_deal_admin",
+};
+
+/**
  * The gate `cached.ts` admits a user record with, and the only schema that
  * should ever meet a raw wire record: `UserRecord` alone no longer parses one,
  * because it now requires two fields Pipedrive does not send. `UserRecord`

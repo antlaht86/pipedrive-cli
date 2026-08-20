@@ -145,6 +145,16 @@ describe("the command table generates the manifest contract", () => {
 		}
 	});
 
+	test("the users list filter is published with both its values", () => {
+		// Ticket 28: `--admin` exists on `list` alone, and the two values it takes
+		// are the answer to "which admin" rather than free text.
+		expect(command("pd users list").flags).toContain("--admin <role>");
+		expect(command("pd users list").flag_values).toMatchObject({
+			"--admin <role>": ["global", "deal"],
+		});
+		expect(command("pd users get").flags).not.toContain("--admin <role>");
+	});
+
 	test("selectable fields are taken from the same runtime schemas", () => {
 		for (const name of [
 			"deals",
@@ -224,6 +234,10 @@ test("root and command help are generated from the table", () => {
 	expect(dealsHelp).toContain("Never invoke --pretty from an agent");
 	expect(dealsHelp).toContain("--verbose");
 	expect(dealsHelp).toContain("--sort-by <field> (id, update_time, add_time)");
+	expect(renderHelp(["users", "list"])).toContain(
+		"--admin <role> (global, deal)",
+	);
+	expect(renderHelp(["stages", "list"])).toContain("--pipeline-id <n>");
 	expect(renderHelp(["fields", "list"])).toContain(
 		"SELECTABLE FIELDS BY --ENTITY\n  deal: field_name, field_code",
 	);

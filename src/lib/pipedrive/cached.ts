@@ -27,7 +27,9 @@
  */
 
 import { err, ok, type Result } from "neverthrow";
-import type { z } from "zod";
+import { z } from "zod";
+
+import type { Arguments, Flag } from "../../commands/arguments.ts";
 
 import { pdError, type PdError } from "../errors.ts";
 import type { CacheEntryName } from "../cache/entries.ts";
@@ -35,7 +37,13 @@ import type { PipedriveClient } from "./client.ts";
 import { identifiedBy, integerId, type FieldVocabulary } from "./schema.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
-import { UserGate, UserRecord, fetchUsers } from "./users.ts";
+import {
+	ADMIN_FIELD,
+	ADMIN_SCOPES,
+	UserGate,
+	UserRecord,
+	fetchUsers,
+} from "./users.ts";
 import {
 	getActivityFields,
 	getDealFields,
@@ -87,13 +95,69 @@ export type CachedSource = {
 	) => PromiseLike<Result<unknown[], PdError>>;
 };
 
+/**
+ * A command-scoped filter over the whole cached list, as `--pipeline-id` and
+ * `--admin` both are.
+ *
+ * `apply` takes the parsed flag value as `unknown` and answers with a `Result`,
+ * which is the shape ticket 28 required: the previous filter read its value
+ * behind a `typeof value === "number"` test, so a resource that declared a flag
+ * whose value was not a number would have had the flag accepted on the command
+ * line and then do nothing — an answer that looks right and is wrong. There is
+ * no third outcome here. The flag is absent, or the filter runs, or `pd`
+ * refuses.
+ *
+ * Declare one with `filterOn` below rather than by writing this type out: the
+ * helper is what ties `flag` to the type of the value `apply` receives.
+ */
 type CachedListFilter = {
-	readonly flag: "pipeline-id";
+	/** The flag on the command line; `list` alone carries it. */
+	readonly flag: Flag;
+	/**
+	 * Its value set, for `--help` and the manifest — read off the value schema
+	 * rather than spelled a second time beside it, so a third admin role is one
+	 * edit and not two that must agree. A numeric filter has none.
+	 */
+	readonly values?: readonly string[];
 	readonly apply: (
 		records: readonly Record<string, unknown>[],
-		value: number,
-	) => Record<string, unknown>[];
+		value: unknown,
+	) => Result<Record<string, unknown>[], PdError>;
 };
+
+/**
+ * The declaration site, where the flag name and the value type are one choice.
+ * `Arguments[F]` is the **parsed** value — `--pipeline-id` arrives as a number
+ * and not as the text the caller typed — so `value` describes what the argument
+ * schema already produced, and re-parsing it here catches only a declaration
+ * that disagrees with itself.
+ */
+const filterOn = <F extends Flag>(spec: {
+	flag: F;
+	value: z.ZodType<NonNullable<Arguments[F]>>;
+	apply: (
+		records: readonly Record<string, unknown>[],
+		value: NonNullable<Arguments[F]>,
+	) => Record<string, unknown>[];
+}): CachedListFilter => ({
+	flag: spec.flag,
+	...(spec.value instanceof z.ZodEnum
+		? { values: Object.values(spec.value.enum) as readonly string[] }
+		: {}),
+	apply: (records, value) => {
+		const parsed = spec.value.safeParse(value);
+		return parsed.success
+			? ok(spec.apply(records, parsed.data))
+			: err(
+					pdError({
+						code: "internal",
+						message:
+							`pd declared --${spec.flag} over a value its own filter then refused. ` +
+							"The argument schema and the filter disagree; no command edit can fix it.",
+					}),
+				);
+	},
+});
 
 export type CachedResource = {
 	/** The plural noun on the command line — ADR-0009 §5, Pipedrive's own. */
@@ -297,6 +361,15 @@ const CACHED: readonly CachedResource[] = [
 		name: "users",
 		recordType: "user",
 		needsEntity: false,
+		// Ticket 28. The filter reads the two booleans ticket 27 derives, so it
+		// runs over validated records rather than over the raw cached list — the
+		// wire carries `access`, not `is_global_admin`.
+		listFilter: filterOn({
+			flag: "admin",
+			value: z.enum(ADMIN_SCOPES),
+			apply: (records, scope) =>
+				records.filter((record) => record[ADMIN_FIELD[scope]] === true),
+		}),
 		source: only(FIXED_SOURCES.users),
 	},
 	{
@@ -309,11 +382,12 @@ const CACHED: readonly CachedResource[] = [
 		name: "stages",
 		recordType: "stage",
 		needsEntity: false,
-		listFilter: {
+		listFilter: filterOn({
 			flag: "pipeline-id",
+			value: z.int(),
 			apply: (records, pipelineId) =>
 				records.filter((record) => record["pipeline_id"] === pipelineId),
-		},
+		}),
 		source: only(FIXED_SOURCES.stages),
 	},
 	{
