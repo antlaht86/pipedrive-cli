@@ -110,16 +110,16 @@ business, for example:
 cp dist/pd ~/.local/bin/
 ```
 
-On macOS and Linux, `bun run update` does the whole loop in one step: `bun install`, the
-build, `install -m 755 dist/pd "$HOME/.local/bin/pd"`, then it prints the installed
-binary's version. The destination is hardcoded and not configurable, and Windows has no
-equivalent — use the manual copy above.
+On macOS and Linux, `bun run update` runs `bun install`, then the build, then
+`install -m 755 dist/pd "$HOME/.local/bin/pd"`, and prints the installed binary's
+version. The destination is hardcoded. Windows has no equivalent; use the manual copy
+above.
 
 `pd --version` names the commit the binary was built from: `1.0.0` from a clean checkout
 at a release tag, `1.0.0+g3f9a1c2` off a tag, `1.0.0+g3f9a1c2.dirty` with local changes.
 
-`pd` never updates itself. Updating is `git pull && bun run build`, or `git pull && bun run update`
-to land the new binary on `PATH` in the same step.
+`pd` never updates itself. Updating is `git pull && bun run build`, or
+`git pull && bun run update` to put the new binary on `PATH` in the same step.
 
 On macOS `codesign -v` reports an invalid signature on fresh `--compile` output, because
 Bun appends its payload after the signature. The binary runs as built and the project
