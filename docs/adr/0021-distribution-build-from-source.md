@@ -66,10 +66,10 @@ Homebrew tap, no per-platform CI build matrix, no code signing, no notarization.
 half of research 07 stays declined, and the first half — `bun build --compile` — is now the whole
 story.
 
-The npm names ADR-0014 §1 shopped for (`pd`, `pipedrive-cli`, `pd-cli`, `@zimple/pd`) are irrelevant
-and the scope is dropped. The **command** name stays `pd`, as every ADR in this map assumes. The PATH
-collision ADR-0014 accepted with `pd-cli`'s own `pd` bin no longer exists unless the user creates it,
-because nothing installs a `pd` on their behalf.
+The npm names ADR-0014 §1 shopped for (`pd`, `pipedrive-cli`, `pd-cli`, `@scope/pd` — a placeholder,
+see ADR-0014's editorial note) are irrelevant and the scope is dropped. The **command** name stays
+`pd`, as every ADR in this map assumes. The PATH collision ADR-0014 accepted with `pd-cli`'s own `pd`
+bin no longer exists unless the user creates it, because nothing installs a `pd` on their behalf.
 
 ~~**The repository is the access control**, and §9 keeps it private.~~ **Superseded by
 [ADR-0031](0031-the-repository-is-public.md)**: the repository is public and controls access to
@@ -254,8 +254,8 @@ from the entrypoint would be embedded rather than published.
 
 *Superseded by [ADR-0031](0031-the-repository-is-public.md). The repository is public, anyone may
 clone it, and `pd`'s audience is no longer this repository's access list. The premise this whole
-section rests on — a recording of the real company account on a tracked path — was removed by ticket
-01: the recorder writes to the ignored `.scratch/live/responses.json`, so there is no company data
+section rests on — a recording of whatever account a run points at, on a tracked path — was removed by
+ticket 01: the recorder writes to the ignored `.scratch/live/responses.json`, so there is no CRM data
 for the clone to protect. In particular the `.gitignore` refusal below is reversed, with its reason
 answered in ADR-0031 §3, and the closing sentence "`AGENTS.md` states plainly that the clone is of a
 private repository" is no longer true of `AGENTS.md`. The distribution channel §1 decides is
@@ -263,13 +263,13 @@ untouched. What survives of §10's data rule is ADR-0031 §4: a recording is nev
 permanently. This section is kept as the account of why the boundary existed.*
 
 [ADR-0019](0019-testing-strategy.md) §10 made the repository's privacy a design constraint with a
-name: fixtures are recorded verbatim from the real company account — real deals, real organisation
+name: fixtures are recorded verbatim from a real production account — real deals, real organisation
 names, real amounts, real owners — and they persist in git history, so the repository "cannot become
 public by flipping a setting."
 
 Making the repository the distribution channel fuses two audiences that ADR-0014 kept apart. Under
 npm, a stranger could install `pd` without seeing a fixture. Under this ADR, **obtaining `pd` is
-cloning**, so anyone who can build it can read the company's recorded CRM data.
+cloning**, so anyone who can build it can read the recorded CRM data.
 
 **The privacy wins and the audience narrows.** `pd`'s users are whoever already has access to this
 repository — colleagues, and harnesses running under their credentials. That is coherent rather than

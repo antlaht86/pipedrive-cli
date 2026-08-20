@@ -52,7 +52,7 @@ export const deal = (id: number, overrides: DealOverrides = {}): Record<string, 
 });
 
 /**
- * The shape ticket 22 measured on a real account (deal 1856): 87 custom fields
+ * The shape ticket 22 measured on a real account: 87 custom fields
  * defined on the company, four of them filled on this deal. The counts and the
  * four value shapes are the real ones; the hashes are invented, because ADR-0019
  * §10 keeps real identifiers out of the fixture tree.

@@ -225,10 +225,11 @@ A separate suite, a separate command, and three hard rules.
   and inherits all four of ADR-0013's layers. It carries a hard `--max-requests` ceiling, and it is
   the only place in the project that supplies one by default.
 
-**It runs against the real company account.** No sandbox tenant is required. That was a deliberate
-choice: a sandbox would have its own custom-field schema, its own option ids and its own emptiness, so
-a fixture recorded there would pin a shape that no user of `pd` will ever meet — which is precisely the
-value the live suite exists to provide.
+**It runs against whatever account the resolved token points at — a production account, not a
+sandbox.** No sandbox tenant is required. That was a deliberate choice: a sandbox would have its own
+custom-field schema, its own option ids and its own emptiness, so a fixture recorded there would pin a
+shape that no user of `pd` will ever meet — which is precisely the value the live suite exists to
+provide.
 
 **It never tests a retry path, a 429, or the Cloudflare block. Permanently.** Research 01's asymmetry
 makes that test the one whose *successful execution* costs the company its API access. Those paths are

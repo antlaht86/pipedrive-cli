@@ -18,7 +18,7 @@ real customer data and git history keeps it. [ADR-0021](0021-distribution-build-
 promoted that constraint: once the repository became the distribution channel, obtaining `pd` *was*
 cloning, so the same sentence that protected the data also bounded the audience to colleagues.
 
-Both arguments rested on one premise — that a recording of the real company account lives on a
+Both arguments rested on one premise — that a recording of a real production account lives on a
 tracked path. That premise is gone. Ticket 01 moved the live recorder's output to
 `.scratch/live/responses.json`, which `.gitignore` already covers, and replaced the git-diff signal
 with a `git diff --no-index` between the previous recording and the new one. No `git add` reaches a

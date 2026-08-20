@@ -14,6 +14,13 @@ Extends: [ADR-0009](0009-command-surface-and-manifest.md) — adds `pd docs` and
 Extends: [ADR-0013](0013-read-only-enforcement.md) — `pd auth status` warnings gains a platform caveat
 Spends: [ADR-0012](0012-authentication-and-credential-resolution.md) §4 — the `Bun.*`-free freedom it preserved is now committed and enforced
 
+*Editorial note, 2026-08-20, before this repository was made public: the npm scope this record
+proposed was the author's employer's name. Every occurrence below now reads `@scope/pd`, a neutral
+placeholder. The channel was withdrawn by [ADR-0021](0021-distribution-build-from-source.md), so no
+argument here depends on which scope was chosen — only on the fact that a scope was needed at all.
+The same substitution was applied to ADR-0021 §1 and to the design map and grilling notes that
+carried the name. Nothing else in this record was touched.*
+
 ## Context
 
 Research 07 measured the option table and found the two ends far cheaper than the middle. A plain
@@ -43,7 +50,7 @@ pipeline only if a runtime-less consumer actually exists, and none does today.
 
 ### 1. One channel: a public npm package
 
-`pd` ships as `@zimple/pd` on the public npm registry, `bin: { "pd": "..." }`. `npm install -g @zimple/pd`.
+`pd` ships as `@scope/pd` on the public npm registry, `bin: { "pd": "..." }`. `npm install -g @scope/pd`.
 
 No compiled binary. No curl installer. No Homebrew tap. No code signing, no notarization, no
 `os`/`cpu`/`libc` platform packages, no glibc/musl split, no `-baseline` CPU variant, no
@@ -108,7 +115,7 @@ rests on — that everything in the gate is a Pipedrive call subject to the same
 Routed around the client, it is precisely the bypass ADR-0013 spent four layers preventing. Neither
 is worth a convenience.
 
-Updating is `npm install -g @zimple/pd@latest`, owned by whoever owns the harness.
+Updating is `npm install -g @scope/pd@latest`, owned by whoever owns the harness.
 
 A stale `pd` against a changed Pipedrive API already fails legibly, and it does so without this ADR
 adding anything: [ADR-0006](0006-validation-placement-and-rejection.md) strips unknown keys and emits
@@ -189,13 +196,13 @@ how the pointing is done without a network fetch.
 
 ### 8. Global install is the documented path; `npx` is named and not blessed
 
-`AGENTS.md` documents exactly one install: `npm install -g @zimple/pd`, after which `pd` is on `PATH`.
+`AGENTS.md` documents exactly one install: `npm install -g @scope/pd`, after which `pd` is on `PATH`.
 
 No absolute install path is pinned. The npm global prefix varies by platform, by Node version manager
 and by container, so "on `PATH` after a global install" is the only promise that holds everywhere,
 and it is the only one made.
 
-`npx @zimple/pd` is named in `AGENTS.md` as working but unsupported for agent use, because it
+`npx @scope/pd` is named in `AGENTS.md` as working but unsupported for agent use, because it
 silently resolves to whatever the registry served that minute — unpinning a version the agent may
 have been instructed to expect — and adds a network dependency to a tool whose entire premise is
 spending network budget carefully. `pd` does nothing at runtime to detect or refuse it: a

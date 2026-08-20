@@ -120,7 +120,7 @@ tarball contents.
 
 **Live suite: yes, hand-invoked only** (user's decision). Never CI, never scheduled, never part of
 `bun test`, read-only by construction through the same guarded client, with a `--max-requests` ceiling
-it is alone in supplying by default. It runs against the **real company account** — a sandbox was
+it is alone in supplying by default. It runs against a **real production account** — a sandbox was
 rejected because its custom-field schema, option ids and emptiness would pin a shape no real user meets.
 Its output is a re-recording that leaves a git diff for a human, not a pass/fail, because a suite that
 goes red when a colleague edits a deal is a suite nobody reads. It **never** tests a retry, a 429 or the

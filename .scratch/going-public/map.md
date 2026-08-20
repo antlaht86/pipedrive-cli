@@ -62,7 +62,7 @@ context each:
 - [06](issues/06-record-the-decision-and-correct-the-normative-documents.md) — the decision record,
   the supersede pointers, the agent contract and the glossary, as one sweep. Supersedes 02. **Done.**
 - [07](issues/07-the-disclosure-pass.md) — the disclosure pass: the employer name and the facts about
-  the company account. Supersedes 04 and 05. Blocked by 06, which opens the same records.
+  the company account. Supersedes 04 and 05. Blocked by 06, which opens the same records. **Done.**
 - [08](issues/08-the-binary-exclusion-gate-and-the-empty-fixture-document.md) — the binary-exclusion
   gate, whose coverage shrank by accident when ticket 01 emptied the tracked fixture document.
   Blocked by 06.

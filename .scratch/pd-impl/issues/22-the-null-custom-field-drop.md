@@ -14,7 +14,7 @@ byte-identical across `--resolve`), [ADR-0016](../../../docs/adr/0016-field-proj
 
 ## The measurement that decided it
 
-`pd deals list --limit 1 --fields custom_fields` against a real account, deal 1856:
+`pd deals list --limit 1 --fields custom_fields` against a real account, one deal:
 
 | | |
 | --- | --- |

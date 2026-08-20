@@ -66,8 +66,8 @@ All five acceptance criteria are answered, none of them the way this ticket prop
   untouched.
 - The nine first-surface resources are covered by one rule rather than by nine observations.
 - `pd deals list` against a live account emits and exits 0. **Verified by hand, 2026-08-17**, against
-  the real company account: `pd deals list --limit 5` returned `emitted: 5, skipped: 0, requests: 1`.
-  The first record was deal 1856, `status: "open"`, carrying no `won_time`, no `lost_time` and no
+  a real production account: `pd deals list --limit 5` returned `emitted: 5, skipped: 0, requests: 1`.
+  The first record carried `status: "open"`, no `won_time`, no `lost_time` and no
   `expected_close_date` — the exact shape this ticket was opened for. Two further records carried no
   `org_id`. Nothing was recorded to disk; the evidence is this paragraph.
 

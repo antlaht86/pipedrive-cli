@@ -958,7 +958,7 @@ Windows-specific code in `pd`.
 ### The live suite
 
 A separate suite and a separate command, never in CI, never on a schedule, never part of `bun test`.
-It runs against the **real company account** — a sandbox would pin a schema no user of `pd` will ever
+It runs against a **real production account** — a sandbox would pin a schema no user of `pd` will ever
 meet — read-only by construction through the same guarded client, and it is the only place in the
 project that supplies a `--max-requests` ceiling by default.
 

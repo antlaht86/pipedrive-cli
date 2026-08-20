@@ -34,7 +34,7 @@ Record as an ADR.
 
 Full detail in [ADR-0014](../../../docs/adr/0014-distribution.md).
 
-**One channel: `@zimple/pd`, a public npm package, bin `pd`.** No compiled binary, no curl installer,
+**One channel: `@scope/pd`, a public npm package, bin `pd`.** No compiled binary, no curl installer,
 no Homebrew, no signing, no platform matrix, no glibc/musl split — the whole second half of research
 07 is declined. The scoped name is forced: `pd`, `pipedrive-cli` and `pd-cli` are all taken on the
 live registry, and `pd-cli` already installs a bin named `pd`. That PATH collision is accepted, not
@@ -68,7 +68,7 @@ after `--help` and `manifest`, earning it by version-matching the docs to the bi
 `pd docs >> AGENTS.md`.
 
 **Global install is the only documented path**; no absolute path is pinned because the npm prefix
-varies, and `npx @zimple/pd` is named as working but unsupported for agents because it unpins the
+varies, and `npx @scope/pd` is named as working but unsupported for agents because it unpins the
 version.
 
 **A thirteenth ADR-0001 variant, `unsupported_runtime`, exit 2**, because npm's `engines` field is

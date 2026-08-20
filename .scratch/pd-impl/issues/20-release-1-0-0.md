@@ -38,7 +38,7 @@ Notes for the implementer:
 
 A separate suite and a separate command. **Never in CI, never on a schedule, never part of `bun test`.**
 
-- It runs against the **real company account** — a sandbox would pin a schema no user of `pd` will ever meet — read-only by construction through the same guarded client.
+- It runs against a **real production account** — a sandbox would pin a schema no user of `pd` will ever meet — read-only by construction through the same guarded client.
 - It is the **only** place in the project that supplies a `--max-requests` ceiling by default.
 - **Its output is a re-recording and a git diff, not a pass or fail.** A diff touching only values is noise; a diff touching keys is Pipedrive changing under `pd`, and that is the signal.
 - **It never tests a retry path, a 429, or the Cloudflare block. Permanently.** Those are the tests whose *successful execution* costs the company its API access. They are tested against fixtures with the injected clock and nowhere else.

@@ -226,7 +226,7 @@ Historic note, superseded: a 2018 changelog announced equal windows ("20/40/80 r
 - "Unlisted" and "private" are the same thing; unlisted apps were moved to the Private apps section in Developer Hub. Source: <https://pipedrive.readme.io/docs/developer-hub>
 - A developer sandbox account is still required to see Developer Hub at all.
 
-This makes OAuth genuinely viable for an internal CLI: register a private app requesting only `base` + the `:read` scopes, install it into the real company account via the direct link, no Marketplace review.
+This makes OAuth genuinely viable for an internal CLI: register a private app requesting only `base` + the `:read` scopes, install it into a real production account via the direct link, no Marketplace review.
 
 ---
 

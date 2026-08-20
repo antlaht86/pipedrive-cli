@@ -51,11 +51,11 @@ run `pd` can currently produce costs roughly **1,300 tokens**, against a smalles
 That leaves the runaway agent loop, and a ceiling aimed at it would have to be an arbitrary absolute
 number: the same value is a third of a Lite single-seat pool and a fraction of a percent of an
 Ultimate pool. It would interrupt legitimate work against a hazard that has not been observed in
-practice on this account.
+practice on the account this decision was measured against.
 
-**Stated as an assumption rather than a fact, because it is the deciding input:** the account this
-tool is built for has never reached the daily token budget. If that changes, adding a ceiling is a new
-decision, and it should be anchored on measurement rather than on a guess.
+**Stated as an assumption rather than a fact, because it is the deciding input:** the account a run
+points at does not reach its daily token budget. Where that assumption does not hold, adding a ceiling
+is a new decision, and it should be anchored on measurement rather than on a guess.
 
 The consequence, accepted and recorded plainly: **`pd` does not guard the shared daily budget.** It
 reduces pressure on it — v2 over v1 halves cost, `limit=500` cuts a walk's request count fivefold, and

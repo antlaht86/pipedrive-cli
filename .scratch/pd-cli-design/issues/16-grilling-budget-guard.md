@@ -50,7 +50,8 @@ by construction. What remains possible is predictive self-accounting, which was 
 rejected: at v2 costs the heaviest single run `pd` can produce is roughly 1,300 tokens against a
 smallest-possible pool of 30,000, so no single run is the hazard, and a ceiling aimed at the runaway
 loop would be an arbitrary absolute number interrupting legitimate work. The deciding input is stated
-in the ADR as an assumption rather than a fact: this account has never reached the daily budget.
+in the ADR as an assumption rather than a fact: the account a run points at does not reach its daily
+budget.
 
 That disposes of the cross-invocation token ledger and, with it, the reset problem — the budget resets
 "at midnight at server's timezone" and the server timezone is named nowhere, so no ledger could have
