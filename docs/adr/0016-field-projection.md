@@ -202,6 +202,30 @@ per-account schema identifiers, not company data, and the whole point of logging
 "why is my field missing" by showing what was actually requested. `include_fields` is not added,
 because §7 never sends it.
 
+### 11. A resource may withhold a field from the default output
+
+**Added 2026-08-20, ticket 29.** §1 says "one mode: name what you want", and that stays true of
+`--fields`. What this section adds is on the other side of the flag: what a run gets when it names
+nothing.
+
+A source may declare a field as **selectable but not sent**. The field keeps its place in the record
+schema, keeps its entry in §8's manifest list, and stays readable by anything that derives from it —
+and a run that passes no `--fields` does not carry it. `--fields <name>` emits it, unchanged. There
+is still no negation syntax and no `--exclude`: the caller cannot withhold anything, and a resource
+cannot withhold anything from a caller who asked for it by name.
+
+`users` withholds `access` (ADR-0007's ticket-29 amendment), and it is the only source that
+withholds anything. A source that declares nothing produces no projection at all, which is the path
+every resource took before this section existed.
+
+Two rules bind the mechanism, and both are §1's:
+
+- **The identity is never withheld.** `id` — `field_code` on `fields` — is emitted selected or not,
+  so a declaration naming it is subtracted rather than enacted.
+- **The declaration answers a deny-list.** ADR-0008's resolver asks a projection whether a field
+  survived and reads an absent projection as "every field did". A default projection answering
+  allow-list would switch resolution off on every run that passed no `--fields`.
+
 ## Assumptions recorded rather than asked
 
 Implementation-level, decided rather than put to the user, per the map's altitude rule.

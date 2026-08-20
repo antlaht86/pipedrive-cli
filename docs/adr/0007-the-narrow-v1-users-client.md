@@ -101,7 +101,8 @@ absence is how this API says "not an admin" — on a live account four of eight 
 a list of `{ app, admin }`, yields `false` for both and still passes the gate. An unrecognised `app`
 value is skipped, for the reason the `access` amendment above gives.
 
-`access` stays, unchanged and in its old position. §7 states the rule for `--resolve` — a derived
+`access` stays in the schema, unchanged and in its old position — and, from ticket 29's amendment
+below, is emitted only when `--fields` names it. §7 states the rule for `--resolve` — a derived
 field is added beside the raw one, never in place of it — and a derived boolean is the same trade:
 `permission_set_id` and the per-app flags have no other home. The derivation costs no request — it
 runs on the way out of the one-hour cache entry, so a warm entry starts emitting both fields without
@@ -116,7 +117,7 @@ UUIDs, on every user of every run, to carry a fact the booleans beside them alre
 This does not touch §7. That rule is about `--resolve`, which adds a derived field beside the raw
 one and never in place of it, and the derivation still reads `access` in full before anything is
 withheld — a user's `is_deal_admin` is identical with the field selected and without it. What
-changed is one stage later: ADR-0016 §5's projection, which is already the one place `pd` removes a
+changed is one stage later: ADR-0016 §11's projection, which is already the one place `pd` removes a
 field from a line. A source now declares what it withholds from a run that named no `--fields`, and
 `users` is the only source that declares anything.
 

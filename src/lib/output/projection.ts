@@ -106,7 +106,7 @@ export type Projection = {
 };
 
 /**
- * The default projection — ADR-0016 §5, ticket 29.
+ * The default projection — ADR-0016 §11, ticket 29.
  *
  * A resource may declare a field that is **selectable but not sent**: it stays
  * in the record schema, stays in the manifest's selectable list, and stays
@@ -118,19 +118,26 @@ export type Projection = {
  * It is a **deny-list**, and that is the whole of it. `includes` answers
  * "everything except what is withheld", because ADR-0008's resolver asks the
  * projection whether a field survived and reads an absent projection as
- * "everything did. An allow-list here would switch resolution off on every run
+ * "everything did". An allow-list here would switch resolution off on every run
  * that passed no `--fields`, which is a wrong answer that looks like a right
  * one.
+ *
+ * A withheld name is a **raw** schema name, the same side of the rename table
+ * that `rawSelected` below holds: the rename runs in the writer, one stage after
+ * this, so both paths compare against the keys a record actually carries here.
  */
-const withholding = (withheld: readonly string[]): Projection => ({
-  pushdown: undefined,
-  apply: (record) =>
-    Object.fromEntries(
-      Object.entries(record).filter(([key]) => !withheld.includes(key)),
-    ),
-  includes: (field) => !withheld.includes(field),
-  unmatched: () => [],
-});
+const withholding = (withheld: readonly string[]): Projection => {
+  const denied = new Set(withheld);
+  return {
+    pushdown: undefined,
+    apply: (record) =>
+      Object.fromEntries(
+        Object.entries(record).filter(([key]) => !denied.has(key)),
+      ),
+    includes: (field) => !denied.has(field),
+    unmatched: () => [],
+  };
+};
 
 export const createProjection = (
   given: readonly string[] | undefined,
@@ -141,8 +148,12 @@ export const createProjection = (
 ): Result<Projection | undefined, PdError> => {
   // No `--fields` and nothing withheld is the passthrough every resource but
   // `users` takes, and it stays a missing projection rather than an empty one.
+  // The identity is subtracted first, for ADR-0016 §1's reason: `id` is emitted
+  // selected or not, and a record without one cannot be followed up. A source
+  // that withheld its own identity would be a bug this refuses to enact.
   if (given === undefined) {
-    return ok(withheld.length === 0 ? undefined : withholding(withheld));
+    const denied = withheld.filter((field) => field !== identityField);
+    return ok(denied.length === 0 ? undefined : withholding(denied));
   }
 
   const outputToRaw = new Map(

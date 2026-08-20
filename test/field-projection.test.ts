@@ -268,4 +268,29 @@ describe("a withheld field", () => {
       createProjection(undefined, ["id", "name"], {}, "id", [])._unsafeUnwrap(),
     ).toBeUndefined();
   });
+
+  test("the identity is subtracted from what a source may withhold", () => {
+    // ADR-0016 §1: `id` is emitted selected or not. A source that declared its
+    // own identity withheld would be a bug, and the subtraction refuses to
+    // enact it rather than emitting records nothing can follow up.
+    const identityOnly = createProjection(
+      undefined,
+      ["id", "name"],
+      {},
+      "id",
+      ["id"],
+    )._unsafeUnwrap();
+    expect(identityOnly).toBeUndefined();
+
+    const alongside = createProjection(
+      undefined,
+      ["field_code", "field_name", "options"],
+      {},
+      "field_code",
+      ["field_code", "options"],
+    )._unsafeUnwrap();
+    expect(
+      alongside?.apply({ field_code: "title", field_name: "Title", options: [] }),
+    ).toEqual({ field_code: "title", field_name: "Title" });
+  });
 });

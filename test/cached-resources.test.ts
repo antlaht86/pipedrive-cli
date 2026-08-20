@@ -449,22 +449,35 @@ describe("pd users withholds access from the default output", () => {
       return Object.keys(records(lines)[0] as Line);
     };
 
+    // A fixture omits a field it has no value for, and ADR-0020 drops a null,
+    // so "every field it did before" is every schema field the fixture fills.
     const survives = (
-      name: string,
+      fields: readonly string[] | undefined,
       raw: Record<string, unknown>,
     ): string[] => [
       "type",
       "record_type",
-      ...(cachedResourceNamed(name)?.source()?.fields ?? []).filter(
-        (field) => raw[field] !== null,
+      ...(fields ?? []).filter(
+        (name) => Object.hasOwn(raw, name) && raw[name] !== null,
       ),
     ];
 
     expect(await emitted("pipelines", pipeline(1))).toEqual(
-      survives("pipelines", pipeline(1)),
+      survives(cachedResourceNamed("pipelines")?.source()?.fields, pipeline(1)),
     );
     expect(await emitted("stages", stage(1))).toEqual(
-      survives("stages", stage(1)),
+      survives(cachedResourceNamed("stages")?.source()?.fields, stage(1)),
+    );
+
+    // `fields` is the interesting one: its identity is `field_code` rather than
+    // `id`, so it is the resource a withholding path would break first.
+    const raw = field("9a3f1c2b4d5e6f708192a3b4c5d6e7f809a1b2c3");
+    const { lines } = await runWith(
+      [cachedPage("dealFields", [raw])],
+      ["fields", "list", "--entity", "deal"],
+    );
+    expect(Object.keys(records(lines)[0] as Line)).toEqual(
+      survives(cachedResourceNamed("fields")?.source("deal")?.fields, raw),
     );
   });
 });
