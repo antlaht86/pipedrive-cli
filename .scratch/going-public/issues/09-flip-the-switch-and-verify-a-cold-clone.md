@@ -53,6 +53,13 @@ and closed:
   belongs in it — stated there as text an agent should ignore, next to the unbounded-list warning
   that already sets that precedent.
 
+Publication exposes the history, not the working tree, so the history was scanned as well. Only one
+file was ever committed under a recording path — `fixtures/live/responses.json`, in the 1.0.0 release
+commit — and every version of it is the canary document with an empty `fixtures` array, 76 bytes;
+ticket 01 then removed it. No blob over 60 KB is anything but generated client code and the design
+spec, and no commit ever held a recorded response body. The flip is a setting, not the history
+rewrite ADR-0019 §10 warned it would be.
+
 The last box is scoped by ticket 06: `package.json`'s `"private": true` is the npm-publish flag
 ticket 03 deliberately kept, and the "private" text under `.scratch/pd-cli-design/`, in the closed
 release ticket, and in ADR-0019 §10 and ADR-0021 §9 is history behind a supersession banner. No
