@@ -12,7 +12,7 @@ role "deal admin", and the record speaks the vocabulary the operator reads on sc
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 Normative: [ADR-0007](../../../docs/adr/0007-the-narrow-v1-users-client.md) §3 (the record schema
 `pd` owns) and §5 (a rejected user record is a name lost from `--resolve` as well as from stdout),
@@ -54,25 +54,25 @@ These were settled in the grilling session and are not open:
 
 ## Acceptance
 
-- [ ] `pd users list` emits `is_global_admin` and `is_deal_admin` on every record
-- [ ] `pd users get <id>` emits the same two fields
-- [ ] A user who is an admin of `global` only gets `is_global_admin: true`, `is_deal_admin: false`
-- [ ] A user who is an admin of `sales` only gets the opposite pair
-- [ ] A user with an `access` list that names neither app gets `false` for both
-- [ ] A record with no `access`, or an `access` that is not a readable list, gets `false` for both
+- [x] `pd users list` emits `is_global_admin` and `is_deal_admin` on every record
+- [x] `pd users get <id>` emits the same two fields
+- [x] A user who is an admin of `global` only gets `is_global_admin: true`, `is_deal_admin: false`
+- [x] A user who is an admin of `sales` only gets the opposite pair
+- [x] A user with an `access` list that names neither app gets `false` for both
+- [x] A record with no `access`, or an `access` that is not a readable list, gets `false` for both
       and still passes the gate
-- [ ] An unrecognised `app` value does not reject the record and does not change either boolean
-- [ ] `access` is still emitted, unchanged, and the six older keys keep their positions
-- [ ] `--fields is_global_admin` and `--fields is_deal_admin` select them, and `pd manifest` lists
+- [x] An unrecognised `app` value does not reject the record and does not change either boolean
+- [x] `access` is still emitted, unchanged, and the six older keys keep their positions
+- [x] `--fields is_global_admin` and `--fields is_deal_admin` select them, and `pd manifest` lists
       both as selectable
-- [ ] No new request: verified by a cache-warm run reporting `requests: 0`
-- [ ] ADR-0007 §3 is amended to name both fields in the kept list
-- [ ] ADR-0029 §1's boundary is amended: `pd` now reads inside `access`. The read path validates
+- [x] No new request: verified by a cache-warm run reporting `requests: 0`
+- [x] ADR-0007 §3 is amended to name both fields in the kept list
+- [x] ADR-0029 §1's boundary is amended: `pd` now reads inside `access`. The read path validates
       leniently (`app` as a string, `admin` as a boolean, no enum); `access` itself is still emitted
       without validation
-- [ ] The test named "the record carries only the fields ADR-0007 §3 keeps" is updated rather than
+- [x] The test named "the record carries only the fields ADR-0007 §3 keeps" is updated rather than
       left stating something false
-- [ ] `AGENTS.md` documents both fields, including that absence of an entry reads as `false`
+- [x] `AGENTS.md` documents both fields, including that absence of an entry reads as `false`
 
 ## Comments
 

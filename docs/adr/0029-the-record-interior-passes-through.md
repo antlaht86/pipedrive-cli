@@ -51,6 +51,17 @@ This is a narrowing of ADR-0006 §1, not a reversal of it. Locked point 3 requir
 boundary untrusted data enters; the boundary is now defined as *the values `pd` acts on* rather than
 *every key on the wire*.
 
+**Amendment (2026-08-20, ticket 27): `pd` reads inside a `users` record's `access`.** It derives
+`is_global_admin` and `is_deal_admin` from it (ADR-0007 §3), so by this ADR's own rule of **use**
+that value is now read and is validated — leniently, one entry at a time: `app` as a string, `admin`
+as a boolean, and no enum over either. An entry that does not read that way is skipped, not
+rejected, because a `users` record that fails the gate is a name lost from `--resolve` as well as
+from stdout (ADR-0007 §5).
+
+`access` itself is still emitted exactly as it arrived, and the lenient read never rewrites it. The
+two rules therefore both hold on the one value: the derivation validates what it reads, and the
+passthrough emits what `pd` only copies.
+
 ### 2. What stays validated
 
 | Subject | Schema | Why |
@@ -61,6 +72,7 @@ boundary untrusted data enters; the boundary is now defined as *the values `pd` 
 | A record's identity | `IdentifiedRecord` / a source's `key` | Deduplication and `get` both key on it |
 | A search hit | The hit schemas of ADR-0017, hand-written | `pd` **reshapes** these: it flattens `item`, renames `owner` to `owner_id`, and splits objects into `*_id` / `*_name` pairs |
 | A `users` record | `UserRecord`, hand-written, ADR-0007 §3 | `pd` reads `id` and `name` to resolve owners |
+| A `users` record's `access` entries | `{ app: string, admin: boolean }`, hand-written, leniently, per entry | `pd` derives `is_global_admin` and `is_deal_admin` from them (ticket 27) |
 | Resolution inputs | `NamedRecord`, `ResolutionField`, hand-written | `--resolve` reads ids, names, field codes and option labels |
 
 Every schema in that table is **hand-written by `pd` from an observed response**. Not one is

@@ -129,6 +129,8 @@ describe("pd users list", () => {
       "is_deleted",
       "timezone_name",
       "access",
+      "is_global_admin",
+      "is_deal_admin",
     ]);
   });
 
@@ -186,6 +188,154 @@ describe("pd users list", () => {
       active_flag: false,
       is_deleted: true,
     });
+  });
+});
+
+describe("pd users names the admin directly", () => {
+  // Ticket 27: the booleans are derived from `access`, whose entries Pipedrive
+  // omits rather than sets to `false` — absence is how this API says "not an
+  // admin", so absence has to read as `false` and never as a rejection.
+  const listed = async (access: unknown): Promise<Line> => {
+    const { lines } = await runWith(
+      [usersFixture([user(11, { access })])],
+      ["users", "list"],
+    );
+    return records(lines)[0] as Line;
+  };
+
+  test("an admin of `global` alone is a global admin and not a deal admin", async () => {
+    expect(await listed([{ app: "global", admin: true, permission_set_id: "set-1" }]))
+      .toMatchObject({ is_global_admin: true, is_deal_admin: false });
+  });
+
+  test("an admin of `sales` alone is a deal admin and not a global admin", async () => {
+    expect(await listed([{ app: "sales", admin: true, permission_set_id: "set-1" }]))
+      .toMatchObject({ is_global_admin: false, is_deal_admin: true });
+  });
+
+  test("an access list naming neither app reads as false for both", async () => {
+    expect(await listed([{ app: "account_settings", admin: true, permission_set_id: "s" }]))
+      .toMatchObject({ is_global_admin: false, is_deal_admin: false });
+  });
+
+  test("a non-admin entry for an app reads as false", async () => {
+    expect(
+      await listed([
+        { app: "global", admin: false, permission_set_id: "s" },
+        { app: "sales", admin: false, permission_set_id: "s" },
+      ]),
+    ).toMatchObject({ is_global_admin: false, is_deal_admin: false });
+  });
+
+  test("a record with no access at all still passes the gate", async () => {
+    const { exit, lines } = await runWith(
+      [usersFixture([{ id: 11, name: "Aino Virtanen 11" }])],
+      ["users", "list"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toMatchObject({
+      id: 11,
+      is_global_admin: false,
+      is_deal_admin: false,
+    });
+  });
+
+  test("an access that is not a readable list reads as false and is still emitted", async () => {
+    expect(await listed("everything")).toMatchObject({
+      id: 11,
+      is_global_admin: false,
+      is_deal_admin: false,
+    });
+    expect(await listed([{}, 7, null, { app: "global", admin: "yes" }])).toMatchObject({
+      id: 11,
+      is_global_admin: false,
+      is_deal_admin: false,
+    });
+  });
+
+  test("an unrecognised app value neither rejects the record nor moves a boolean", async () => {
+    // ADR-0007 §5: a Pipedrive product launch must not turn into a lost name.
+    const { exit, lines } = await runWith(
+      [
+        usersFixture([
+          user(11, {
+            access: [
+              { app: "quantum_crm", admin: true, permission_set_id: "s" },
+              { app: "global", admin: true, permission_set_id: "s" },
+            ],
+          }),
+        ]),
+      ],
+      ["users", "list"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toMatchObject({
+      is_global_admin: true,
+      is_deal_admin: false,
+    });
+  });
+
+  test("access is still emitted, unchanged", async () => {
+    const access = [{ app: "sales", admin: true, permission_set_id: "set-9" }];
+    expect((await listed(access))["access"]).toEqual(access);
+  });
+
+  test("pd users get <id> emits the same two fields", async () => {
+    const { exit, lines } = await runWith(
+      [
+        usersFixture([
+          user(11),
+          user(12, { access: [{ app: "sales", admin: true, permission_set_id: "s" }] }),
+        ]),
+      ],
+      ["users", "get", "12"],
+    );
+
+    expect(exit).toBe(0);
+    expect(records(lines)[0]).toMatchObject({
+      id: 12,
+      is_global_admin: false,
+      is_deal_admin: true,
+    });
+  });
+
+  test("--fields selects each boolean on its own", async () => {
+    const selected = async (field: string): Promise<Line> => {
+      const { exit, lines } = await runWith(
+        [usersFixture([user(11)])],
+        ["users", "list", "--fields", field],
+      );
+      expect(exit).toBe(0);
+      return records(lines)[0] as Line;
+    };
+
+    expect(await selected("is_global_admin")).toEqual({
+      type: "record",
+      record_type: "user",
+      id: 11,
+      is_global_admin: true,
+    } as unknown as Line);
+    expect(await selected("is_deal_admin")).toEqual({
+      type: "record",
+      record_type: "user",
+      id: 11,
+      is_deal_admin: false,
+    } as unknown as Line);
+  });
+
+  test("a warm cache emits the booleans and reports requests: 0", async () => {
+    await runWith([usersFixture([user(11)])], ["users", "list"]);
+
+    const warm = await runWith(undefined, ["users", "list"]);
+
+    expect(warm.exit).toBe(0);
+    expect(records(warm.lines)[0]).toMatchObject({
+      is_global_admin: true,
+      is_deal_admin: false,
+    });
+    expect(warm.last).toMatchObject({ requests: 0 });
   });
 });
 

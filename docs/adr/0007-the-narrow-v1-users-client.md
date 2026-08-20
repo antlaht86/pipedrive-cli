@@ -89,6 +89,24 @@ declared as `z.unknown()` rather than as its wire shape: ADR-0029 §1 validates 
 schema is the gate as well as the vocabulary — an `app` enum would turn a Pipedrive product launch
 into a rejected user record, and a rejected user record is a name §5 promised to keep.
 
+**Amendment (2026-08-20, ticket 27): `is_global_admin` and `is_deal_admin` join the kept list.** They
+are **derived**, not sent: `is_global_admin` is the `admin` flag of the `access` entry whose `app` is
+`global`, and `is_deal_admin` the one whose `app` is `sales`. The name says `deal` because
+Pipedrive's own UI calls the role "deal admin", and the record speaks the vocabulary the operator
+reads on screen.
+
+Both are always present and always a boolean. An entry missing from `access` yields `false`, because
+absence is how this API says "not an admin" — on a live account four of eight users carry no
+`account_settings` entry at all. A record with no `access`, or with an `access` that does not read as
+a list of `{ app, admin }`, yields `false` for both and still passes the gate. An unrecognised `app`
+value is skipped, for the reason the `access` amendment above gives.
+
+`access` stays, unchanged and in its old position. §7 states the rule for `--resolve` — a derived
+field is added beside the raw one, never in place of it — and a derived boolean is the same trade:
+`permission_set_id` and the per-app flags have no other home. The derivation costs no request — it
+runs on the way out of the one-hour cache entry, so a warm entry starts emitting both fields without
+a refresh.
+
 The envelope schema is `{ success, data: unknown[] }` with no `additional_data` member. It is
 validated strictly and a failure ends the fetch as `invalid_response`, exactly as ADR-0006 §1
 specifies. Records are validated individually.

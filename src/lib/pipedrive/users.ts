@@ -44,6 +44,14 @@ import { getUsers } from "./v1/generated/sdk.gen.ts";
  * from stdout, which is precisely the naming failure ADR-0007 §5 exists to
  * prevent.
  *
+ * `is_global_admin` and `is_deal_admin` are derived from `access` rather than
+ * read off the wire, and they are the one place `pd` looks **inside** a record
+ * on this resource (ADR-0029 §1, amended by ticket 27). They answer the
+ * question `access` only contains: a caller would otherwise have to know the
+ * app is spelled `sales` and not `deals`, and that an absent entry means "not
+ * an admin" rather than `admin: false`. The name says `deal` because
+ * Pipedrive's own UI calls the role "deal admin".
+ *
  * That makes `users` the one resource whose output is still closed. ADR-0029 §6
  * opened the other nine by taking their generated schemas out of the record
  * path; this one is hand-written, `pd` reads `id` and `name` out of it to
@@ -57,9 +65,56 @@ export const UserRecord = z.object({
   is_deleted: z.boolean().optional(),
   timezone_name: z.string().optional(),
   access: z.unknown().optional(),
+  is_global_admin: z.boolean(),
+  is_deal_admin: z.boolean(),
 });
 
 export type UserRecord = z.infer<typeof UserRecord>;
+
+/**
+ * One `access` entry, read as leniently as the derivation allows: `app` is a
+ * string and `admin` is a boolean, with no enum over either. An entry that does
+ * not read this way is data the derivation skips, never a reason to reject the
+ * record — an unrecognised `app` value is a Pipedrive product launch, and
+ * ADR-0007 §5 keeps a name through one of those.
+ */
+const AccessEntry = z.object({ app: z.string(), admin: z.boolean() });
+
+/** True when `access` names `app` with `admin: true`. Absence reads as false. */
+const administers = (access: unknown, app: string): boolean =>
+  Array.isArray(access) &&
+  access.some((entry) => {
+    const parsed = AccessEntry.safeParse(entry);
+    return parsed.success && parsed.data.app === app && parsed.data.admin;
+  });
+
+/**
+ * The two booleans, injected before the record is parsed rather than defaulted
+ * inside it: they are always present and always a boolean, including on a
+ * record that carries no `access` at all and on one whose `access` is not a
+ * readable list. A non-object is handed on untouched, so it fails the gate for
+ * the reason it already did.
+ */
+const withAdminFlags = (raw: unknown): unknown => {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
+  const record = raw as Record<string, unknown>;
+  return {
+    ...record,
+    is_global_admin: administers(record["access"], "global"),
+    is_deal_admin: administers(record["access"], "sales"),
+  };
+};
+
+/**
+ * The gate `cached.ts` admits a user record with, and the only schema that
+ * should ever meet a raw wire record: `UserRecord` alone no longer parses one,
+ * because it now requires two fields Pipedrive does not send. `UserRecord`
+ * stays the field vocabulary — its shape order is the output key order — and
+ * the derived booleans sit at the end of it, so the six older keys and `access`
+ * keep their positions (ADR-0007 §7: resolution adds, it never removes).
+ */
+export const UserGate: z.ZodType<Record<string, unknown>, unknown> =
+  z.preprocess(withAdminFlags, UserRecord);
 
 /**
  * ADR-0007 §3: `{ success, data }` with no `additional_data` member, validated

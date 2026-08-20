@@ -135,6 +135,16 @@ describe("the command table generates the manifest contract", () => {
 		expect(costKeys).toEqual([]);
 	});
 
+	test("the two user admin booleans are selectable", () => {
+		// Ticket 27: they are derived rather than sent, so nothing about the wire
+		// would put them in the vocabulary — the record schema has to carry them.
+		for (const verb of ["list", "get"]) {
+			expect(command(`pd users ${verb}`).selectable_fields).toEqual(
+				expect.arrayContaining(["is_global_admin", "is_deal_admin"]),
+			);
+		}
+	});
+
 	test("selectable fields are taken from the same runtime schemas", () => {
 		for (const name of [
 			"deals",

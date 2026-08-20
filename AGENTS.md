@@ -31,6 +31,8 @@ Entity search is a distinct verb: `pd deals search Acme`. Search lines are **hit
 
 An activity record's upstream `type` field is emitted as `activity_type`; `type` is reserved for the NDJSON line discriminator.
 
+A user record carries `is_global_admin` and `is_deal_admin` beside the raw `access` array. Both are always present and always a boolean. `is_global_admin` is the `admin` flag of the `access` entry whose `app` is `global`; `is_deal_admin` is the one whose `app` is `sales`, which Pipedrive's UI calls the deal admin. Pipedrive omits an entry instead of sending `admin: false`, so an absent entry reads as `false`. A user with no `access` at all reads as `false` for both. Read these fields rather than searching `access` yourself.
+
 ## Bound output before reading it
 
 List commands fetch the complete result by default. Pass `--limit` unless you know the result is small. Reaching `--limit` is successful and produces a partial summary with `reason: "limit"`.

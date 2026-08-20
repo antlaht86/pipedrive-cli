@@ -35,7 +35,7 @@ import type { PipedriveClient } from "./client.ts";
 import { identifiedBy, integerId, type FieldVocabulary } from "./schema.ts";
 import { ListEnvelope, nextCursorOf } from "./envelope.ts";
 import { LIST_PAGE_SIZE, structural } from "./walk.ts";
-import { UserRecord, fetchUsers } from "./users.ts";
+import { UserGate, UserRecord, fetchUsers } from "./users.ts";
 import {
 	getActivityFields,
 	getDealFields,
@@ -118,8 +118,10 @@ type SourceDefinition = {
 	vocabulary: FieldVocabulary;
 	/**
 	 * The gate, where it asks more than `key` does. Present on `users` alone:
-	 * ADR-0029 §2 keeps the schemas `pd` reads the interior of, and `UserRecord`
-	 * is one `pd` wrote itself from an observed response.
+	 * ADR-0029 §2 keeps the schemas `pd` reads the interior of, and `UserGate`
+	 * is one `pd` wrote itself from an observed response. It also derives the
+	 * two admin booleans, which is why the gate and the vocabulary are the same
+	 * shape here but not the same schema.
 	 */
 	gate?: z.ZodType<Record<string, unknown>, unknown>;
 	identityField?: string;
@@ -271,7 +273,7 @@ const FIXED_SOURCES = {
 	users: defineSource({
 		entry: "users",
 		vocabulary: UserRecord,
-		gate: UserRecord,
+		gate: UserGate,
 		key: integerId,
 		fetch: fetchUsers,
 	}),
