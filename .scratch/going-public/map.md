@@ -6,9 +6,10 @@ git history for private data.
 ## What the audit found
 
 **The history is clean.** Across all 86 commits: exactly one blob has ever existed at
-`fixtures/live/responses.json` and it is the canary placeholder with an empty fixture list. No API
-tokens, no real email addresses, no home-directory paths, no internal links, no colleague names. One
-file has ever been deleted and it held source, not data. Every Pipedrive-shaped record in the tree
+`fixtures/live/responses.json` and it is the canary placeholder with an empty fixture list, which
+ticket 08 has since deleted as well. No API tokens, no real email addresses, no home-directory
+paths, no internal links, no colleague names. One file has ever been deleted and it held source, not
+data. Every Pipedrive-shaped record in the tree
 comes from an invented generator; the sample custom-field keys are hand-patterned hex, and the two
 real-looking field keys in the research notes are quoted from Pipedrive's public documentation. The
 `.scratch/live/` directory on disk holds real run output but is ignored and untracked.
@@ -50,6 +51,11 @@ being an access boundary. That makes 01 and 03 mandatory and narrows what 02 mus
   and ADR-0021 §9 are superseded and point at it, ADR-0019 §9's git-diff signal is amended,
   `AGENTS.md` no longer names a private repository, and `CONTEXT.md` gains **recording**. The design
   spec and the closed release ticket are deliberately left as history. This unblocks 07 and 08.
+- **08 done, 2026-08-20.** [ADR-0032](../../docs/adr/0032-the-canary-is-the-whole-binary-exclusion-gate.md)
+  keeps the binary-exclusion gate as a named tripwire armed from the canary constant, deletes the
+  tracked fixture document and the whole `fixtures/` tree with the tree-scanning code, and removes the
+  fixture credential scan rather than relocating it. `bun run gates` now requires a binary path. This
+  unblocks 09 together with 07.
 - **02, 04 and 05 superseded** — 02 by ticket 06, and 04 and 05 by ticket 07. No hard blocker
   remains: what is left is the disclosure pass, the binary-exclusion gate, and the switch itself.
 
@@ -65,8 +71,8 @@ context each:
   the company account. Supersedes 04 and 05. Blocked by 06, which opens the same records. **Done.**
 - [08](issues/08-the-binary-exclusion-gate-and-the-empty-fixture-document.md) — the binary-exclusion
   gate, whose coverage shrank by accident when ticket 01 emptied the tracked fixture document.
-  Blocked by 06.
+  Blocked by 06. **Done.**
 - [09](issues/09-flip-the-switch-and-verify-a-cold-clone.md) — the visibility change, and proving a
   stranger can clone and build. Blocked by 07 and 08.
 
-06 has landed. 07 and 08 are independent of each other and are the frontier; 09 waits on both.
+06, 07 and 08 have landed. 09 is the only ticket left: flip the switch and verify a cold clone.

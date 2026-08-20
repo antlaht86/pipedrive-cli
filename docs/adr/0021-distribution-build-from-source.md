@@ -247,8 +247,10 @@ new referents: the embedded `AGENTS.md` of §5, and the version stamp of §6. Th
 `unsupported_runtime` refusal, is deleted with the variant. It gains the `.env` assertion of §3.
 
 ADR-0019 §10's "no fixture in the tarball" gate becomes **no fixture in the binary**: the same
-concern, checked against `dist/pd` instead of a `npm pack` output, since a fixture tree reachable
-from the entrypoint would be embedded rather than published.
+concern, checked against `dist/pd` instead of a `npm pack` output, since ~~a fixture tree~~ a
+recording reachable from the entrypoint would be embedded rather than published.
+[ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) keeps this gate and narrows its
+needle to the recording canary; the fixture tree it named no longer exists.
 
 ### 9. The repository stays private, and that bounds who can have `pd`
 

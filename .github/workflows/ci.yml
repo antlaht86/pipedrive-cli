@@ -29,8 +29,6 @@ jobs:
       - run: bun run typecheck
       # Includes the generated-operation, restricted-import and stderr gates.
       - run: bun test
-      # Separate command: fixture credential leakage is a gate, not a warning.
-      - run: bun run gates
 
   binary-linux:
     name: binary smoke (linux)
@@ -42,7 +40,7 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run build
-      # Version agreement, docs, fixture exclusion and CWD .env refusal.
+      # Version agreement, docs, recording exclusion and CWD .env refusal.
       - run: bun run gates dist/pd
 
   binary-windows:

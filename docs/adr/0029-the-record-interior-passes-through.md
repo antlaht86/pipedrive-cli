@@ -185,9 +185,12 @@ What is deleted is the **obligation** to grow that list from live recordings.
   Nothing else needs it, and no fixture it would write is now wanted. It stays in the repository,
   hand-invoked, as a drift detector — which is what ADR-0019 §9 said its output was for — but no
   ticket depends on it.
-- **`fixtures/live/responses.json` stays empty**, and the ADR-0019 §10 gate that greps the fixture
+- ~~**`fixtures/live/responses.json` stays empty**, and the ADR-0019 §10 gate that greps the fixture
   tree for credential-shaped strings stays. A gate over an empty tree is cheap, and the tree is empty
-  by decision rather than by accident.
+  by decision rather than by accident.~~ Superseded by
+  [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md): the file and the tree are
+  deleted, and the credential scan goes with them. What survives is the binary-exclusion tripwire,
+  armed from the canary constant rather than from the file.
 - **`pd` becomes more robust to Pipedrive changing its API and less able to describe it.** The two
   move together and cannot be separated: a schema strict enough to document a resource is strict
   enough to reject one.

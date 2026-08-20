@@ -6,12 +6,11 @@ import { z } from "zod";
 
 import { createManifest } from "../src/command-table.ts";
 import { WARNING_KINDS } from "../src/lib/warnings.ts";
-import { parseOptionalSingleArgument } from "./arguments.ts";
+import { parseRequiredSingleArgument } from "./arguments.ts";
 import {
 	makeDirectory,
 	readBytes,
 	readText,
-	scanFiles,
 	runProcessSync,
 	withTempDirectory,
 	writeStderr,
@@ -23,24 +22,22 @@ export const FIXTURE_CANARY = "pd-live-fixture-must-not-be-embedded-v1";
 
 const JsonValueSchema = z.json();
 type JsonValue = z.infer<typeof JsonValueSchema>;
-const RecordedFixtureSchema = z
-	.object({
-		method: z.literal("GET"),
-		path: z.string().startsWith("/api/"),
-		query: z.record(z.string(), z.union([z.string(), z.number()])),
-		status: z.number().int(),
-		body: JsonValueSchema,
-	})
-	.strict();
-export type RecordedFixture = z.infer<typeof RecordedFixtureSchema>;
+/**
+ * The recording format `bun run live` writes. Nothing parses it any more — ADR-0032 §2
+ * deleted the last reader — so it is a plain type rather than a zod schema.
+ */
+export type RecordedFixture = {
+	method: "GET";
+	path: string;
+	query: Record<string, string | number>;
+	status: number;
+	body: JsonValue;
+};
 
-const FixtureDocumentSchema = z
-	.object({
-		canary: z.literal(FIXTURE_CANARY),
-		fixtures: z.array(RecordedFixtureSchema),
-	})
-	.strict();
-export type FixtureDocument = z.infer<typeof FixtureDocumentSchema>;
+export type FixtureDocument = {
+	canary: typeof FIXTURE_CANARY;
+	fixtures: RecordedFixture[];
+};
 
 export const fixtureDocument = (
 	fixtures: readonly RecordedFixture[],
@@ -58,210 +55,16 @@ export const serializeFixtureDocument = (
 ): ResultType<string, string> =>
 	stringifyJson(document, 2).map((text) => `${text}\n`);
 
-const CREDENTIAL_METADATA = [
-	/x-api-token/i,
-	/pd_api_token/i,
-	/\bapi[_-]?token\b/i,
-	/\bauthorization\b/i,
-	/\bbearer\s+[a-z0-9._~+/-]+/i,
-] as const;
-const TOKEN_VALUES = /([a-z0-9]{40})/gi;
-const CUSTOM_FIELD_HASH = /^[a-f0-9]{40}$/i;
 const parseJson = Result.fromThrowable(JSON.parse, (cause) => String(cause));
 
-const credentialValue = (
-	value: JsonValue,
-	allowedHashes: ReadonlySet<string>,
-): string | undefined => {
-	if (typeof value === "string") {
-		return [...value.matchAll(TOKEN_VALUES)]
-			.map((match) => match[1])
-			.find(
-				(token): token is string =>
-					token !== undefined && !allowedHashes.has(token),
-			);
-	}
-	if (Array.isArray(value)) {
-		for (const item of value) {
-			const leak = credentialValue(item, allowedHashes);
-			if (leak !== undefined) return leak;
-		}
-		return undefined;
-	}
-	if (typeof value !== "object" || value === null) return undefined;
-	for (const [childKey, child] of Object.entries(value)) {
-		const keyToken = [...childKey.matchAll(TOKEN_VALUES)]
-			.map((match) => match[1])
-			.find(
-				(token): token is string =>
-					token !== undefined && !allowedHashes.has(token),
-			);
-		if (keyToken !== undefined) return keyToken;
-		const leak = credentialValue(child, allowedHashes);
-		if (leak !== undefined) return leak;
-	}
-	return undefined;
-};
-
-/** Detect both credential metadata and a bare token stored as a JSON value. */
-export const credentialLeak = (
-	text: string,
-	allowedHashes: ReadonlySet<string> = new Set(),
-): string | undefined => {
-	const metadata = CREDENTIAL_METADATA.map(
-		(shape) => text.match(shape)?.[0],
-	).find((match) => match !== undefined);
-	if (metadata !== undefined) return metadata;
-	return parseJson(text).match(
-		(value) => {
-			const json = JsonValueSchema.safeParse(value);
-			return json.success
-				? credentialValue(json.data, allowedHashes)
-				: [...text.matchAll(TOKEN_VALUES)][0]?.[1];
-		},
-		() => [...text.matchAll(TOKEN_VALUES)][0]?.[1],
-	);
-};
-
-type FixtureFile = { path: string; bytes: Buffer; text: string };
-const fixtureFiles = (root: string): ResultType<FixtureFile[], string> =>
-	scanFiles(root).andThen((files) => {
-		const contents: FixtureFile[] = [];
-		for (const file of files) {
-			const bytes = readBytes(file);
-			if (bytes.isErr()) return err(`fixture gate: ${file}: ${bytes.error}`);
-			contents.push({
-				path: file,
-				bytes: bytes.value,
-				text: bytes.value.toString("utf8"),
-			});
-		}
-		return ok(contents);
-	});
-
-const FIELD_SCHEMA_PATH =
-	/^\/api\/v2\/(?:deal|person|organization|activity|product)Fields$/;
-const FieldDefinitionResponse = z
-	.object({
-		field_code: z.string().regex(CUSTOM_FIELD_HASH),
-		field_name: z.string(),
-		field_type: z.string(),
-		is_custom_field: z.boolean(),
-	})
-	.catchall(JsonValueSchema);
-const FieldEnvelopeResponse = z
-	.object({
-		success: z.literal(true),
-		data: z.array(FieldDefinitionResponse),
-	})
-	.catchall(JsonValueSchema);
-
-const allowedFieldHashes = (files: readonly FixtureFile[]): Set<string> => {
-	const hashes = new Set<string>();
-	for (const file of files) {
-		const parsedJson = parseJson(file.text);
-		if (parsedJson.isErr()) continue;
-		const document = FixtureDocumentSchema.safeParse(parsedJson.value);
-		if (!document.success) continue;
-		for (const fixture of document.data.fixtures) {
-			if (fixture.status !== 200 || !FIELD_SCHEMA_PATH.test(fixture.path))
-				continue;
-			const envelope = FieldEnvelopeResponse.safeParse(fixture.body);
-			if (!envelope.success) continue;
-			for (const field of envelope.data.data) {
-				if (field.is_custom_field) hashes.add(field.field_code);
-			}
-		}
-	}
-	return hashes;
-};
-
-/** Credential scanning is format-independent and covers every fixture-tree file. */
-export const fixtureCredentialGate = (root: string): ResultType<void, string> =>
-	fixtureFiles(root).andThen((files) => {
-		const allowedHashes = allowedFieldHashes(files);
-		for (const file of files) {
-			if (credentialLeak(file.text, allowedHashes) !== undefined) {
-				return err(
-					`fixture credential gate: ${file.path} contains credential-shaped data`,
-				);
-			}
-		}
-		return ok(undefined);
-	});
-
-export type FixtureInspection = {
-	documents: FixtureDocument[];
-	rawContents: Uint8Array[];
-};
-const inspectFixtureTree = (
-	root: string,
-): ResultType<FixtureInspection, string> =>
-	fixtureFiles(root).andThen((files) => {
-		if (files.length === 0) return err("fixture gate: fixture tree is empty");
-		const documents: FixtureDocument[] = [];
-		for (const file of files) {
-			const parsedJson = parseJson(file.text);
-			if (parsedJson.isErr()) continue;
-			const document = FixtureDocumentSchema.safeParse(parsedJson.value);
-			if (document.success) documents.push(document.data);
-		}
-		if (documents.length === 0) {
-			return err("fixture gate: no live fixture document found");
-		}
-		return ok({
-			documents,
-			rawContents: files.map((file) => file.bytes),
-		});
-	});
-
-type BinaryNeedle = { label: string; bytes: Buffer };
-const fixtureNeedles = (
-	inspection: FixtureInspection,
-): ResultType<BinaryNeedle[], string> => {
-	const needles: BinaryNeedle[] = [
-		{ label: "fixture canary", bytes: Buffer.from(FIXTURE_CANARY) },
-		...inspection.rawContents.flatMap((bytes) =>
-			bytes.byteLength > 0
-				? [{ label: "raw fixture file", bytes: Buffer.from(bytes) }]
-				: [],
-		),
-	];
-	const addJsonNeedle = (
-		label: string,
-		value: JsonValue,
-	): ResultType<void, string> =>
-		stringifyJson(value).map((text) => {
-			needles.push({ label, bytes: Buffer.from(text) });
-			return undefined;
-		});
-	for (const document of inspection.documents) {
-		const documentNeedle = addJsonNeedle(
-			"compacted fixture document",
-			document,
-		);
-		if (documentNeedle.isErr()) return err(documentNeedle.error);
-		for (const fixture of document.fixtures) {
-			const responseNeedle = addJsonNeedle(
-				"compacted fixture response",
-				fixture,
-			);
-			if (responseNeedle.isErr()) return err(responseNeedle.error);
-			const bodyNeedle = addJsonNeedle("fixture response body", fixture.body);
-			if (bodyNeedle.isErr()) return err(bodyNeedle.error);
-		}
-	}
-	return ok(needles);
-};
-
-export const binaryContainsFixture = (
-	executable: Uint8Array,
-	inspection: FixtureInspection,
-): ResultType<string | undefined, string> =>
-	fixtureNeedles(inspection).map((needles) => {
-		const binary = Buffer.from(executable);
-		return needles.find((needle) => binary.includes(needle.bytes))?.label;
-	});
+/**
+ * The binary-exclusion gate, per ADR-0032 §1. The needle is the canary constant and
+ * nothing else: `bun run live` stamps it into every recording it writes, so a build
+ * that embedded one would carry it. It proves no recording is in the binary. It does
+ * not prove that no arbitrary response body is — see ADR-0032 §1 for what was given up.
+ */
+export const binaryEmbedsRecording = (executable: Uint8Array): boolean =>
+	Buffer.from(executable).includes(Buffer.from(FIXTURE_CANARY));
 
 const VersionStamp = z
 	.string()
@@ -401,16 +204,11 @@ const checkVersionAndDocs = (binary: string): ResultType<void, string> =>
 		),
 	);
 
-const checkFixtureExclusion = (
-	binary: string,
-	inspection: FixtureInspection,
-): ResultType<void, string> =>
+const checkRecordingExclusion = (binary: string): ResultType<void, string> =>
 	readBytes(binary).andThen((executable) =>
-		binaryContainsFixture(executable, inspection).andThen((embedded) =>
-			embedded === undefined
-				? ok(undefined)
-				: err(`binary gate: embedded fixture content: ${embedded}`),
-		),
+		binaryEmbedsRecording(executable)
+			? err("binary gate: the binary carries the live-recording canary")
+			: ok(undefined),
 	);
 
 const checkCredentialSafety = (binary: string): ResultType<void, string> =>
@@ -445,32 +243,27 @@ const checkCredentialSafety = (binary: string): ResultType<void, string> =>
 /** Artifact-only gates from ADR-0021 §3, §5, §6 and §8. */
 export const binaryGate = (binaryPath: string): ResultType<void, string> => {
 	const binary = resolve(binaryPath);
-	return fixtureCredentialGate("fixtures")
-		.andThen(() => inspectFixtureTree("fixtures"))
-		.andThen((inspection) =>
-			checkVersionAndDocs(binary)
-				.andThen(() => checkFixtureExclusion(binary, inspection))
-				.andThen(() => checkCredentialSafety(binary)),
-		);
+	return checkVersionAndDocs(binary)
+		.andThen(() => checkRecordingExclusion(binary))
+		.andThen(() => checkCredentialSafety(binary));
 };
 
 export const parseGateArguments = (
 	args: readonly string[],
-): ResultType<string | undefined, string> =>
-	parseOptionalSingleArgument(args, z.string().min(1), undefined);
+): ResultType<string, string> =>
+	parseRequiredSingleArgument(args, z.string().min(1)).mapErr(() =>
+		"exactly one binary path is required",
+	);
 
 const main = (args: readonly string[]): number => {
 	const parsed = parseGateArguments(args);
 	if (parsed.isErr()) {
 		const reported = writeStderr(
-			`Usage: bun run gates [binary-path]\n${parsed.error}\n`,
+			`Usage: bun run gates <binary-path>\n${parsed.error}\n`,
 		);
 		return reported.isErr() ? 1 : 2;
 	}
-	const result =
-		parsed.value === undefined
-			? fixtureCredentialGate("fixtures")
-			: binaryGate(parsed.value);
+	const result = binaryGate(parsed.value);
 	if (result.isErr()) {
 		return writeStderr(`${result.error}\n`)
 			.map(() => 1)

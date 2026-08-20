@@ -103,8 +103,8 @@ The skill assumes `pd` is on your `PATH`; build it first as described above.
 ## Develop
 
 ```bash
-bun test           # offline suite; costs zero Pipedrive requests
-bun run gates      # fixture credential gate (CI also runs artifact gates)
+bun test                # offline suite; costs zero Pipedrive requests
+bun run gates dist/pd   # artifact gates; run bun run build first
 bun run typecheck
 bun run lint
 ```

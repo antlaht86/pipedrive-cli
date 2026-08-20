@@ -3,7 +3,6 @@ import {
 	mkdtempSync,
 	mkdirSync,
 	readFileSync,
-	readdirSync,
 	rmSync,
 	writeFileSync,
 	type WriteFileOptions,
@@ -46,18 +45,6 @@ export const writeText = Result.fromThrowable(
 export const makeDirectory = Result.fromThrowable(
 	(path: string) => mkdirSync(path, { recursive: true }),
 	(cause) => message("directory creation failed", cause),
-);
-
-export const scanFiles = Result.fromThrowable(
-	(root: string) => {
-		const walk = (directory: string): string[] =>
-			readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-				const path = join(directory, entry.name);
-				return entry.isDirectory() ? walk(path) : [path];
-			});
-		return walk(root);
-	},
-	(cause) => message("fixture scan failed", cause),
 );
 
 export type SpawnOptions = {

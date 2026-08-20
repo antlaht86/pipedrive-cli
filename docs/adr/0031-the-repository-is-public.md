@@ -71,7 +71,8 @@ recording cannot be staged, and the failure mode the boundary guarded against �
 commits — is unreachable rather than merely discouraged. Nothing writes to the tracked
 `fixtures/live/responses.json` any more; it holds the canary string the release gates grep for and an
 empty fixture list, and whether it keeps earning its place is ticket 08's question, not this
-record's.
+record's. *Answered by [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) §2: it does
+not, and the file is deleted.*
 
 ADR-0021 §9's `.gitignore` refusal is reversed, and the reason it was refused is worth stating
 because it was a good reason at the time: an ignored file has no index entry, so `git diff` against
@@ -82,7 +83,9 @@ replay gate is unaffected: it serves invented fixtures, and always did.
 
 The binary-exclusion gate is weaker by construction now that the tracked fixture document is empty —
 it has only the canary string to grep for. That is named here and left open; ticket 08 owns both it
-and the fate of the document.
+and the fate of the document. *Closed by
+[ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md): the canary is kept as the whole
+needle, and what the gate no longer proves is written down there.*
 
 ### 4. Recorded fixtures never return to version control
 

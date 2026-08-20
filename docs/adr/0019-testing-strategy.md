@@ -7,8 +7,11 @@ repository is public, and no recording is committed, so its privacy protects not
 amended — the live suite's output is still a re-recording a human reads, but the diff is a
 `git diff --no-index` between two recordings on an ignored path. §9's three hard rules and every
 other section stand unchanged.
+Partly superseded by: [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) — §10's
+fixture-tree credential gate is removed with the tree, and §10's artifact gate narrows to one needle:
+the built binary is grepped for the recording canary and nothing else.
 Deciding ticket: [Testing strategy against a shared live account](../../.scratch/pd-cli-design/issues/28-grilling-testing-strategy.md)
-Extends: [ADR-0013](0013-read-only-enforcement.md) §2 — the CI gate set grows from three to six, and the fixture tree gains two of its own
+Extends: [ADR-0013](0013-read-only-enforcement.md) §2 — the CI gate set grows from three to six, and the fixture tree gains two of its own (one after [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md), and it no longer reads the tree)
 Extends: [ADR-0011](0011-concurrency-and-retry.md) — the gate and both retry budgets take an injected clock; no observable behaviour changes
 Confirms: [ADR-0005](0005-cache-design.md) §6 and [ADR-0012](0012-authentication-and-credential-resolution.md) §3 — the existing `XDG_*` overrides are the whole test-isolation mechanism, so no test-only flag or environment variable is added
 
@@ -185,8 +188,8 @@ existence.
 | ~~ADR-0014 §3~~ | ~~ESLint ban on the `Bun` global and every `bun:*` import in `src/**`~~ — removed by [ADR-0021](0021-distribution-build-from-source.md) §2 | — |
 | ADR-0021 §3 | The built binary ignores a `.env` in the process CWD: `pd auth status` run beside one setting `PD_API_TOKEN` does not report the `env` tier | CI gate, on the binary |
 | ADR-0015 §6 | No unredacted query value and no non-allowlisted header can reach stderr | CI gate |
-| §10 below | No credential-shaped string exists anywhere in the fixture tree | CI gate |
-| §10 below | The published artifact contains no fixture — per [ADR-0021](0021-distribution-build-from-source.md) §8 this is checked against the built binary, not an `npm pack` output | CI gate |
+| ~~§10 below~~ | ~~No credential-shaped string exists anywhere in the fixture tree~~ — removed with the tree by [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) §3 | — |
+| §10 below | The built binary contains no recording — per [ADR-0021](0021-distribution-build-from-source.md) §8 this is checked against the binary rather than an `npm pack` output, and per [ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) §1 the needle is the canary constant | CI gate |
 | ADR-0015 §1 | A non-TTY run emits exactly two things on stderr, and neither is progress | Replay |
 | ADR-0016 §7 | The same projection with and without the `custom_fields` push-down is **byte-identical** | Replay, fixture pair |
 | ADR-0016 §6 | An unknown top-level selector exits 2 with zero dispatches | Offline |
@@ -290,8 +293,10 @@ real data) and the artifact (public, holds a bundle) being enforced rather than 
 **The credential is stripped mechanically, and it is not CRM data.** The recorder never writes request
 headers at all, which disposes of the `x-api-token` header ADR-0012 §1 fixed as the transport. Research
 05's `grep -c api_token` returning zero in both OpenAPI specs means there is no query-parameter path to
-strip either, but the gate does not rely on that staying true: a CI check greps the whole fixture tree
-for credential-shaped strings and fails the build on a hit. The user's decision was about *CRM* data;
+strip either, but the gate does not rely on that staying true: ~~a CI check greps the whole fixture tree
+for credential-shaped strings and fails the build on a hit~~ — that check is removed by
+[ADR-0032](0032-the-canary-is-the-whole-binary-exclusion-gate.md) §3, which records why scanning a
+tree that no longer holds recordings proved nothing. The user's decision was about *CRM* data;
 it was never about the token, and the token has no exception.
 
 ## Consequences
