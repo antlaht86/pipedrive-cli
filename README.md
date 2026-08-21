@@ -151,6 +151,7 @@ bun test                # offline suite; costs zero Pipedrive requests
 bun run gates dist/pd   # artifact gates; run bun run build first
 bun run typecheck
 bun run lint
+bun run update          # build, then install to $HOME/.local/bin/pd (macOS and Linux)
 ```
 
 The live suite is deliberately separate and hand-invoked only:
