@@ -27,6 +27,27 @@ It makes no request and exits 0 either way. With no token anywhere it reports
 `"found":false` on stdout and names all three tiers on stderr, so a fresh build tells you
 what it is missing rather than failing on your first real command.
 
+`pd auth status` reads the configuration without using it. To find out whether the token
+still works, and whose it is, spend one request:
+
+```bash
+pd auth whoami
+```
+
+```json
+{"type":"record","record_type":"whoami","id":14182285,"name":"antti lahtinen","email":"antti@example.com","active_flag":true,"timezone_name":"Europe/Helsinki","company_id":1234567,"company_name":"Zimple","company_domain":"zimple","tier":"env","fingerprint":"1f6076e3a47ba1de"}
+{"type":"summary","complete":true,"emitted":1,"skipped":0,"duplicates":0,"resolved":"off","requests":1}
+```
+
+A record on stdout means the credential authenticated, so there is no `works` field to
+read. A dead or missing token exits 1 with `code: "auth"`, an unreachable network exits 1
+with `code: "upstream"`, and a spent burst window or daily budget exits 3. The answer is
+never cached, so the trailer reports `requests: 1` every time and the call costs 2 tokens
+of the shared daily budget.
+
+`tier` and `fingerprint` are the same two values `pd auth status` prints. They are what
+pairs an account with a cache directory when two tokens live on one machine.
+
 The grammar is `pd <resource> <verb> [argument] [flags]`. The verbs are `list`, `get` and
 `search`.
 
@@ -84,7 +105,8 @@ puts the token into the transcript the file was supposed to keep it out of.
   src/cli.ts` does not have that protection.
 
 To confirm which credential is live, run `pd auth status` and compare fingerprints instead
-of tokens.
+of tokens. `pd auth whoami` prints the same fingerprint beside the name and company it
+belongs to, at the cost of one request.
 
 ## Build
 
