@@ -176,7 +176,8 @@ export type PipedriveClient = {
 		options: TOptions,
 	) => ResultAsync<unknown, PdError>;
 	/**
-	 * The same, for the one v1 operation `pd` calls — `GET /users` (ADR-0007 §1).
+	 * The same, for the two v1 operations `pd` calls — `GET /users` (ADR-0007 §1)
+	 * and `GET /users/me`, which ADR-0033 §7 let back in for `pd auth whoami`.
 	 * It differs from `v2` in its `baseUrl` and in nothing else: both clients are
 	 * given the same `guardedFetch`, so a v1 request queues in the same limiter
 	 * and decrements the same counter (ADR-0007 §2).

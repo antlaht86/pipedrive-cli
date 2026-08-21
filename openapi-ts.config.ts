@@ -247,10 +247,14 @@ const config: UserConfig[] = [
       // No patch: ADR-0007 §3 gives `pd` its own user record schema, so nothing
       // downstream trusts the v1 spec's nullability.
       transforms: { propertiesRequiredByDefault: true },
-      // The anchored form is the whole v1 footprint — the collection endpoint
-      // and nothing else. `/^GET \/users/` unanchored pulls in seven more
-      // operations, and generated code that exists is code someone can call.
-      filters: { operations: { include: ["/^GET \\/users$/"] } },
+      // The anchored forms are the whole v1 footprint — the collection endpoint
+      // and the current-user endpoint, and nothing else (ADR-0007 §1, amended by
+      // ADR-0033 §7). `/^GET \/users/` unanchored pulls in six more operations,
+      // and generated code that exists is code someone can call. The anchors are
+      // what keeps them out.
+      filters: {
+        operations: { include: ["/^GET \\/users$/", "/^GET \\/users\\/me$/"] },
+      },
     },
     plugins,
   },

@@ -98,10 +98,20 @@ describe("the no-restricted-imports ban on the generated SDK", () => {
   }, 30_000);
 });
 
+/**
+ * ADR-0007 §1 as amended by ADR-0033 §7. The filter names two anchored
+ * operations and the generated surface holds exactly those two: `getCurrentUser`
+ * re-entered for `pd auth whoami`, and the six the unanchored form would pull in
+ * — `getUser`, `findUsersByName`, `getUserFollowers`, `getUserPermissions`,
+ * `getUserRoleAssignments`, `getUserRoleSettings` — stayed out.
+ */
 describe("the v1 client", () => {
-  test("holds exactly one operation, getUsers", async () => {
+  test("holds exactly two operations, getUsers and getCurrentUser", async () => {
     const source = await readSdk(GENERATED_SDKS.v1);
     const operations = source.match(/^export const (\w+)/gm) ?? [];
-    expect(operations).toEqual(["export const getUsers"]);
+    expect(operations).toEqual([
+      "export const getUsers",
+      "export const getCurrentUser",
+    ]);
   });
 });

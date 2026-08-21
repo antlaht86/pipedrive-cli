@@ -89,20 +89,33 @@ const administers = (access: unknown, app: string): boolean =>
   });
 
 /**
+ * The derivation itself, and the one place the two wire spellings are written.
+ * `pd auth whoami` reads the same `access` array off a different endpoint
+ * (ADR-0033 §4), and two copies of `"global"` and `"sales"` would be two things
+ * to keep in step.
+ */
+export const adminFlags = (
+  access: unknown,
+): { is_global_admin: boolean; is_deal_admin: boolean } => ({
+  is_global_admin: administers(access, "global"),
+  is_deal_admin: administers(access, "sales"),
+});
+
+/**
  * The two booleans, injected before the record is parsed rather than defaulted
  * inside it: they are always present and always a boolean, including on a
  * record that carries no `access` at all and on one whose `access` is not a
  * readable list. A non-object is handed on untouched, so it fails the gate for
  * the reason it already did.
+ *
+ * `whoami` deliberately does **not** do this. There the fields are omitted when
+ * `access` is absent, because the whole array missing means "not asked" rather
+ * than "not an admin" (ADR-0033 §4).
  */
 const withAdminFlags = (raw: unknown): unknown => {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
   const record = raw as Record<string, unknown>;
-  return {
-    ...record,
-    is_global_admin: administers(record["access"], "global"),
-    is_deal_admin: administers(record["access"], "sales"),
-  };
+  return { ...record, ...adminFlags(record["access"]) };
 };
 
 /**

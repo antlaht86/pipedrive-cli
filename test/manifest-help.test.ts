@@ -87,6 +87,7 @@ describe("the command table generates the manifest contract", () => {
 			"pd cache info",
 			"pd cache clear",
 			"pd auth status",
+			"pd auth whoami",
 			"pd docs",
 		]);
 		expect(command("pd deals list").flag_values).toMatchObject({

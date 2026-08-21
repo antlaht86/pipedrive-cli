@@ -22,6 +22,7 @@ import {
 	parseArguments,
 	refusesToken,
 } from "./commands/arguments.ts";
+import { whoamiCommand } from "./commands/whoami.ts";
 import { noCredentialAdvice } from "./lib/auth/credentials.ts";
 import { credentialsPath } from "./lib/auth/paths.ts";
 import { authStatus } from "./lib/auth/status.ts";
@@ -167,6 +168,20 @@ const main = async (argv: readonly string[]): Promise<number> => {
 
 	if (argv[0] === "auth" && argv[1] === "status") {
 		return runAuthStatus(argv.slice(2));
+	}
+
+	// ADR-0033 §1: the second command in the `auth` subtree, and the one that
+	// uses the credential rather than describing it. It is a data command in
+	// everything but its place in the grammar, so it is wired here beside its
+	// sibling and takes the transport `route` takes.
+	if (argv[0] === "auth" && argv[1] === "whoami") {
+		return whoamiCommand({
+			argv: argv.slice(2),
+			platform: process.platform,
+			env: process.env,
+			home: homedir(),
+			transport: globalThis.fetch,
+		});
 	}
 
 	// ADR-0009 §8: `cache` is not a resource and `info` / `clear` are not verbs of

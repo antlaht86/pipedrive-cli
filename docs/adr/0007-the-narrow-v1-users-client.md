@@ -4,6 +4,7 @@ Status: accepted
 Date: 2026-08-11
 Supersedes in part: the flag name `--resolve-fields` used in ADR-0005
 Extended by [ADR-0008](0008-resolution-mechanics.md): the closed table of §7 grows from three sibling fields to seven
+Amended by [ADR-0033](0033-the-live-identity-probe.md): §1's generation filter grows from one operation to two — `getCurrentUser` re-enters, the other six stay out
 
 ## Context
 

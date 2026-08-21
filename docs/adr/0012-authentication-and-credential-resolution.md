@@ -150,6 +150,12 @@ say about it. `--pretty` renders the same fields as human text.
 
 ### 6. No store-time validation, and `GET /users/me` stays out of the generated surface
 
+*Amended by [ADR-0033](0033-the-live-identity-probe.md). The reasoning below stands on **validity**,
+which was the only thing it priced: a dead token still surfaces as `auth` on the first real command,
+and no `verify` exists. It never priced **identity** — "which account is this, and who am I on it" —
+which no command could answer at all. `pd auth whoami` answers that, `getCurrentUser` therefore
+re-enters the generated surface, and the heading's second clause no longer holds.*
+
 Research 08 recommended validating a pasted token once against `GET /users/me` (2 tokens). With no
 `login` command there is no store time to validate at, and a `pd auth verify` was declined: it buys
 one clearer error message for a mistyped paste, at the cost of re-admitting an operation

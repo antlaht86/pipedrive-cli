@@ -25,7 +25,7 @@ pd <resource> <verb> [arg] [flags]
 
 The three verbs are `list`, `get`, and `search`. The ten resources are `deals`, `persons`, `organizations`, `activities`, `products`, `pipelines`, `stages`, `users`, `fields`, and `items`. `search` exists for deals, persons, organizations, products, and items; `items` has neither `list` nor `get`. Run `pd manifest` for the exact command, flag, selectable-field, error-code, and warning-kind contract.
 
-The named commands outside the resource grammar are `pd manifest`, `pd cache info`, `pd cache clear`, `pd auth status`, and `pd docs`. The named non-NDJSON stdout commands are `pd --help`, `pd manifest`, `pd auth status`, `pd cache info`, `pd docs`, and `pd --version`.
+The named commands outside the resource grammar are `pd manifest`, `pd cache info`, `pd cache clear`, `pd auth status`, `pd auth whoami`, and `pd docs`. The named non-NDJSON stdout commands are `pd --help`, `pd manifest`, `pd auth status`, `pd cache info`, `pd docs`, and `pd --version`.
 
 Entity search is a distinct verb: `pd deals search Acme`. Search lines are **hits**, not complete records, and are tagged accordingly (for example, `deal_search_hit`). A bounded search returns the best matches first, so `--limit 20` is usually useful. `--search-in` chooses which upstream fields Pipedrive searches; `--fields` chooses which fields `pd` emits. They do not do the same job.
 
@@ -66,6 +66,28 @@ Credential precedence is:
 The first match wins. A named `--token-file` that cannot be resolved is a usage error (exit 2); `pd` never silently falls back from it. If no tier resolves, `pd` reports `code: "auth"`, exits 1, and its message names all three tiers. Use `pd auth status` to inspect the chosen tier and token fingerprint without making a Pipedrive request.
 
 `pd auth status` answers an empty chain with `"found":false` on stdout and exit 0, and writes the same three-tier sentence to stderr as human prose. Its stdout object is unchanged by that line; read stdout, as always.
+
+`pd auth whoami` is the other half of the pair, and the two have different grammars. `status` describes the configuration and makes no request. `whoami` uses the credential: it makes exactly one request to Pipedrive, spends 2 tokens of the shared daily budget, and reports who the credential authenticates as. It emits NDJSON with a trailer, like every data command, and `--pretty` and `--fields` work on it. It is never cached, so the trailer reports `"requests":1` on every run.
+
+```text
+$ pd auth whoami
+{"type":"record","record_type":"whoami","id":14182285,"name":"antti lahtinen","email":"…","active_flag":true,"timezone_name":"Europe/Helsinki","company_id":1234567,"company_name":"…","company_domain":"…","tier":"config-file","fingerprint":"a1b2c3d4e5f60718"}
+{"type":"summary","complete":true,"emitted":1,"skipped":0,"duplicates":0,"resolved":"off","requests":1}
+```
+
+The record has three groups of fields. The user — `id`, `name`, `email`, `active_flag`, `timezone_name` — is shaped exactly as `pd users` shapes a user, so you can compare `id` against a deal's `owner_id` with no conversion. The company is `company_id`, `company_name`, and `company_domain`. The local join is `tier` and `fingerprint`, which are the same two values `pd auth status` reports for the same configuration; they say which cache directory belongs to this credential when two tokens live on one machine.
+
+There is **no `works` field**. A record on stdout means the credential authenticated. Branch on `code` instead, which tells you more than a boolean can:
+
+| What happened | `code` | Exit |
+| --- | --- | --- |
+| The token is dead or revoked, or no tier resolved | `auth` | 1 |
+| The network or Pipedrive did not answer | `upstream` | 1 |
+| Pipedrive returned an identity `pd` cannot read | `invalid_response` | 1 |
+| The burst window or the daily budget is spent | `rate_limited` / `budget_exhausted` | 3 |
+| The token works | — | 0 |
+
+`is_global_admin` and `is_deal_admin` appear on the `whoami` record **only** when the response carries `access`, and are omitted otherwise. This differs from `pd users`, where both fields are always present: there an absent entry inside a present `access` means "not an admin", and here the whole array can be missing, which means "not asked". Do not read an omission as `false`.
 
 The credentials file is `$XDG_CONFIG_HOME/pd/credentials`, defaulting to `~/.config/pd/credentials`, on POSIX and `%APPDATA%\pd\credentials` on Windows. It must be mode `0600` on POSIX. Per-user directories are:
 

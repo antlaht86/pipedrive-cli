@@ -1,5 +1,7 @@
 import type { Flag } from "./commands/arguments.ts";
+import { WHOAMI_COMMAND, WHOAMI_PARSER_FLAGS } from "./commands/whoami.ts";
 import { ERROR_CODES, exitCodeFor, retryFor } from "./lib/errors.ts";
+import { WHOAMI_FIELDS } from "./lib/pipedrive/whoami.ts";
 import { DEAL_STATUSES } from "./lib/pipedrive/list-filters.ts";
 import { WARNING_KINDS } from "./lib/warnings.ts";
 import {
@@ -275,6 +277,12 @@ type OtherDefinition = {
 	readonly arguments: readonly CommandArgument[];
 	readonly flags: readonly string[];
 	readonly delivery: "streams" | "collects";
+	/**
+	 * Present on a named command that streams records and takes `--fields`. `pd
+	 * auth whoami` is the first — ADR-0033 §5 keeps it inside the NDJSON grammar,
+	 * so it publishes a selectable list exactly as a resource command does.
+	 */
+	readonly selectable_fields?: readonly string[];
 	/** Internal parser names; omitted from the emitted manifest. */
 	readonly parserFlags: readonly Flag[];
 };
@@ -488,6 +496,16 @@ export const COMMAND_TABLE: CommandTable = {
 			parserFlags: ["token-file", "pretty"],
 		},
 		{
+			name: WHOAMI_COMMAND,
+			description:
+				"Ask Pipedrive who this credential authenticates as; makes one request.",
+			arguments: [],
+			flags: WHOAMI_PARSER_FLAGS.map((flag) => FLAG_NAMES[flag]),
+			delivery: "streams",
+			selectable_fields: WHOAMI_FIELDS,
+			parserFlags: WHOAMI_PARSER_FLAGS,
+		},
+		{
 			name: "pd docs",
 			description: "Emit the AGENTS.md documentation embedded in this binary.",
 			arguments: [],
@@ -518,6 +536,9 @@ const manifestOther = (definition: OtherDefinition) => ({
 	arguments: definition.arguments,
 	flags: definition.flags,
 	delivery: definition.delivery,
+	...(definition.selectable_fields === undefined
+		? {}
+		: { selectable_fields: definition.selectable_fields }),
 });
 
 const manifestCommand = (definition: CommandDefinition) => ({

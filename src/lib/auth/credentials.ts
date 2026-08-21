@@ -33,7 +33,14 @@ import { pdError, type PdError } from "../errors.ts";
 import type { PdWarning } from "../warnings.ts";
 import { credentialsPath, type PathContext } from "./paths.ts";
 
-export type CredentialTier = "token-file" | "env" | "config-file";
+/**
+ * The chain, in precedence order. It is a value rather than a bare union
+ * because `pd auth whoami` emits the chosen tier as a record field, and a zod
+ * enum built from the union by hand is a second copy of it (ADR-0033 §4).
+ */
+export const CREDENTIAL_TIERS = ["token-file", "env", "config-file"] as const;
+
+export type CredentialTier = (typeof CREDENTIAL_TIERS)[number];
 
 export type Credential = {
   tier: CredentialTier;
@@ -45,6 +52,26 @@ export type Credential = {
   /** Non-fatal observations about the credential; the run continues. */
   warnings: PdWarning[];
 };
+
+/**
+ * The half of a credential that may be printed — CONTEXT.md's *credential
+ * identity*, local side.
+ *
+ * It is a type rather than two loose fields because the pair travels together
+ * from the resolved credential into `pd auth whoami`'s record, and because the
+ * one thing that must never travel with it is the token. `identityOf` is the
+ * only conversion, so no call site assembles the pair by hand and no call site
+ * has the chance to add a third field to it.
+ */
+export type CredentialIdentity = {
+  tier: CredentialTier;
+  fingerprint: string;
+};
+
+export const identityOf = ({
+  tier,
+  fingerprint,
+}: Credential): CredentialIdentity => ({ tier, fingerprint });
 
 export type ResolveInput = PathContext & {
   /** The value of `--token-file`, when the flag was given. */

@@ -45,3 +45,57 @@ export const zGetUsersResponse = z.object({
         is_deleted: z.boolean()
     }))
 }));
+
+/**
+ * GetCurrentUserResponse
+ *
+ * The data of the logged in user
+ */
+export const zGetCurrentUserResponse = z.object({
+    success: z.boolean()
+}).and(z.object({
+    data: z.object({
+        id: z.int(),
+        name: z.string(),
+        default_currency: z.string(),
+        locale: z.string(),
+        lang: z.int(),
+        email: z.string(),
+        phone: z.string().nullable(),
+        activated: z.boolean(),
+        last_login: z.string(),
+        created: z.string(),
+        modified: z.string().nullable(),
+        has_created_company: z.boolean(),
+        access: z.array(z.object({
+            app: z.enum([
+                'global',
+                'sales',
+                'campaigns',
+                'projects',
+                'account_settings',
+                'partnership',
+                'nova'
+            ]),
+            admin: z.boolean(),
+            permission_set_id: z.string()
+        })),
+        active_flag: z.boolean(),
+        timezone_name: z.string(),
+        timezone_offset: z.string(),
+        role_id: z.int(),
+        icon_url: z.string().nullable(),
+        is_you: z.boolean(),
+        is_deleted: z.boolean()
+    }).and(z.object({
+        company_id: z.int(),
+        company_name: z.string(),
+        company_domain: z.string(),
+        company_country: z.string(),
+        company_industry: z.string(),
+        language: z.object({
+            language_code: z.string(),
+            country_code: z.string()
+        })
+    }))
+}));

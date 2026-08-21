@@ -119,3 +119,177 @@ export type GetUsersResponses = {
 };
 
 export type GetUsersResponse = GetUsersResponses[keyof GetUsersResponses];
+
+export type GetCurrentUserData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/users/me';
+};
+
+export type GetCurrentUserErrors = {
+    /**
+     * unathorizedResponse
+     *
+     * Unauthorized response
+     */
+    401: {
+        /**
+         * If the response is successful or not
+         */
+        success: boolean;
+        /**
+         * The error message
+         */
+        error: string;
+        /**
+         * The response error code
+         */
+        errorCode: number;
+    };
+};
+
+export type GetCurrentUserError = GetCurrentUserErrors[keyof GetCurrentUserErrors];
+
+export type GetCurrentUserResponses = {
+    /**
+     * GetCurrentUserResponse
+     *
+     * The data of the logged in user
+     */
+    200: {
+        /**
+         * If the response is successful or not
+         */
+        success: boolean;
+    } & {
+        data: {
+            /**
+             * The user ID
+             */
+            id: number;
+            /**
+             * The user name
+             */
+            name: string;
+            /**
+             * The user default currency
+             */
+            default_currency: string;
+            /**
+             * The user locale
+             */
+            locale: string;
+            /**
+             * The user language ID
+             */
+            lang: number;
+            /**
+             * The user email
+             */
+            email: string;
+            /**
+             * The user phone
+             */
+            phone: string | null;
+            /**
+             * Boolean that indicates whether the user is activated
+             */
+            activated: boolean;
+            /**
+             * The last login date and time of the user. Format: YYYY-MM-DD HH:MM:SS
+             */
+            last_login: string;
+            /**
+             * The creation date and time of the user. Format: YYYY-MM-DD HH:MM:SS
+             */
+            created: string;
+            /**
+             * The last modification date and time of the user. Format: YYYY-MM-DD HH:MM:SS
+             */
+            modified: string | null;
+            /**
+             * Boolean that indicates whether the user has created a company
+             */
+            has_created_company: boolean;
+            access: Array<{
+                /**
+                 * The granular app access level
+                 */
+                app: 'global' | 'sales' | 'campaigns' | 'projects' | 'account_settings' | 'partnership' | 'nova';
+                /**
+                 * Whether the user has admin access or not
+                 */
+                admin: boolean;
+                /**
+                 * The ID of the permission set
+                 */
+                permission_set_id: string;
+            }>;
+            /**
+             * Boolean that indicates whether the user is activated
+             */
+            active_flag: boolean;
+            /**
+             * The user timezone name
+             */
+            timezone_name: string;
+            /**
+             * The user timezone offset
+             */
+            timezone_offset: string;
+            /**
+             * The ID of the user role
+             */
+            role_id: number;
+            /**
+             * The user icon URL
+             */
+            icon_url: string | null;
+            /**
+             * Boolean that indicates if the requested user is the same which is logged in (in this case, always true)
+             */
+            is_you: boolean;
+            /**
+             * Boolean that indicates whether the user is deleted from the company
+             */
+            is_deleted: boolean;
+        } & {
+            /**
+             * The user company ID
+             */
+            company_id: number;
+            /**
+             * The user company name
+             */
+            company_name: string;
+            /**
+             * The user company domain
+             */
+            company_domain: string;
+            /**
+             * The user company country
+             */
+            company_country: string;
+            /**
+             * The user company industry
+             */
+            company_industry: string;
+            /**
+             * The user language details
+             */
+            language: {
+                /**
+                 * The language code. E.g. en
+                 */
+                language_code: string;
+                /**
+                 * The country code. E.g. US
+                 */
+                country_code: string;
+            };
+        };
+    };
+};
+
+export type GetCurrentUserResponse = GetCurrentUserResponses[keyof GetCurrentUserResponses];
